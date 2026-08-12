@@ -285,25 +285,66 @@ async function muatRiwayat(){
 /* ---------------------------------------------------------------- */
 /* Header / tabs                                                     */
 /* ---------------------------------------------------------------- */
-function renderBarcodeStripe(){
-  const bars = [2,1,3,1,1,2,4,1,2,1,3,2,1,1,4,2,1,3,1,2,1,1,3,2,4,1,2,1];
-  $("barcodeStripe").innerHTML = bars.map(w => '<div class="bar" style="width:'+w+'px"></div>').join("");
-}
 const TABS = [
-  { id:"dashboard", label:"Dashboard stok" },
-  { id:"masuk", label:"Barang masuk" },
-  { id:"keluar", label:"Barang keluar" },
-  { id:"master", label:"Master barang" },
+  { id:"dashboard", label:"Dashboard stok", sub:"Ringkasan stok seluruh barang",
+    ikon:'<path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/>' },
+  { id:"masuk", label:"Barang masuk", sub:"Catat dan telusuri barang yang diterima",
+    ikon:'<path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><path d="M3 17v2a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-2"/>' },
+  { id:"keluar", label:"Barang keluar", sub:"Impor picking list PDF atau catat manual",
+    ikon:'<path d="M12 21V9"/><polyline points="7 14 12 9 17 14"/><path d="M3 7V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2"/>' },
+  { id:"master", label:"Master barang", sub:"Kelola katalog, barcode, dan ambang stok",
+    ikon:'<path d="M4 7h16M4 12h16M4 17h10"/>' },
 ];
-function renderTabs(){
-  $("tabs").innerHTML = TABS.map(t =>
-    '<button class="tab-btn' + (tab===t.id?' active':'') + '" onclick="switchTab(\'' + t.id + '\')">' + esc(t.label) + '</button>'
-  ).join("");
+
+/** Jumlah kecil di sisi menu — diisi setelah dashboard dimuat. */
+let navHitung = { perluOrder:0 };
+
+function renderNav(){
+  const nav = $("sisiNav");
+  if(!nav) return;
+  nav.innerHTML = '<div class="nav-judul">Menu</div>' + TABS.map(t => {
+    const isi = (t.ikon.indexOf("fill") === -1 && t.id !== "dashboard")
+      ? ' fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'
+      : ' fill="currentColor"';
+    let lencana = "";
+    if(t.id === "dashboard" && navHitung.perluOrder > 0){
+      lencana = '<span class="nav-jml perhatian">' + fmtNum(navHitung.perluOrder) + '</span>';
+    }
+    return '<button type="button" class="nav-btn' + (tab===t.id ? ' aktif' : '') + '"'
+      + ' data-tab="' + t.id + '"' + (tab===t.id ? ' aria-current="page"' : '') + '>'
+      + '<svg width="17" height="17" viewBox="0 0 24 24"' + isi + '>' + t.ikon + '</svg>'
+      + esc(t.label) + lencana + '</button>';
+  }).join("");
 }
+
+function judulHalaman(){
+  const t = TABS.find(x => x.id === tab);
+  if(!t) return;
+  const h = $("judulHalaman"), p = $("subJudulHalaman");
+  if(h) h.textContent = t.label;
+  if(p) p.textContent = t.sub;
+  document.title = t.label + " — " + (window.APP_USER ? "Papan Kendali Gudang" : "Gudang");
+}
+
 function switchTab(id){
+  if(tab === id) return;
   tab = id;
-  renderTabs();
+  renderNav();
+  judulHalaman();
   renderContent();
+  tutupSisi();
+}
+
+/* --- Sidebar di layar sempit --- */
+function bukaSisi(){
+  const s = $("sisi"), t = $("sisiTirai");
+  if(s) s.classList.add("buka");
+  if(t) t.hidden = false;
+}
+function tutupSisi(){
+  const s = $("sisi"), t = $("sisiTirai");
+  if(s) s.classList.remove("buka");
+  if(t) t.hidden = true;
 }
 
 function paginationBar(total, page, totalPages, fnName){
@@ -315,17 +356,75 @@ function paginationBar(total, page, totalPages, fnName){
     + '</span></div>';
 }
 
-function statCard(label, value, tone){
-  return '<div class="stat-card"><div class="stat-label">'+esc(label)+'</div><div class="stat-value'+(tone?' '+tone:'')+'">'+value+'</div></div>';
+/** Kartu statistik. Angka diberi data-nilai supaya bisa dihitung naik. */
+function statCard(o){
+  const ikon = {
+    sku:    '<path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>',
+    unit:   '<path d="M3 9h18M3 15h18"/><rect x="3" y="4" width="18" height="16" rx="2"/>',
+    alert:  '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+    kosong: '<circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
+    tag:    '<path d="M20.6 13.4L12 22l-9-9V4a1 1 0 0 1 1-1h9l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.2"/>'
+  }[o.ikon] || "";
+
+  return '<div class="stat-card' + (o.klik ? ' bisa-klik' : '') + '"'
+    + (o.klik ? ' data-statklik="' + o.klik + '" tabindex="0" role="button"' : '')
+    + '>'
+    + '<div class="stat-atas">'
+      + '<span class="stat-ikon ' + (o.nada || '') + '">'
+        + '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + ikon + '</svg>'
+      + '</span>'
+      + '<span class="stat-label">' + esc(o.label) + '</span>'
+    + '</div>'
+    + '<div class="stat-value' + (o.tone ? ' ' + o.tone : '') + '" data-nilai="' + o.nilai + '">0</div>'
+    + (o.kaki ? '<div class="stat-kaki">' + esc(o.kaki) + '</div>' : '')
+    + '</div>';
 }
 
 /* ---------------------------------------------------------------- */
 /* Dashboard                                                          */
 /* ---------------------------------------------------------------- */
+let ringkasHari = 30;
+
 function renderDashboard(){
   let html = "";
   html += '<div id="dashBanner"></div>';
   html += '<div class="stat-row" id="dashStats"></div>';
+
+  // --- Panel visual ---
+  html += '<div class="panel-grid dua masuk-tahap" style="--d:60ms">'
+    + '<div class="panel">'
+      + '<div class="panel-head"><div>'
+        + '<h2>Pergerakan stok</h2>'
+        + '<p>Unit masuk dan keluar per hari</p></div>'
+        + '<div class="panel-aksi" id="segHari">'
+          + [7,30,90].map(h => '<button type="button" class="seg-btn'+(h===ringkasHari?' aktif':'')+'" data-hari="'+h+'">'+h+'h</button>').join("")
+        + '</div>'
+      + '</div>'
+      + '<div id="gPergerakan" class="panel-isi"><div class="g-kosong">Memuat…</div></div>'
+    + '</div>'
+    + '<div class="panel">'
+      + '<div class="panel-head"><div>'
+        + '<h2>Paling perlu diorder</h2>'
+        + '<p>Diurutkan menurut kekurangan terhadap ambang</p></div></div>'
+      + '<div id="gPerluOrder" class="panel-isi"><div class="g-kosong">Memuat…</div></div>'
+    + '</div>'
+  + '</div>';
+
+  html += '<div class="panel-grid dua-rata masuk-tahap" style="--d:120ms">'
+    + '<div class="panel">'
+      + '<div class="panel-head"><div>'
+        + '<h2>Status stok</h2>'
+        + '<p>Sebaran seluruh SKU menurut ambang minimalnya</p></div></div>'
+      + '<div id="gStatus" class="panel-isi"><div class="g-kosong">Memuat…</div></div>'
+    + '</div>'
+    + '<div class="panel">'
+      + '<div class="panel-head"><div>'
+        + '<h2>Stok per kategori</h2>'
+        + '<p>Klik untuk menyaring tabel di bawah</p></div></div>'
+      + '<div id="gKategori" class="panel-isi"><div class="g-kosong">Memuat…</div></div>'
+    + '</div>'
+  + '</div>';
+
   html += '<div class="toolbar">'
     + '<div class="search-wrap">' + svgIcon("search") + '<input type="text" id="dashSearch" placeholder="Cari nama, SKU, atau barcode…" oninput="onDashSearchInput()"></div>'
     + '<select id="dashKategori" onchange="onDashFilterChange()"><option>Semua</option></select>'
@@ -338,11 +437,86 @@ function renderDashboard(){
     + '</select>'
     + '<a class="btn ghost" href="api/export/csv.php?jenis=dashboard">' + svgIcon("download") + 'Ekspor CSV</a>'
     + '</div>';
-  html += '<div id="dashResults"></div>';
+  html += '<div id="dashResults" class="masuk-tahap" style="--d:180ms"></div>';
   $("content").innerHTML = html;
   $("dashSearch").value = dashFilters.q;
   $("dashStatus").value = dashFilters.status;
+
+  const seg = $("segHari");
+  if(seg){
+    seg.addEventListener("click", function(e){
+      const b = e.target.closest("[data-hari]");
+      if(!b) return;
+      ringkasHari = Number(b.getAttribute("data-hari"));
+      seg.querySelectorAll(".seg-btn").forEach(x =>
+        x.classList.toggle("aktif", Number(x.getAttribute("data-hari")) === ringkasHari));
+      muatRingkas();
+    });
+  }
+
   refreshDashboard();
+  muatRingkas();
+}
+
+/** Muat data panel visual (grafik, perlu order). Terpisah dari tabel
+ *  supaya memfilter tabel tidak ikut menggambar ulang grafik. */
+async function muatRingkas(){
+  let d;
+  try{
+    d = await API.get("dashboard/ringkas.php", { hari: ringkasHari });
+  }catch(e){
+    console.error(e);
+    return;
+  }
+  if(tab !== "dashboard") return;
+
+  const gs = $("gStatus");
+  if(gs) Grafik.statusBar(gs, d.status);
+
+  const gk = $("gKategori");
+  if(gk) Grafik.kategoriBar(gk, d.kategori, {
+    onPilih: function(kat){
+      dashFilters.kategori = kat;
+      dashFilters.page = 1;
+      const sel = $("dashKategori");
+      if(sel) sel.value = kat;
+      refreshDashboard();
+      const hasil = $("dashResults");
+      if(hasil) hasil.scrollIntoView({ behavior:"smooth", block:"start" });
+      toast("Disaring: kategori " + kat);
+    }
+  });
+
+  const gp = $("gPergerakan");
+  if(gp) Grafik.pergerakanArea(gp, d.pergerakan, d.ada_pergerakan);
+
+  const go = $("gPerluOrder");
+  if(go) renderPerluOrder(go, d.perlu_order);
+}
+
+function renderPerluOrder(wadah, baris){
+  if(!baris || !baris.length){
+    wadah.innerHTML = '<div class="g-kosong g-kosong-ajak">'
+      + '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">'
+      + '<polyline points="20 6 9 17 4 12"/></svg>'
+      + '<b>Tidak ada yang perlu diorder</b>'
+      + '<span>Semua barang yang ambangnya sudah diatur masih di atas batas minimal.</span></div>';
+    return;
+  }
+  wadah.innerHTML = '<div class="order-list">' + baris.map((b, i) =>
+    '<div class="order-item">'
+    + '<span class="order-rank">' + (i+1) + '</span>'
+    + '<span class="order-teks">'
+      + '<span class="order-nama">' + esc(b.nama) + '</span>'
+      + '<span class="order-sub">' + esc(b.barcode) + ' · sisa ' + fmtNum(b.stok_akhir)
+        + ' dari min ' + fmtNum(b.stok_minimal) + '</span>'
+    + '</span>'
+    + '<span class="order-angka">'
+      + '<span class="order-kurang">' + fmtNum(b.kurang) + '</span>'
+      + '<span class="order-kurang-lbl">kurang</span>'
+    + '</span>'
+    + '</div>'
+  ).join("") + '</div>';
 }
 
 const onDashSearchInput = debounce(function(){
@@ -411,11 +585,28 @@ async function refreshDashboard(){
   const stats = $("dashStats");
   if(stats){
     stats.innerHTML =
-        statCard("Total SKU", fmtNum(r.total_sku), "")
-      + statCard("Total stok akhir", fmtNum(r.total_stok), "")
-      + statCard("Perlu order", fmtNum(r.perlu_order), r.perlu_order ? "danger" : "safe")
-      + statCard("Belum diatur", fmtNum(r.belum_diatur), "muted")
-      + statCard("Kategori", fmtNum(r.jml_kategori), "");
+        statCard({ label:"Total SKU", nilai:r.total_sku, ikon:"sku", nada:"biru",
+                   kaki:fmtNum(r.jml_kategori) + " kategori" })
+      + statCard({ label:"Total stok akhir", nilai:r.total_stok, ikon:"unit", nada:"biru",
+                   kaki:"unit di gudang" })
+      + statCard({ label:"Perlu order", nilai:r.perlu_order, ikon:"alert",
+                   nada:r.perlu_order ? "danger" : "safe",
+                   tone:r.perlu_order ? "danger" : "safe",
+                   kaki:fmtNum(r.kritis) + " kritis · " + fmtNum(r.rendah) + " menipis",
+                   klik:"kritis" })
+      + statCard({ label:"Belum diatur", nilai:r.belum_diatur, ikon:"kosong", nada:"",
+                   tone:"muted", kaki:"ambang minimal masih 0", klik:"belum_diatur" });
+
+    // Angka menghitung naik, bukan langsung muncul — mengarahkan mata ke
+    // besaran yang berubah setiap kali data dimuat ulang.
+    stats.querySelectorAll(".stat-value[data-nilai]").forEach(n =>
+      Grafik.angkaNaik(n, Number(n.getAttribute("data-nilai"))));
+  }
+
+  // Lencana jumlah di menu sisi.
+  if(navHitung.perluOrder !== r.perlu_order){
+    navHitung.perluOrder = r.perlu_order;
+    renderNav();
   }
 
   const bannerEl = $("dashBanner");
@@ -1089,15 +1280,44 @@ function renderContent(){
 }
 
 function init(){
-  renderBarcodeStripe();
-  renderTabs();
+  renderNav();
+  judulHalaman();
   renderContent();
   setSaveStatus("ok");
+
+  const buka  = $("sisiBuka");
+  const tutup = $("sisiTutup");
+  const tirai = $("sisiTirai");
+  if(buka)  buka.addEventListener("click", bukaSisi);
+  if(tutup) tutup.addEventListener("click", tutupSisi);
+  if(tirai) tirai.addEventListener("click", tutupSisi);
+
+  document.addEventListener("keydown", function(e){
+    if(e.key === "Escape") tutupSisi();
+  });
 }
 
 document.addEventListener("click", function(e){
   if(!e.target.closest(".picker-wrap")){
     document.querySelectorAll(".picker-list").forEach(el => el.style.display = "none");
+  }
+
+  // Menu sisi.
+  const nav = e.target.closest && e.target.closest("[data-tab]");
+  if(nav){ switchTab(nav.getAttribute("data-tab")); return; }
+
+  // Kartu statistik yang menyaring tabel.
+  const kartu = e.target.closest && e.target.closest("[data-statklik]");
+  if(kartu){
+    const s = kartu.getAttribute("data-statklik");
+    dashFilters.status = dashFilters.status === s ? "semua" : s;
+    dashFilters.page = 1;
+    const sel = $("dashStatus");
+    if(sel) sel.value = dashFilters.status;
+    refreshDashboard();
+    const hasil = $("dashResults");
+    if(hasil) hasil.scrollIntoView({ behavior:"smooth", block:"start" });
+    return;
   }
 
   // Angka MASUK / KELUAR di dashboard -> popup riwayat.
