@@ -29,7 +29,7 @@ Dokumentasi lengkap, hasil audit, dan rancangan migrasi ke PHP (Hostinger).
 11. [Spesifikasi API](#11-spesifikasi-api)
 12. [Rencana Kerja Bertahap](#12-rencana-kerja-bertahap)
 13. [Glosarium](#13-glosarium)
-14. [Status Implementasi](#14-status-implementasi) ← *apa yang sudah jadi, impor data nyata, cara menjalankan*
+14. [Status Implementasi](#14-status-implementasi) ← *status, impor data, **panduan deploy***
 
 ---
 
@@ -1790,7 +1790,126 @@ dengan Excel — cocok. Dua sisanya adalah pasangan barcode kembar di atas,
 yang setelah diperiksa manual juga sudah benar (dicocokkan lewat nama).
 Akurasi impor **1.404/1.404**.
 
-### 14.6 Popup riwayat per barang
+### 14.6 Panduan deploy ke Hostinger
+
+Ikuti berurutan. Langkah 3 dan 6 adalah yang paling sering menggagalkan.
+
+#### 1. Siapkan database di hPanel
+
+```
+hPanel → Databases → MySQL Databases
+  Buat database         → catat namanya (berawalan uXXXXXX_)
+  Buat user + password  → catat keduanya
+  Tambahkan user ke database, beri ALL PRIVILEGES
+```
+
+#### 2. Impor struktur dan data
+
+phpMyAdmin dari hPanel → pilih database → tab **Import**:
+
+```
+1. sql/001_schema.sql        7 tabel + akun admin awal
+2. sql/002_seed_master.sql   1.404 barang, 79.123 unit, 350 ambang (108 KB)
+```
+
+`002_seed_master.sql` sudah berisi **data nyata dari KARTU STOK** — bukan
+seed nol dari prototipe. Berkas itu diawali `DELETE FROM master_barang`,
+jadi aman diimpor ulang. Regenerasi kapan pun dengan:
+
+```
+php tools\ekspor_master.php
+```
+
+#### 3. Isi kredensial produksi ⚠️
+
+`config/database.php` di repositori berisi **placeholder**, bukan
+kredensial asli. Ubah cabang produksinya **di server**, bukan di repo:
+
+```php
+} else {
+    // ---- Hostinger (produksi) ----
+    define('DB_HOST', 'localhost');
+    define('DB_PORT', '3306');
+    define('DB_NAME', 'uXXXXXX_web_stock');      // dari langkah 1
+    define('DB_USER', 'uXXXXXX_gudang');
+    define('DB_PASS', 'password-asli-anda');
+    define('APP_DEBUG', false);
+    define('APP_ENV', 'produksi');
+}
+```
+
+Repositori ini publik. **Jangan pernah meng-commit kredensial asli.**
+Deteksi lingkungan berjalan otomatis lewat `HTTP_HOST`, jadi cabang lokal
+tetap dipakai saat kamu bekerja di XAMPP.
+
+#### 4. Unggah berkas
+
+File Manager hPanel atau FTP, ke `public_html/`. Yang perlu diunggah:
+
+```
+index.php  login.php  logout.php  .htaccess
+api/  assets/  config/  includes/
+```
+
+`sql/` dan `tools/` boleh ikut (`.htaccess` sudah memblokir aksesnya lewat
+web), atau tidak diunggah sama sekali setelah langkah 2 selesai.
+
+**Jangan unggah** berkas `.xlsx` dan prototipe `.html` — keduanya sudah
+di-*gitignore* dan tidak diperlukan aplikasi.
+
+#### 5. Aktifkan HTTPS
+
+```
+hPanel → Security → SSL → pasang sertifikat gratis
+```
+
+`.htaccess` sudah memaksa redirect ke HTTPS, dan sengaja melewati
+`localhost` supaya pengembangan tidak terganggu. Cookie sesi otomatis
+menjadi `secure` begitu situs berjalan di HTTPS.
+
+#### 6. Ganti password admin ⚠️
+
+Skema mengirim akun `admin` / `admin123`. **Ganti sebelum dipakai.**
+
+```
+php tools\buat_password.php "PasswordBaruAnda"
+```
+
+Perintah itu mencetak `UPDATE users SET password_hash = ...` yang tinggal
+dijalankan di phpMyAdmin. Passwordnya sendiri tidak pernah tersimpan di
+berkas mana pun — hanya hashnya.
+
+Alat yang sama juga mencetak `INSERT` untuk menambah pengguna baru, karena
+antarmuka manajemen pengguna belum dibuat.
+
+#### 7. Periksa setelah naik
+
+| Periksa | Harapan |
+|---|---|
+| `https://domain/login.php` | halaman masuk tampil |
+| Login | masuk ke dashboard, 1.404 SKU, 110 merah |
+| `https://domain/config/database.php` | **403 / 404** — bukan isi berkas |
+| `https://domain/sql/001_schema.sql` | **403 / 404** |
+| Lencana di kaki halaman masuk | tertulis `produksi`, bukan `lokal` |
+| PHP version di hPanel | **8.1+** |
+
+Bila `config/database.php` bisa dibuka isinya, `.htaccess` tidak terbaca —
+periksa apakah berkasnya benar-benar terunggah (namanya diawali titik, dan
+sebagian klien FTP menyembunyikannya).
+
+#### Beda lingkungan yang perlu diingat
+
+| Hal | XAMPP (Windows) | Hostinger (Linux) |
+|---|---|---|
+| Nama berkas | tidak peka huruf besar/kecil | **peka** — `Api/List.php` ≠ `api/list.php` |
+| Zona waktu | ikut Windows | sering UTC — sudah dipaksa `Asia/Jakarta` di `config.php` |
+| `CHECK` constraint | MariaDB menegakkan | MySQL 5.7 **mengabaikan diam-diam** |
+
+Poin ketiga sudah diantisipasi: seluruh aturan (jumlah > 0, stok tidak
+minus, barcode wajib) divalidasi di PHP, dan constraint database hanya jaring
+pengaman kedua.
+
+### 14.7 Popup riwayat per barang
 
 Angka pada kolom **MASUK** dan **KELUAR** di dashboard bisa diklik. Sekali
 klik membuka popup berisi seluruh riwayat transaksi barang itu — tanpa perlu
@@ -1815,7 +1934,7 @@ untuk konteks string JavaScript di dalam atribut. Listener-nya didelegasikan
 dari `document` supaya tetap bekerja setelah tabel dirender ulang oleh filter
 atau paginasi.
 
-### 14.7 Masih terbuka
+### 14.8 Masih terbuka
 
 - **PDF picking list asli** untuk uji regresi parser — satu-satunya hal yang
   belum bisa diverifikasi
