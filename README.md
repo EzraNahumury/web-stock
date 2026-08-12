@@ -9,7 +9,7 @@ Dokumentasi lengkap, hasil audit, dan rancangan migrasi ke PHP (Hostinger).
 | **Prototipe** | `aplikasi-gudang (2).html` — 951 baris, 262 KB, single-file |
 | **Lingkungan kerja** | XAMPP di komputer lokal (Apache + PHP + MariaDB) |
 | **Target produksi** | PHP 8.x + MySQL, shared hosting Hostinger |
-| **Status** | Prototipe berjalan, **belum bisa di-hosting** (lihat [Blocker #1](#b1)) |
+| **Status** | Versi PHP **sudah dibangun dan berjalan** — lihat [Bagian 14](#14-status-implementasi) |
 | **Dokumen ini** | Hasil audit mendalam + spesifikasi versi PHP |
 
 ---
@@ -29,6 +29,7 @@ Dokumentasi lengkap, hasil audit, dan rancangan migrasi ke PHP (Hostinger).
 11. [Spesifikasi API](#11-spesifikasi-api)
 12. [Rencana Kerja Bertahap](#12-rencana-kerja-bertahap)
 13. [Glosarium](#13-glosarium)
+14. [Status Implementasi](#14-status-implementasi) ← *apa yang sudah jadi & cara menjalankannya*
 
 ---
 
@@ -1567,15 +1568,158 @@ pemeriksaan klien saja tidak pernah cukup).
 
 ---
 
+## 14. Status Implementasi
+
+Versi PHP sudah dibangun mengikuti fungsi dan tampilan prototipe. Bagian ini
+mencatat apa yang sudah jadi, cara menjalankannya, dan apa yang masih terbuka.
+
+### 14.1 Cara menjalankan
+
+**Prasyarat:** XAMPP dengan Apache + MySQL menyala.
+
+```
+1. Salin/link folder proyek ke htdocs:
+     mklink /D C:\xampp\htdocs\web-stock C:\web-stock      (CMD as Administrator)
+   atau salin isinya secara manual.
+
+2. Database sudah dibuat & terisi. Bila perlu mengulang dari nol:
+     C:\xampp\mysql\bin\mysql.exe -u root -e "CREATE DATABASE web_stock CHARACTER SET utf8mb4"
+     C:\xampp\mysql\bin\mysql.exe -u root web_stock < sql\001_schema.sql
+     C:\xampp\mysql\bin\mysql.exe -u root web_stock < sql\002_seed_master.sql
+
+3. Buka http://localhost/web-stock/
+     Login: admin / admin123      <-- ganti sebelum dipakai sungguhan
+```
+
+**Uji mandiri:**
+
+```
+C:\xampp\php\php.exe tools\uji_fondasi.php      38 pemeriksaan fondasi
+C:\xampp\php\php.exe tools\buat_pdf_contoh.php  buat PDF picking list sintetis
+node tools\uji_parser.mjs                       22 asersi parser (butuh: npm i pdfjs-dist@3.11.174)
+```
+
+### 14.2 Yang sudah selesai
+
+| Tahap | Isi | Status |
+|---|---|---|
+| 0 | Setup XAMPP, database `web_stock` | ✅ terisi 1.404 item |
+| 1 | Skema SQL, konversi seed, config, auth, CSRF | ✅ 38/38 uji lulus |
+| 2 | Pecah aset: CSS, app.js, api.js, parser, vendor pdf.js | ✅ CDN dilepas |
+| 3 | Endpoint API: master, masuk, keluar, dashboard | ✅ diuji lewat HTTP |
+| 4 | Impor PDF: check + commit transaksional | ✅ rollback terverifikasi |
+| 5 | Perbaikan temuan audit | ✅ lihat tabel di bawah |
+| 6 | Ekspor CSV | ✅ BOM UTF-8, pemisah titik koma |
+| 7 | Naik ke Hostinger | ⬜ belum |
+
+### 14.3 Temuan audit yang sudah ditutup
+
+| Kode | Temuan | Perbaikan |
+|---|---|---|
+| B1 | `window.storage` bukan API browser | Diganti PHP + MySQL lewat `assets/js/api.js` |
+| B2 | Tanpa autentikasi | Login sesi, `password_hash`, CSRF, `session_regenerate_id` |
+| B3 | Tulis ulang seluruh array | `INSERT`/`UPDATE` per baris |
+| D1 | Barcode duplikat | `UNIQUE KEY` + kolom relasi `master_id` |
+| D2 | 356 barcode kosong | Digenerate `INT-<sku>`, ditandai `barcode_asli = 0` |
+| D3 | Stok bisa minus | Divalidasi server, bisa diatur lewat `IZINKAN_STOK_MINUS` |
+| D4 | 1.404 item kritis sejak awal | Status keempat `belum_diatur` untuk `stok_minimal = 0` |
+| D5 | Impor PDF ganda | Hash SHA-256 + `no_picking`, wajib konfirmasi ulang |
+| D6 | Tanggal selalu hari ini | Diisi awal dari tanggal cetak PDF, bisa diubah admin |
+| D7 | Kategori dipaksa terisi | Opsi `— Tanpa kategori —` bernilai kosong |
+| F1 | Riwayat terpotong 200 baris | Paginasi server + filter rentang tanggal |
+| F2 | Hapus tanpa konfirmasi | Dialog konfirmasi + soft delete `deleted_at` |
+| F3 | Tidak ada ekspor | `api/export/csv.php` untuk 4 jenis data |
+| F4 | Tidak ada jejak audit | Tabel `activity_log` terisi di semua operasi tulis |
+| F5 | Dropdown keterangan tidak reset | Direset setelah simpan |
+| F6 | `computeStats()` dua kali | Agregasi pindah ke SQL `GROUP BY` |
+| S2 | Rakit HTML lewat string | `htmlspecialchars()` di server, `esc()` dipertahankan di klien |
+| S4 | CDN tanpa SRI | pdf.js di-host sendiri di `assets/vendor/` |
+
+### 14.4 Keterbatasan diketahui
+
+**Parser `dicetakOleh` rapuh.** Regex bawaan prototipe:
+
+```js
+dicetakOleh: get(/Dicetak Oleh:?\s*([A-Za-z0-9 _-]+?)(?:\s+Picking|$)/i)
+```
+
+Perilakunya yang terukur:
+
+| Teks setelah nama | Hasil |
+|---|---|
+| `Picking List` | ✅ `"admin_gudang"` |
+| (akhir teks) | ✅ `"admin_gudang"` |
+| `Halaman 1` | ⚠️ ikut tertelan: `"admin_gudang Halaman 1"` |
+| `Jumlah Pesanan: 3` | ❌ kosong — titik dua di luar character class |
+
+Parser **sengaja tidak diubah**: layout PDF asli belum pernah diuji, dan
+alternatif `\s+Picking` menunjukkan regex ini ditulis untuk layout tertentu
+yang kemungkinan besar cocok di sana. Dampaknya hanya metadata tampilan
+(`import_batch.dicetak_oleh` dan panel review) — **tidak mempengaruhi
+perhitungan stok sama sekali**. Verifikasi dengan PDF asli sebelum memutuskan
+mengubahnya.
+
+**Uji parser memakai PDF sintetis.** `tools/buat_pdf_contoh.php` menghasilkan
+picking list tiruan berdasarkan tebakan atas apa yang dicari parser. Semua
+22 asersi lulus — termasuk penggabungan nama terbungkus dua baris dan
+pengabaian footer halaman — tapi itu membuktikan alurnya berjalan, bukan
+bahwa layout PDF asli sudah pasti cocok.
+
+### 14.5 Masih terbuka
+
+- **PDF picking list asli** untuk uji regresi parser — satu-satunya hal yang
+  belum bisa diverifikasi
+- **359 barcode `barcode_asli = 0`** perlu dilengkapi barcode sungguhan lewat
+  menu Master barang (tampil dengan penanda `SEMENTARA`)
+- **Opname stok awal** — seluruh item masih `stok_awal = 0`, jadi angka sistem
+  belum mencerminkan fisik gudang
+- **Stok minimal per item** — selama masih 0, statusnya `belum diatur` dan
+  peringatan order tidak akan menyala
+- **Manajemen pengguna** — skema sudah punya role `admin`/`operator`, tapi
+  antarmuka pengelolaannya belum dibuat; user tambahan untuk sementara
+  ditambahkan lewat phpMyAdmin
+- **Deploy ke Hostinger** (Tahap 7)
+
+---
+
 ## Lampiran — Berkas Proyek
 
 ```
-C:\web-stock\                       Ruang kerja & referensi
-├── aplikasi-gudang (2).html        Prototipe, 951 baris — sumber kebenaran fungsional
-└── README.md                       Dokumen ini
-
-C:\xampp\htdocs\web-stock\          Aplikasi yang dikembangkan (lihat Bagian 9.2)
-└── …                               Isinya dipindahkan ke public_html/ saat deploy
+C:\web-stock\
+├── aplikasi-gudang (2).html    Prototipe — sumber kebenaran fungsional (tidak di-commit)
+├── README.md                   Dokumen ini
+├── index.php                   Halaman utama
+├── login.php / logout.php      Autentikasi
+├── .htaccess                   HTTPS, blokir folder sensitif, header keamanan
+├── config/
+│   ├── database.php            Kredensial, deteksi lokal/produksi otomatis
+│   └── config.php              Konstanta aplikasi
+├── includes/
+│   ├── db.php                  PDO + helper query
+│   ├── auth.php                Sesi, login, CSRF, jejak audit
+│   ├── helpers.php             Validasi, sanitasi, logika stok bersama
+│   ├── response.php            Keluaran JSON seragam
+│   └── transaksi.php           Logika bersama barang masuk/keluar
+├── api/
+│   ├── dashboard/stats.php     Agregasi stok via SQL
+│   ├── master/                 list, save, delete, cek_barcode
+│   ├── masuk/  keluar/         list, create, delete
+│   ├── import/                 check (deteksi ganda), commit (transaksional)
+│   └── export/csv.php          Ekspor 4 jenis data
+├── assets/
+│   ├── css/app.css             CSS prototipe + tambahan versi PHP
+│   ├── js/pdf-parser.js        Parser PDF — SALINAN UTUH prototipe
+│   ├── js/api.js               Pembungkus fetch, pengganti loadKey/saveKey
+│   ├── js/app.js               State, router, seluruh render*()
+│   └── vendor/                 pdf.min.js + worker (host sendiri, lepas CDN)
+├── sql/
+│   ├── 001_schema.sql          7 tabel
+│   └── 002_seed_master.sql     1.404 item hasil konversi
+└── tools/
+    ├── convert_seed.php        Konversi MASTER_SEED -> SQL
+    ├── buat_pdf_contoh.php     Buat PDF picking list sintetis
+    ├── uji_fondasi.php         38 pemeriksaan fondasi
+    └── uji_parser.mjs          22 asersi parser (Node + pdfjs-dist)
 ```
 
 Prototipe **jangan dihapus** selama migrasi. Ia adalah spesifikasi yang bisa
