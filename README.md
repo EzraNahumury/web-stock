@@ -29,7 +29,7 @@ Dokumentasi lengkap, hasil audit, dan rancangan migrasi ke PHP (Hostinger).
 11. [Spesifikasi API](#11-spesifikasi-api)
 12. [Rencana Kerja Bertahap](#12-rencana-kerja-bertahap)
 13. [Glosarium](#13-glosarium)
-14. [Status Implementasi](#14-status-implementasi) ← *apa yang sudah jadi & cara menjalankannya*
+14. [Status Implementasi](#14-status-implementasi) ← *apa yang sudah jadi, impor data nyata, cara menjalankan*
 
 ---
 
@@ -1665,16 +1665,145 @@ picking list tiruan berdasarkan tebakan atas apa yang dicari parser. Semua
 pengabaian footer halaman — tapi itu membuktikan alurnya berjalan, bukan
 bahwa layout PDF asli sudah pasti cocok.
 
-### 14.5 Masih terbuka
+### 14.5 Impor data nyata dari KARTU STOK
+
+Master barang sudah diisi data operasional sungguhan dari
+`KARTU STOK AGUSTUS 2026 (1).xlsx`, sheet **DAFTAR REKAP BARANG**
+(header baris 4, data mulai baris 6, 1.404 baris).
+
+```
+C:\xampp\php\php.exe tools\audit_kartu_stok.php        periksa dulu, tanpa menulis
+C:\xampp\php\php.exe tools\impor_kartu_stok.php        simulasi
+C:\xampp\php\php.exe tools\impor_kartu_stok.php --tulis  simpan
+```
+
+XLSX dibaca tanpa pustaka luar — `tools/baca_xlsx.php` membongkar ZIP-nya dan
+membaca `sharedStrings.xml` + `sheet1.xml` langsung.
+
+#### Kolom yang dipakai
+
+| Kolom | Isi | Dipakai |
+|---|---|---|
+| A | SKU | ✅ |
+| B | KODE BARCODE | ✅ |
+| C | NAMA BARANG | ✅ |
+| D | STOK AWAL | ✅ |
+| E | BARANG MASUK | ❌ **seluruh 1.404 baris `#REF!`** |
+| F | BARANG KELUAR | ❌ **`#REF!`** |
+| G | STOK AKHIR | ❌ **`#REF!`** |
+| H | STOK MINIMAL | ✅ |
+| J | KATEGORI | ✅ |
+
+Kolom E/F/G rumusnya rusak di berkas sumber. Tidak masalah: ketiganya nilai
+turunan, dan aplikasi menghitungnya sendiri dari tabel transaksi.
+
+#### Cara pencocokan
+
+Berurutan, dan baris master yang sudah diklaim baris Excel lain tidak
+dipertimbangkan lagi — supaya dua produk bernama sama tidak berebut baris yang
+sama:
+
+| Jalur | Cocok |
+|---|---|
+| 1. barcode persis | 1.045 |
+| 2. SKU persis | 350 |
+| 3. nama persis | 9 |
+| **Total** | **1.404 / 1.404** |
+
+Nol baris Excel gagal dicocokkan, nol baris master tanpa pasangan.
+
+#### Keputusan atas data bermasalah
+
+| Masalah | Jumlah | Perlakuan |
+|---|---|---|
+| Stok minimal **pecahan** | 180 | **Dibulatkan ke atas** (`ceil`). Kolom DB bertipe `INT`; ambang yang dibulatkan ke bawah membuat peringatan order terlambat menyala |
+| Stok minimal kosong/`#REF!` | 1.010 | → 0, berarti status `belum diatur` |
+| Stok awal kosong | 2 | → 0 (`GYMBALL 55CM KUNING`, `GYMBALL 65CM KUNING`) |
+| Stok awal **negatif** (−1) | 1 | → 0 (`GYMBALL 65CM PUTIH`) — stok pembuka tidak mungkin minus |
+| Barcode kembar | 3 | Akhiran `-D2` **dipertahankan**, tidak dikembalikan ke barcode asli |
+
+Soal barcode kembar: berkas sumber memberi barcode yang sama kepada dua produk
+yang berbeda —
+
+```
+12132848  AYRES GLOVE EXERION FINGER SAFE RED BLACK 9  ← memegang barcode asli
+12132848  AYRES GLOVE EXERION RED BLACK 10             ← jadi 12132848-D2
+12132897  FOX KAOS KAKI BLAST MERAH / STANDAR MERAH
+12132898  FOX KAOS KAKI BLAST PUTIH / STANDAR PUTIH
+```
+
+Mengembalikan barcode aslinya bukan cuma menabrak `UNIQUE`, tapi akan
+**menggabungkan dua produk berbeda menjadi satu** dalam perhitungan stok.
+Importir punya pemeriksaan tabrakan yang membatalkan seluruh impor bila ini
+terjadi. Akhiran `-D2` bertahan sampai gudang memutuskan barcode mana yang
+benar; barisnya bertanda `barcode_asli = 0` dan tampil dengan label
+`SEMENTARA`.
+
+#### Kategori diperbaiki
+
+Daftar kategori prototipe hanya cocok 3 dari 10 kategori yang benar-benar
+dipakai. `KATEGORI_OPTIONS` di `config/config.php` diganti dengan yang nyata:
+
+| Kategori | Item | Unit | Merah |
+|---|---|---|---|
+| AYRES | 687 | 22.353 | 40 |
+| SAIFENU | 181 | 814 | 0 |
+| FASHION | 176 | 16.880 | 31 |
+| AVO | 130 | 8.578 | 12 |
+| JERSEY | 89 | 88 | 0 |
+| ACC | 51 | 323 | 7 |
+| FISIO | 33 | 28.335 | 8 |
+| GYM | 23 | 8 | 0 |
+| AOLIKES | 18 | 1.436 | 9 |
+| TRAINING | 15 | 239 | 3 |
+
+`FOX` dan `AC` dibuang — tidak pernah dipakai sebagai kategori di data nyata
+(produk FOX masuk `FASHION`/`JERSEY`), dan `AC` sebenarnya tertulis `ACC`.
+
+Daftar ini kini **hanya ada di satu tempat**: `config/config.php`.
+`index.php` menyuntikkannya ke `window.KATEGORI_OPTIONS`, jadi `app.js` tidak
+lagi menyalinnya — dulu daftarnya kembar di dua berkas dan bisa menyimpang.
+
+#### Hasil
+
+```
+1.404 baris master diperbarui
+79.123 unit stok awal
+  350 item punya ambang stok minimal
+   10 kategori
+```
+
+| Status | Jumlah | Warna |
+|---|---|---|
+| **Perlu order** (`stok_akhir <= stok_minimal`) | **110** | 🔴 merah |
+| Menipis (≤ minimal × 1,3) | 11 | 🟠 amber |
+| Aman | 229 | 🟢 hijau |
+| Belum diatur (`stok_minimal = 0`) | 1.054 | ⚪ abu |
+
+Aturan merahnya ada di `sqlStatusStok()` (`includes/helpers.php`) dan dipakai
+bersama oleh dashboard maupun ekspor CSV, jadi ambangnya tidak mungkin
+menyimpang antar tampilan. Badge memakai `.badge.kritis` (`#B23A2E`) dan bar
+gauge-nya ikut merah.
+
+**Verifikasi:** 1.046 dari 1.048 baris berbarcode dibanding sel demi sel
+dengan Excel — cocok. Dua sisanya adalah pasangan barcode kembar di atas,
+yang setelah diperiksa manual juga sudah benar (dicocokkan lewat nama).
+Akurasi impor **1.404/1.404**.
+
+### 14.6 Masih terbuka
 
 - **PDF picking list asli** untuk uji regresi parser — satu-satunya hal yang
   belum bisa diverifikasi
+- **1.054 item tanpa ambang stok minimal** — berkas KARTU STOK hanya mengisi
+  350 dari 1.404. Selama masih 0, statusnya `belum diatur` dan peringatan
+  order tidak akan menyala untuk item itu
 - **359 barcode `barcode_asli = 0`** perlu dilengkapi barcode sungguhan lewat
-  menu Master barang (tampil dengan penanda `SEMENTARA`)
-- **Opname stok awal** — seluruh item masih `stok_awal = 0`, jadi angka sistem
-  belum mencerminkan fisik gudang
-- **Stok minimal per item** — selama masih 0, statusnya `belum diatur` dan
-  peringatan order tidak akan menyala
+  menu Master barang (tampil dengan penanda `SEMENTARA`). Tiga di antaranya
+  adalah barcode kembar yang perlu diputuskan gudang — lihat
+  [Bagian 14.5](#145-impor-data-nyata-dari-kartu-stok)
+- **Verifikasi stok awal ke fisik gudang** — 79.123 unit sudah masuk dari
+  KARTU STOK, tapi angkanya per Agustus 2026 dan belum dicocokkan ulang
+  dengan hitungan fisik
 - **Manajemen pengguna** — skema sudah punya role `admin`/`operator`, tapi
   antarmuka pengelolaannya belum dibuat; user tambahan untuk sementara
   ditambahkan lewat phpMyAdmin

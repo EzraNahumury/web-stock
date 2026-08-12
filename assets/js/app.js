@@ -297,8 +297,10 @@ async function refreshDashboard(){
 /* ---------------------------------------------------------------- */
 /* Transaksi (Barang Masuk / Keluar)                                 */
 /* ---------------------------------------------------------------- */
-const KET_MASUK  = ["Barang Baru","Restock","Retur Masuk","Lainnya"];
-const KET_KELUAR = ["Pesanan MP","Retur","Rusak / Reject","Lainnya"];
+// Disuntikkan index.php dari config/config.php — satu sumber kebenaran.
+// Nilai cadangan hanya dipakai bila halaman dibuka tanpa suntikan server.
+const KET_MASUK  = window.KET_MASUK  || ["Barang Baru","Restock","Retur Masuk","Lainnya"];
+const KET_KELUAR = window.KET_KELUAR || ["Pesanan MP","Retur","Rusak / Reject","Lainnya"];
 
 function renderTransaksiTab(kind){
   const ketOptions = kind==="masuk" ? KET_MASUK : KET_KELUAR;
@@ -772,8 +774,9 @@ async function confirmPdfReview(){
 /* Master barang                                                      */
 /* ---------------------------------------------------------------- */
 function renderMaster(){
+  const daftarKategori = window.KATEGORI_OPTIONS || [];
   const opsiKategori = '<option value="">— Tanpa kategori —</option>'
-    + ["FISIO","FOX","AVO","AYRES","AC","LAINNYA"].map(k=>'<option value="'+k+'">'+k+'</option>').join("");
+    + daftarKategori.map(k=>'<option value="'+esc(k)+'">'+esc(k)+'</option>').join("");
 
   let html = '<form class="form-card" id="masterForm" onsubmit="submitMaster(event)">';
   html += '<div class="form-grid">';

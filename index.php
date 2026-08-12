@@ -54,6 +54,10 @@ $csrf = csrfToken();
 <script>
   window.CSRF_TOKEN = <?= json_encode($csrf) ?>;
   window.APP_USER   = <?= json_encode($user, JSON_UNESCAPED_UNICODE) ?>;
+  // Sumber tunggal: config/config.php. Jangan disalin ulang di app.js.
+  window.KATEGORI_OPTIONS = <?= json_encode(KATEGORI_OPTIONS, JSON_UNESCAPED_UNICODE) ?>;
+  window.KET_MASUK        = <?= json_encode(KET_MASUK, JSON_UNESCAPED_UNICODE) ?>;
+  window.KET_KELUAR       = <?= json_encode(KET_KELUAR, JSON_UNESCAPED_UNICODE) ?>;
 </script>
 <script src="assets/vendor/pdf.min.js"></script>
 <script src="assets/js/pdf-parser.js?v=<?= e(APP_VERSI) ?>"></script>

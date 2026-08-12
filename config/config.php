@@ -19,7 +19,25 @@ define('PAGE_SIZE', 50);
 define('AMBANG_RENDAH', 1.3);
 
 // Pilihan dropdown — harus sama persis dengan yang ada di assets/js/app.js.
-define('KATEGORI_OPTIONS', ['FISIO', 'FOX', 'AVO', 'AYRES', 'AC', 'LAINNYA']);
+//
+// Daftar ini diambil dari kategori yang BENAR-BENAR dipakai di berkas
+// "KARTU STOK AGUSTUS 2026". Daftar lama prototipe (FISIO, FOX, AVO, AYRES,
+// AC, LAINNYA) hanya cocok 3 dari 10: SAIFENU, FASHION, JERSEY, ACC, GYM,
+// AOLIKES, dan TRAINING tidak ada di sana, sementara FOX tidak pernah
+// dipakai sebagai kategori (produk FOX masuk FASHION/JERSEY).
+define('KATEGORI_OPTIONS', [
+    'ACC',       //   51 item
+    'AOLIKES',   //   18
+    'AVO',       //  130
+    'AYRES',     //  687
+    'FASHION',   //  176
+    'FISIO',     //   33
+    'GYM',       //   23
+    'JERSEY',    //   89
+    'SAIFENU',   //  181
+    'TRAINING',  //   15
+    'LAINNYA',   // penampung
+]);
 define('KET_MASUK',  ['Barang Baru', 'Restock', 'Retur Masuk', 'Lainnya']);
 define('KET_KELUAR', ['Pesanan MP', 'Retur', 'Rusak / Reject', 'Lainnya']);
 

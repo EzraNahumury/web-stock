@@ -18,3 +18,9 @@ Thumbs.db
 # Editor
 .vscode/
 .idea/
+
+# Data operasional nyata — jangan pernah masuk repo publik.
+# Berisi stok, harga, dan angka penjualan 1.404 produk.
+*.xlsx
+*.xls
+*.csv
