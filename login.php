@@ -227,14 +227,7 @@ $csrf = csrfToken();
       </button>
     </form>
 
-    <?php if (APP_ENV === 'lokal'): ?>
-      <div class="catatan-lokal tahap" style="--d:660ms">
-        Lingkungan lokal — akun awal <b>admin</b> / <b>admin123</b>.
-        Ganti passwordnya sebelum dipakai di gudang.
-      </div>
-    <?php endif; ?>
-
-    <div class="form-kaki tahap" style="--d:720ms">
+    <div class="form-kaki tahap" style="--d:660ms">
       <span>v<?= e(APP_VERSI) ?></span>
       <span class="lencana"><?= e(APP_ENV) ?></span>
     </div>
