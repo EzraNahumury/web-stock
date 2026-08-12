@@ -138,6 +138,150 @@ function konfirmasi(judul, pesan, labelYa){
   });
 }
 
+/**
+ * Modal isi bebas (bukan konfirmasi). Mengembalikan objek dengan .tutup()
+ * dan .isi(html) supaya isinya bisa diganti setelah data tiba.
+ */
+function modalKonten(lebar){
+  const bg = document.createElement("div");
+  bg.className = "modal-bg";
+  bg.innerHTML = '<div class="modal' + (lebar ? ' lebar' : '') + '" role="dialog" aria-modal="true"></div>';
+  const kotak = bg.firstChild;
+
+  function tutup(){
+    document.removeEventListener("keydown", onKey);
+    if(bg.parentNode) bg.parentNode.removeChild(bg);
+  }
+  function onKey(ev){ if(ev.key === "Escape") tutup(); }
+
+  bg.addEventListener("click", ev => {
+    if(ev.target === bg) tutup();
+    const act = ev.target.closest && ev.target.closest('[data-act="tutup"]');
+    if(act) tutup();
+  });
+  document.addEventListener("keydown", onKey);
+  document.body.appendChild(bg);
+
+  return {
+    tutup: tutup,
+    isi: function(html){ kotak.innerHTML = html; },
+    el: kotak
+  };
+}
+
+/* ---------------------------------------------------------------- */
+/* Popup riwayat transaksi per barang                                */
+/* ---------------------------------------------------------------- */
+let riwayatState = { masterId:0, jenis:"masuk", page:1, modal:null };
+
+async function bukaRiwayat(masterId, jenis, nama){
+  riwayatState = { masterId: masterId, jenis: jenis, page: 1, modal: modalKonten(true) };
+  riwayatState.modal.isi(
+    '<div class="modal-head"><h3>' + esc(nama || "Riwayat") + '</h3>'
+    + '<button type="button" class="icon-btn" data-act="tutup" aria-label="Tutup">' + svgIcon("x") + '</button></div>'
+    + '<div class="modal-kosong">Memuat riwayat…</div>'
+  );
+  await muatRiwayat();
+}
+
+function riwayatGoPage(p){
+  riwayatState.page = p;
+  muatRiwayat();
+}
+
+async function muatRiwayat(){
+  const st = riwayatState;
+  if(!st.modal) return;
+
+  let d;
+  try{
+    d = await API.get("master/riwayat.php", {
+      master_id: st.masterId, jenis: st.jenis, page: st.page
+    });
+  }catch(e){
+    st.modal.isi(
+      '<div class="modal-head"><h3>Gagal memuat</h3>'
+      + '<button type="button" class="icon-btn" data-act="tutup" aria-label="Tutup">' + svgIcon("x") + '</button></div>'
+      + '<p>' + esc(e.message || "Terjadi kesalahan.") + '</p>'
+      + '<div class="modal-act"><button type="button" class="btn ghost" data-act="tutup">Tutup</button></div>'
+    );
+    return;
+  }
+
+  const isKel  = d.jenis === "keluar";
+  const judul  = isKel ? "Riwayat barang keluar" : "Riwayat barang masuk";
+  const tanda  = isKel ? "−" : "+";
+  const kelas  = isKel ? "keluar" : "masuk";
+
+  let html = '<div class="modal-head"><div>'
+    + '<h3>' + esc(judul) + '</h3>'
+    + '<div style="font-size:13.5px; font-weight:600; margin-top:2px;">' + esc(d.item.nama) + '</div>'
+    + '</div>'
+    + '<button type="button" class="icon-btn" data-act="tutup" aria-label="Tutup">' + svgIcon("x") + '</button>'
+    + '</div>';
+
+  html += '<div class="modal-sub">' + esc(d.item.sku || "-") + ' · ' + esc(d.item.barcode) + '</div>';
+
+  html += '<div class="chip-row">'
+    + '<span class="chip">Total ' + esc(isKel ? "keluar" : "masuk") + ': <b>' + tanda + fmtNum(d.total_jumlah) + '</b> pcs</span>'
+    + '<span class="chip"><b>' + fmtNum(d.total) + '</b> catatan</span>'
+    + '<span class="chip">Stok awal: <b>' + fmtNum(d.item.stok_awal) + '</b></span>'
+    + (d.item.kategori ? '<span class="chip">' + esc(d.item.kategori) + '</span>' : '')
+    + '</div>';
+
+  if(d.per_keterangan && d.per_keterangan.length > 1){
+    html += '<div class="chip-row">'
+      + d.per_keterangan.map(k =>
+          '<span class="chip">' + esc(k.keterangan) + ': <b>' + fmtNum(k.unit) + '</b> pcs (' + fmtNum(k.jml) + 'x)</span>'
+        ).join("")
+      + '</div>';
+  }
+
+  if(!d.rows.length){
+    html += '<div class="modal-kosong">Belum ada catatan barang '
+      + esc(isKel ? "keluar" : "masuk") + ' untuk barang ini.</div>';
+  } else {
+    const kolom = ["Tanggal", "Jumlah", "Keterangan"]
+      .concat(isKel ? ["No. Pesanan", "Asal"] : [])
+      .concat(["Dicatat oleh"]);
+
+    html += '<div class="modal-scroll"><table><thead><tr>'
+      + kolom.map((h,i)=>'<th'+(i===1?' class="num"':'')+'>'+esc(h)+'</th>').join("")
+      + '</tr></thead><tbody>'
+      + d.rows.map(r => {
+          let asal = "Input manual";
+          if(isKel && r.batch_id){
+            asal = "Impor PDF" + (r.no_picking ? " · " + esc(r.no_picking) : (r.nama_file ? " · " + esc(r.nama_file) : ""));
+          }
+          return '<tr>'
+            + '<td style="white-space:nowrap">' + fmtDate(r.tanggal) + '</td>'
+            + '<td class="num" style="font-weight:700; color:var(--' + (isKel ? 'danger' : 'safe') + ')">'
+              + tanda + fmtNum(r.jumlah) + '</td>'
+            + '<td style="color:var(--slate)">' + esc(r.keterangan) + '</td>'
+            + (isKel ? '<td class="mono" style="font-size:11.5px; color:var(--slate)">' + esc(r.no_pesanan || "-") + '</td>' : '')
+            + (isKel ? '<td style="font-size:11.5px; color:var(--slate)">' + asal + '</td>' : '')
+            + '<td style="font-size:11.5px; color:var(--slate)">' + esc(r.oleh || "-") + '</td>'
+            + '</tr>';
+        }).join("")
+      + '</tbody></table></div>';
+
+    if(d.total_pages > 1){
+      html += '<div class="pagination" style="padding:10px 2px 0">'
+        + '<span>halaman ' + d.page + ' dari ' + d.total_pages + '</span>'
+        + '<span style="display:flex; gap:6px;">'
+          + '<button class="btn ghost" ' + (d.page<=1?'disabled':'') + ' onclick="riwayatGoPage(' + (d.page-1) + ')">Sebelumnya</button>'
+          + '<button class="btn ghost" ' + (d.page>=d.total_pages?'disabled':'') + ' onclick="riwayatGoPage(' + (d.page+1) + ')">Berikutnya</button>'
+        + '</span></div>';
+    }
+  }
+
+  html += '<div class="modal-act" style="margin-top:14px;">'
+    + '<button type="button" class="btn ghost" data-act="tutup">Tutup</button>'
+    + '</div>';
+
+  riwayatState.modal.isi(html);
+}
+
 /* ---------------------------------------------------------------- */
 /* Header / tabs                                                     */
 /* ---------------------------------------------------------------- */
@@ -223,6 +367,24 @@ function setDashStatusFilter(){
   refreshDashboard();
 }
 
+/**
+ * Sel angka MASUK / KELUAR yang bisa diklik untuk membuka riwayatnya.
+ * Nama barang diselipkan lewat atribut data-, bukan diinterpolasi ke dalam
+ * string JavaScript di atribut onclick — nama barang mengandung tanda kutip
+ * dan karakter lain yang akan memecah atribut bila ditempel begitu saja.
+ */
+function selRiwayat(s, jenis){
+  const nilai = jenis === "masuk" ? s.masuk_total : s.keluar_total;
+  const tanda = jenis === "masuk" ? "+" : "-";
+  const teks  = tanda + fmtNum(nilai);
+  const judul = jenis === "masuk"
+    ? "Lihat riwayat barang masuk untuk " + s.nama
+    : "Lihat riwayat barang keluar untuk " + s.nama;
+  return '<button type="button" class="num-link" data-riwayat="' + jenis + '"'
+    + ' data-id="' + s.id + '" data-nama="' + esc(s.nama) + '"'
+    + ' title="' + esc(judul) + '">' + teks + '</button>';
+}
+
 async function refreshDashboard(){
   const hasil = $("dashResults");
   if(hasil && !hasil.innerHTML) hasil.innerHTML = '<div class="info-box">Memuat…</div>';
@@ -277,8 +439,8 @@ async function refreshDashboard(){
         + (s.barcode_asli===0 ? '<span class="flag-gen">BARCODE SEMENTARA</span>' : '') + '</div></td>'
       + '<td>'+esc(s.kategori||'-')+'</td>'
       + '<td class="num">'+fmtNum(s.stok_awal)+'</td>'
-      + '<td class="num" style="color:var(--safe)">+'+fmtNum(s.masuk_total)+'</td>'
-      + '<td class="num" style="color:var(--danger)">-'+fmtNum(s.keluar_total)+'</td>'
+      + '<td class="num" style="color:var(--safe)">'   + selRiwayat(s, "masuk")  + '</td>'
+      + '<td class="num" style="color:var(--danger)">' + selRiwayat(s, "keluar") + '</td>'
       + '<td class="num"><div class="stok-akhir-num">'+fmtNum(s.stok_akhir)+'</div><div class="gauge"><div class="gauge-fill" style="width:'+pct+'%; background:'+color+'"></div><div class="gauge-mark" style="left:'+markPct+'%"></div></div></td>'
       + '<td class="num">'+fmtNum(s.stok_minimal)+'</td>'
       + '<td class="num"><span class="badge '+s.status+'">'+(s.status==="kritis"?svgIcon("alert"):"")+labelStatus+'</span></td>'
@@ -936,6 +1098,18 @@ function init(){
 document.addEventListener("click", function(e){
   if(!e.target.closest(".picker-wrap")){
     document.querySelectorAll(".picker-list").forEach(el => el.style.display = "none");
+  }
+
+  // Angka MASUK / KELUAR di dashboard -> popup riwayat.
+  // Didelegasikan dari document supaya tetap bekerja setelah tabel
+  // dirender ulang oleh filter atau paginasi.
+  const tombol = e.target.closest && e.target.closest("[data-riwayat]");
+  if(tombol){
+    bukaRiwayat(
+      Number(tombol.getAttribute("data-id")),
+      tombol.getAttribute("data-riwayat"),
+      tombol.getAttribute("data-nama")
+    );
   }
 });
 

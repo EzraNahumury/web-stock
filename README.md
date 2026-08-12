@@ -1790,7 +1790,32 @@ dengan Excel — cocok. Dua sisanya adalah pasangan barcode kembar di atas,
 yang setelah diperiksa manual juga sudah benar (dicocokkan lewat nama).
 Akurasi impor **1.404/1.404**.
 
-### 14.6 Masih terbuka
+### 14.6 Popup riwayat per barang
+
+Angka pada kolom **MASUK** dan **KELUAR** di dashboard bisa diklik. Sekali
+klik membuka popup berisi seluruh riwayat transaksi barang itu — tanpa perlu
+pindah tab lalu mencari barangnya satu per satu.
+
+**Isi popup:**
+
+- nama barang, SKU, dan barcode
+- total unit, jumlah catatan, stok awal, kategori
+- rincian per keterangan (mis. `Barang Baru 300 pcs (1x)`, `Restock 150 pcs (1x)`)
+- tabel: tanggal, jumlah, keterangan, dan siapa yang mencatat
+- khusus barang keluar: **No. Pesanan** dan **asal** — `Input manual` atau
+  `Impor PDF · PICK-20260812-009`
+- paginasi 25 baris per halaman bila riwayatnya panjang
+
+Endpoint: `GET api/master/riwayat.php?master_id=&jenis=masuk|keluar&page=`
+
+**Catatan implementasi.** Nama barang dikirim lewat atribut `data-nama`,
+bukan diinterpolasi ke dalam `onclick="...('nama')"`. Sepuluh produk memuat
+karakter `&` di namanya, dan `esc()` yang meng-escape HTML **tidak** aman
+untuk konteks string JavaScript di dalam atribut. Listener-nya didelegasikan
+dari `document` supaya tetap bekerja setelah tabel dirender ulang oleh filter
+atau paginasi.
+
+### 14.7 Masih terbuka
 
 - **PDF picking list asli** untuk uji regresi parser — satu-satunya hal yang
   belum bisa diverifikasi
