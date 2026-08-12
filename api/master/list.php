@@ -73,4 +73,4 @@ foreach ($rows as &$r) {
 }
 unset($r);
 
-jsonOk(['rows' => $rows, 'kategori_options' => KATEGORI_OPTIONS] + $meta);
+jsonOk(['rows' => $rows, 'kategori_options' => daftarKategori()] + $meta);

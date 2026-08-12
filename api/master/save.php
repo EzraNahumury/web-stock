@@ -34,7 +34,7 @@ if ($stokAwal < 0 || $stokMinimal < 0) {
 }
 // Kategori boleh kosong — audit D7: seluruh data seed berkategori kosong,
 // jadi memaksa kategori akan diam-diam mengubah data lama saat diedit.
-if ($kategori !== '' && !in_array($kategori, KATEGORI_OPTIONS, true)) {
+if ($kategori !== '' && !in_array($kategori, daftarKategori(), true)) {
     jsonError('Kategori tidak dikenal.');
 }
 

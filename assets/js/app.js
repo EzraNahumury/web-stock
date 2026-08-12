@@ -286,15 +286,32 @@ async function muatRiwayat(){
 /* Header / tabs                                                     */
 /* ---------------------------------------------------------------- */
 const TABS = [
-  { id:"dashboard", label:"Dashboard stok", sub:"Ringkasan stok seluruh barang",
-    ikon:'<path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/>' },
-  { id:"masuk", label:"Barang masuk", sub:"Catat dan telusuri barang yang diterima",
+  { id:"dashboard", label:"Dashboard stok", sub:"Ringkasan stok seluruh barang", grup:"Operasional",
+    ikon:'<path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/>', isi:true },
+  { id:"masuk", label:"Barang masuk", sub:"Catat dan telusuri barang yang diterima", grup:"Operasional",
     ikon:'<path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><path d="M3 17v2a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-2"/>' },
-  { id:"keluar", label:"Barang keluar", sub:"Impor picking list PDF atau catat manual",
+  { id:"keluar", label:"Barang keluar", sub:"Impor picking list PDF atau catat manual", grup:"Operasional",
     ikon:'<path d="M12 21V9"/><polyline points="7 14 12 9 17 14"/><path d="M3 7V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2"/>' },
-  { id:"master", label:"Master barang", sub:"Kelola katalog, barcode, dan ambang stok",
-    ikon:'<path d="M4 7h16M4 12h16M4 17h10"/>' },
+
+  { id:"master", label:"Barang", sub:"Kelola katalog, barcode, dan ambang stok", grup:"Master",
+    ikon:'<path d="M20.6 13.4L12 22l-9-9V4a1 1 0 0 1 1-1h9l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.2"/>' },
+  { id:"kategori", label:"Kategori", sub:"Kelola daftar kategori barang", grup:"Master",
+    ikon:'<path d="M3 6h18M3 12h18M3 18h18"/><circle cx="7" cy="6" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="17" cy="18" r="1.6" fill="currentColor" stroke="none"/>' },
+  { id:"pengguna", label:"Pengguna", sub:"Kelola akun yang bisa masuk ke aplikasi", grup:"Master",
+    adminSaja:true,
+    ikon:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13A4 4 0 0 1 16 11"/>' },
 ];
+
+/** Peran pengguna yang sedang masuk. */
+function peranSaya(){
+  return (window.APP_USER && window.APP_USER.role) || "operator";
+}
+function sayaAdmin(){ return peranSaya() === "admin"; }
+
+/** Menu yang boleh dilihat pengguna ini. */
+function tabTerlihat(){
+  return TABS.filter(t => !t.adminSaja || sayaAdmin());
+}
 
 /** Jumlah kecil di sisi menu — diisi setelah dashboard dimuat. */
 let navHitung = { perluOrder:0 };
@@ -302,19 +319,31 @@ let navHitung = { perluOrder:0 };
 function renderNav(){
   const nav = $("sisiNav");
   if(!nav) return;
-  nav.innerHTML = '<div class="nav-judul">Menu</div>' + TABS.map(t => {
-    const isi = (t.ikon.indexOf("fill") === -1 && t.id !== "dashboard")
-      ? ' fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'
-      : ' fill="currentColor"';
+
+  let html = "";
+  let grupTerakhir = null;
+
+  tabTerlihat().forEach(t => {
+    if(t.grup !== grupTerakhir){
+      html += '<div class="nav-judul">' + esc(t.grup) + '</div>';
+      grupTerakhir = t.grup;
+    }
+    // Ikon dashboard digambar dengan fill; sisanya dengan stroke.
+    const gaya = t.id === "dashboard"
+      ? ' fill="currentColor"'
+      : ' fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"';
+
     let lencana = "";
     if(t.id === "dashboard" && navHitung.perluOrder > 0){
       lencana = '<span class="nav-jml perhatian">' + fmtNum(navHitung.perluOrder) + '</span>';
     }
-    return '<button type="button" class="nav-btn' + (tab===t.id ? ' aktif' : '') + '"'
+    html += '<button type="button" class="nav-btn' + (tab===t.id ? ' aktif' : '') + '"'
       + ' data-tab="' + t.id + '"' + (tab===t.id ? ' aria-current="page"' : '') + '>'
-      + '<svg width="17" height="17" viewBox="0 0 24 24"' + isi + '>' + t.ikon + '</svg>'
+      + '<svg width="17" height="17" viewBox="0 0 24 24"' + gaya + '>' + t.ikon + '</svg>'
       + esc(t.label) + lencana + '</button>';
-  }).join("");
+  });
+
+  nav.innerHTML = html;
 }
 
 function judulHalaman(){
@@ -1269,6 +1298,376 @@ async function deleteMaster(id){
   }catch(e){ tampilGalat(e); }
 }
 
+/* ================================================================== */
+/* Master: Kategori                                                   */
+/* ================================================================== */
+let editKategoriId = null;
+let kategoriRows = [];
+
+function renderKategori(){
+  const bolehUbah = sayaAdmin();
+
+  let html = "";
+  if(!bolehUbah){
+    html += '<div class="info-box">Hanya admin yang bisa mengubah daftar kategori. '
+      + 'Kamu masuk sebagai operator, jadi daftarnya hanya bisa dilihat.</div>';
+  }
+
+  if(bolehUbah){
+    html += '<form class="form-card" id="katForm" onsubmit="submitKategori(event)">'
+      + '<div class="form-grid">'
+      + '<div><label class="field-label" for="kNama">Nama kategori</label>'
+        + '<input type="text" id="kNama" maxlength="30" placeholder="Contoh: FISIO" required></div>'
+      + '<div class="span2"><label class="field-label" for="kKet">Keterangan</label>'
+        + '<input type="text" id="kKet" maxlength="120" placeholder="Untuk apa kategori ini"></div>'
+      + '<div><label class="field-label" for="kUrutan">Urutan</label>'
+        + '<input type="number" id="kUrutan" min="0" step="10" value="0"></div>'
+      + '</div>'
+      + '<div style="display:flex; gap:8px;">'
+        + '<button type="submit" class="btn" id="kSubmit">' + svgIcon("plus") + 'Tambah kategori</button>'
+        + '<button type="button" class="btn ghost" id="kBatal" style="display:none" onclick="batalEditKategori()">'
+          + svgIcon("x") + 'Batal</button>'
+      + '</div></form>';
+  }
+
+  html += '<div id="katHasil"></div>';
+  $("content").innerHTML = html;
+  refreshKategori();
+}
+
+async function refreshKategori(){
+  const wadah = $("katHasil");
+  if(!wadah) return;
+
+  let d;
+  try{ d = await API.get("kategori/list.php"); }
+  catch(e){ tampilGalat(e); return; }
+
+  kategoriRows = d.rows;
+  const bolehUbah = sayaAdmin();
+
+  let baris = d.rows.map(k =>
+    '<tr>'
+    + '<td><div class="item-name">' + esc(k.nama) + '</div>'
+      + (k.keterangan ? '<div class="item-sub" style="font-family:Inter">' + esc(k.keterangan) + '</div>' : '')
+      + '</td>'
+    + '<td class="num">' + fmtNum(k.dipakai) + '</td>'
+    + '<td class="num mono" style="color:var(--slateLo)">' + k.urutan + '</td>'
+    + '<td>' + (k.aktif
+        ? '<span class="badge aman">' + svgIcon("check") + 'Aktif</span>'
+        : '<span class="badge belum_diatur">Nonaktif</span>') + '</td>'
+    + (bolehUbah
+        ? '<td class="num" style="white-space:nowrap">'
+          + '<button class="icon-btn" onclick="editKategori(' + k.id + ')" aria-label="Ubah ' + esc(k.nama) + '">' + svgIcon("edit") + '</button>'
+          + '<button class="icon-btn bahaya" onclick="hapusKategori(' + k.id + ')" aria-label="Hapus ' + esc(k.nama) + '">' + svgIcon("trash") + '</button>'
+          + '</td>'
+        : '')
+    + '</tr>'
+  ).join("");
+
+  if(!d.rows.length){
+    baris = '<tr class="empty-row"><td colspan="' + (bolehUbah?5:4) + '">Belum ada kategori.</td></tr>';
+  }
+
+  const kolom = ["Kategori","Dipakai","Urutan","Status"].concat(bolehUbah?[""]:[]);
+
+  wadah.innerHTML =
+    (d.tanpa_kategori > 0
+      ? '<div class="info-box"><b>' + fmtNum(d.tanpa_kategori) + '</b> barang belum punya kategori. '
+        + 'Atur lewat menu Master → Barang.</div>'
+      : '')
+    + '<div class="table-card"><table style="min-width:560px"><thead><tr>'
+    + kolom.map((h,i)=>'<th' + (i===1||i===2?' class="num"':'') + '>' + esc(h) + '</th>').join("")
+    + '</tr></thead><tbody>' + baris + '</tbody></table>'
+    + '<div class="pagination"><span>' + fmtNum(d.total) + ' kategori</span></div>'
+    + '</div>';
+}
+
+function editKategori(id){
+  const k = kategoriRows.find(x => x.id === id);
+  if(!k) return;
+  editKategoriId = id;
+  $("kNama").value   = k.nama;
+  $("kKet").value    = k.keterangan;
+  $("kUrutan").value = k.urutan;
+  $("kSubmit").innerHTML = svgIcon("edit") + "Simpan perubahan";
+  $("kBatal").style.display = "inline-flex";
+  $("katForm").scrollIntoView({ behavior:"smooth", block:"center" });
+}
+
+function batalEditKategori(){ resetFormKategori(); }
+
+function resetFormKategori(){
+  editKategoriId = null;
+  if($("kNama"))   $("kNama").value = "";
+  if($("kKet"))    $("kKet").value = "";
+  if($("kUrutan")) $("kUrutan").value = "0";
+  if($("kSubmit")) $("kSubmit").innerHTML = svgIcon("plus") + "Tambah kategori";
+  if($("kBatal"))  $("kBatal").style.display = "none";
+}
+
+async function submitKategori(e){
+  e.preventDefault();
+  const body = {
+    id:         editKategoriId || 0,
+    nama:       $("kNama").value.trim(),
+    keterangan: $("kKet").value.trim(),
+    urutan:     Number($("kUrutan").value) || 0,
+    aktif:      true
+  };
+  if(!body.nama){ toast("Nama kategori wajib diisi.", "err"); return; }
+
+  const tbl = $("kSubmit");
+  if(tbl) tbl.disabled = true;
+  setSaveStatus("saving");
+  try{
+    const res = await API.post("kategori/save.php", body);
+    setSaveStatus("ok");
+    toast(res.pesan || "Tersimpan.");
+    resetFormKategori();
+    refreshKategori();
+    segarkanDaftarKategori();
+  }catch(err){ tampilGalat(err); }
+  finally{ if(tbl) tbl.disabled = false; }
+}
+
+async function hapusKategori(id){
+  const k = kategoriRows.find(x => x.id === id);
+  if(!k) return;
+
+  // Kategori yang masih dipakai butuh tujuan pemindahan lebih dulu.
+  if(k.dipakai > 0){
+    const tujuan = await pilihTujuanKategori(k);
+    if(tujuan === null) return;
+    await kirimHapusKategori(id, tujuan);
+    return;
+  }
+
+  const ok = await konfirmasi(
+    'Hapus kategori "' + k.nama + '"?',
+    "Kategori ini belum dipakai barang mana pun, jadi aman dihapus.",
+    "Hapus kategori"
+  );
+  if(!ok) return;
+  await kirimHapusKategori(id, "");
+}
+
+/** Dialog pemilihan kategori tujuan sebelum menghapus yang masih dipakai. */
+function pilihTujuanKategori(k){
+  return new Promise(resolve => {
+    const lain = kategoriRows.filter(x => x.id !== k.id && x.aktif);
+    const m = modalKonten(false);
+    m.isi(
+      '<h3>Pindahkan barangnya dulu</h3>'
+      + '<p>Kategori <b>' + esc(k.nama) + '</b> masih dipakai <b>' + fmtNum(k.dipakai)
+      + '</b> barang. Pilih kategori tujuan sebelum menghapusnya.</p>'
+      + '<label class="field-label" for="katTujuan">Pindahkan ke</label>'
+      + '<select id="katTujuan" style="width:100%; margin-bottom:18px;">'
+        + '<option value="">— Tanpa kategori —</option>'
+        + lain.map(x => '<option value="' + esc(x.nama) + '">' + esc(x.nama) + '</option>').join("")
+      + '</select>'
+      + '<div class="modal-act">'
+        + '<button type="button" class="btn ghost" data-act="tutup">Batal</button>'
+        + '<button type="button" class="btn danger-btn" data-act="lanjut">Pindahkan &amp; hapus</button>'
+      + '</div>'
+    );
+    m.el.addEventListener("click", ev => {
+      if(ev.target.closest('[data-act="lanjut"]')){
+        const v = m.el.querySelector("#katTujuan").value;
+        m.tutup();
+        resolve(v);
+      } else if(ev.target.closest('[data-act="tutup"]')){
+        resolve(null);
+      }
+    });
+  });
+}
+
+async function kirimHapusKategori(id, pindahKe){
+  setSaveStatus("saving");
+  try{
+    const res = await API.post("kategori/delete.php", { id:id, pindah_ke:pindahKe });
+    setSaveStatus("ok");
+    toast(res.pesan || "Dihapus.");
+    refreshKategori();
+    segarkanDaftarKategori();
+  }catch(e){ tampilGalat(e); }
+}
+
+/** Ambil ulang daftar kategori supaya dropdown di halaman lain ikut segar. */
+async function segarkanDaftarKategori(){
+  try{
+    const d = await API.masterList({ page:1 });
+    if(d.kategori_options) window.KATEGORI_OPTIONS = d.kategori_options;
+  }catch(e){ /* bukan galat fatal */ }
+}
+
+/* ================================================================== */
+/* Master: Pengguna                                                   */
+/* ================================================================== */
+let editPenggunaId = null;
+let penggunaRows = [];
+
+function renderPengguna(){
+  if(!sayaAdmin()){
+    $("content").innerHTML = '<div class="info-box">Halaman ini hanya untuk admin.</div>';
+    return;
+  }
+
+  let html = '<form class="form-card" id="pForm" onsubmit="submitPengguna(event)">'
+    + '<div class="form-grid">'
+    + '<div><label class="field-label" for="pUser">Username</label>'
+      + '<input type="text" id="pUser" maxlength="50" autocomplete="off" placeholder="huruf kecil, tanpa spasi" required></div>'
+    + '<div class="span2"><label class="field-label" for="pNama">Nama lengkap</label>'
+      + '<input type="text" id="pNama" maxlength="100" placeholder="Nama yang tampil di riwayat" required></div>'
+    + '<div><label class="field-label" for="pRole">Peran</label>'
+      + '<select id="pRole"><option value="operator">Operator</option><option value="admin">Admin</option></select></div>'
+    + '<div><label class="field-label" for="pAktif">Status</label>'
+      + '<select id="pAktif"><option value="1">Aktif</option><option value="0">Nonaktif</option></select></div>'
+    + '<div class="span2"><label class="field-label" for="pSandi">Password</label>'
+      + '<input type="password" id="pSandi" autocomplete="new-password" placeholder="Minimal 8 karakter">'
+      + '<div id="pSandiCatatan" style="font-size:11px; color:var(--slateLo); margin-top:5px; display:none;">'
+        + 'Kosongkan bila tidak ingin mengganti password.</div></div>'
+    + '</div>'
+    + '<div style="display:flex; gap:8px;">'
+      + '<button type="submit" class="btn" id="pSubmit">' + svgIcon("plus") + 'Tambah akun</button>'
+      + '<button type="button" class="btn ghost" id="pBatal" style="display:none" onclick="batalEditPengguna()">'
+        + svgIcon("x") + 'Batal</button>'
+    + '</div></form>'
+    + '<div id="pHasil"></div>';
+
+  $("content").innerHTML = html;
+  refreshPengguna();
+}
+
+async function refreshPengguna(){
+  const wadah = $("pHasil");
+  if(!wadah) return;
+
+  let d;
+  try{ d = await API.get("pengguna/list.php"); }
+  catch(e){ tampilGalat(e); return; }
+
+  penggunaRows = d.rows;
+
+  const baris = d.rows.map(u => {
+    // Admin aktif terakhir tidak boleh dihapus — tombolnya dimatikan
+    // sekalian, bukan hanya ditolak server, supaya niatnya terbaca.
+    const kunciHapus = u.ini_saya || (u.role === "admin" && u.aktif && d.admin_aktif <= 1);
+    const alasan = u.ini_saya ? "Tidak bisa menghapus akun sendiri"
+                 : (kunciHapus ? "Satu-satunya admin aktif" : "Hapus akun");
+    return '<tr>'
+      + '<td><div class="item-name">' + esc(u.nama_lengkap)
+        + (u.ini_saya ? '<span class="flag-gen">AKUN ANDA</span>' : '') + '</div>'
+        + '<div class="item-sub">' + esc(u.username) + '</div></td>'
+      + '<td>' + (u.role === "admin"
+          ? '<span class="badge kritis" style="background:#E4EDF1;color:var(--biru);border-color:#C6DAE2">Admin</span>'
+          : '<span class="badge belum_diatur">Operator</span>') + '</td>'
+      + '<td>' + (u.aktif
+          ? '<span class="badge aman">' + svgIcon("check") + 'Aktif</span>'
+          : '<span class="badge belum_diatur">Nonaktif</span>') + '</td>'
+      + '<td style="font-size:11.5px; color:var(--slateLo)">'
+        + (u.last_login_at ? esc(u.last_login_at) : "Belum pernah masuk") + '</td>'
+      + '<td class="num" style="white-space:nowrap">'
+        + '<button class="icon-btn" onclick="editPengguna(' + u.id + ')" aria-label="Ubah ' + esc(u.username) + '">' + svgIcon("edit") + '</button>'
+        + '<button class="icon-btn bahaya" onclick="hapusPengguna(' + u.id + ')"'
+          + (kunciHapus ? ' disabled' : '') + ' title="' + esc(alasan) + '" aria-label="' + esc(alasan) + '">'
+          + svgIcon("trash") + '</button>'
+      + '</td>'
+      + '</tr>';
+  }).join("");
+
+  wadah.innerHTML =
+    (d.admin_aktif <= 1
+      ? '<div class="warn-box">Hanya ada 1 admin aktif. Kalau akun itu hilang aksesnya, '
+        + 'tidak ada lagi yang bisa mengelola aplikasi. Sebaiknya angkat satu admin cadangan.</div>'
+      : '')
+    + '<div class="table-card"><table style="min-width:660px"><thead><tr>'
+    + ["Pengguna","Peran","Status","Terakhir masuk",""].map(h=>'<th>'+esc(h)+'</th>').join("")
+    + '</tr></thead><tbody>' + baris + '</tbody></table>'
+    + '<div class="pagination"><span>' + fmtNum(d.total) + ' akun · ' + fmtNum(d.admin_aktif) + ' admin aktif</span></div>'
+    + '</div>';
+}
+
+function editPengguna(id){
+  const u = penggunaRows.find(x => x.id === id);
+  if(!u) return;
+  editPenggunaId = id;
+  $("pUser").value  = u.username;
+  $("pNama").value  = u.nama_lengkap;
+  $("pRole").value  = u.role;
+  $("pAktif").value = String(u.aktif);
+  $("pSandi").value = "";
+  $("pSandi").placeholder = "Biarkan kosong untuk mempertahankan password";
+  $("pSandiCatatan").style.display = "block";
+  $("pSubmit").innerHTML = svgIcon("edit") + "Simpan perubahan";
+  $("pBatal").style.display = "inline-flex";
+  $("pForm").scrollIntoView({ behavior:"smooth", block:"center" });
+}
+
+function batalEditPengguna(){ resetFormPengguna(); }
+
+function resetFormPengguna(){
+  editPenggunaId = null;
+  ["pUser","pNama","pSandi"].forEach(id => { if($(id)) $(id).value = ""; });
+  if($("pRole"))  $("pRole").value = "operator";
+  if($("pAktif")) $("pAktif").value = "1";
+  if($("pSandi")) $("pSandi").placeholder = "Minimal 8 karakter";
+  if($("pSandiCatatan")) $("pSandiCatatan").style.display = "none";
+  if($("pSubmit")) $("pSubmit").innerHTML = svgIcon("plus") + "Tambah akun";
+  if($("pBatal"))  $("pBatal").style.display = "none";
+}
+
+async function submitPengguna(e){
+  e.preventDefault();
+  const body = {
+    id:           editPenggunaId || 0,
+    username:     $("pUser").value.trim(),
+    nama_lengkap: $("pNama").value.trim(),
+    role:         $("pRole").value,
+    aktif:        $("pAktif").value === "1",
+    password:     $("pSandi").value
+  };
+  if(!body.username || !body.nama_lengkap){
+    toast("Username dan nama lengkap wajib diisi.", "err"); return;
+  }
+  if(!editPenggunaId && body.password.length < 8){
+    toast("Password minimal 8 karakter untuk akun baru.", "err"); return;
+  }
+
+  const tbl = $("pSubmit");
+  if(tbl) tbl.disabled = true;
+  setSaveStatus("saving");
+  try{
+    const res = await API.post("pengguna/save.php", body);
+    setSaveStatus("ok");
+    toast(res.pesan || "Tersimpan.");
+    resetFormPengguna();
+    refreshPengguna();
+  }catch(err){ tampilGalat(err); }
+  finally{ if(tbl) tbl.disabled = false; }
+}
+
+async function hapusPengguna(id){
+  const u = penggunaRows.find(x => x.id === id);
+  if(!u) return;
+  const ok = await konfirmasi(
+    'Hapus akun "' + u.username + '"?',
+    "Akun dihapus permanen dan orang ini tidak bisa masuk lagi. "
+    + "Catatan transaksi yang pernah dibuatnya tetap tersimpan. "
+    + "Untuk menutup akses sementara, pakai status Nonaktif.",
+    "Hapus akun"
+  );
+  if(!ok) return;
+  setSaveStatus("saving");
+  try{
+    const res = await API.post("pengguna/delete.php", { id:id });
+    setSaveStatus("ok");
+    toast(res.pesan || "Dihapus.");
+    refreshPengguna();
+  }catch(e){ tampilGalat(e); }
+}
+
 /* ---------------------------------------------------------------- */
 /* Router & init                                                      */
 /* ---------------------------------------------------------------- */
@@ -1277,6 +1676,8 @@ function renderContent(){
   else if(tab==="masuk") renderTransaksiTab("masuk");
   else if(tab==="keluar") renderTransaksiTab("keluar");
   else if(tab==="master") renderMaster();
+  else if(tab==="kategori") renderKategori();
+  else if(tab==="pengguna") renderPengguna();
 }
 
 function init(){

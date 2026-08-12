@@ -1808,9 +1808,13 @@ hPanel → Databases → MySQL Databases
 phpMyAdmin dari hPanel → pilih database → tab **Import**:
 
 ```
-1. sql/001_schema.sql        7 tabel + akun admin awal
-2. sql/002_seed_master.sql   1.404 barang, 79.123 unit, 350 ambang (108 KB)
+1. sql/001_schema.sql             7 tabel + akun admin awal
+2. sql/002_seed_master.sql        1.404 barang, 79.123 unit, 350 ambang (108 KB)
+3. sql/003_kategori_pengguna.sql  tabel kategori + 11 kategori awal
 ```
+
+Urutannya wajib. `003` mengambil kategori yang benar-benar dipakai dari
+`master_barang`, jadi harus dijalankan setelah `002`.
 
 `002_seed_master.sql` sudah berisi **data nyata dari KARTU STOK** — bukan
 seed nol dari prototipe. Berkas itu diawali `DELETE FROM master_barang`,
@@ -1909,7 +1913,68 @@ Poin ketiga sudah diantisipasi: seluruh aturan (jumlah > 0, stok tidak
 minus, barcode wajib) divalidasi di PHP, dan constraint database hanya jaring
 pengaman kedua.
 
-### 14.7 Popup riwayat per barang
+### 14.7 Menu Master: kategori dan pengguna
+
+Sidebar kini terbagi dua kelompok:
+
+```
+OPERASIONAL          MASTER
+  Dashboard stok       Barang       katalog, barcode, ambang stok
+  Barang masuk         Kategori     daftar kategori barang
+  Barang keluar        Pengguna     akun yang bisa masuk   (admin saja)
+```
+
+#### Kategori
+
+Daftar kategori pindah dari konstanta PHP ke tabel `kategori`, sehingga bisa
+dikelola lewat aplikasi tanpa menyentuh kode. `KATEGORI_OPTIONS` di
+`config/config.php` tinggal jadi cadangan bila tabelnya belum ada.
+
+`master_barang.kategori` **tetap disimpan sebagai teks**, bukan diubah jadi
+foreign key: 1.404 baris sudah terisi, dan mengubah relasinya berisiko tanpa
+manfaat nyata di skala ini. Konsekuensinya ditangani eksplisit:
+
+| Aksi | Perlakuan |
+|---|---|
+| **Ganti nama** | Seluruh barang yang memakainya ikut diperbarui dalam satu transaksi. Tanpa ini, barangnya menunjuk nama yang sudah tidak ada dan hilang dari penyaringan |
+| **Hapus, belum dipakai** | Langsung dihapus setelah konfirmasi |
+| **Hapus, masih dipakai** | **Ditolak** disertai jumlah pemakainya. Muncul dialog untuk memilih kategori tujuan; barangnya dipindahkan dulu, baru kategorinya dihapus |
+
+Endpoint: `api/kategori/{list,save,delete}.php`
+
+#### Pengguna
+
+Antarmuka pengelolaan akun, menggantikan cara lama lewat phpMyAdmin.
+**Hanya admin** yang bisa membukanya — menunya pun tidak muncul untuk
+operator.
+
+Penjaga yang semuanya ditegakkan di server, bukan sekadar disembunyikan di
+antarmuka:
+
+- Password disimpan sebagai hash `password_hash()`, dan **hash tidak pernah
+  ikut terkirim ke klien**
+- Username unik, 3–50 karakter, hanya huruf kecil/angka/`.`/`-`/`_`
+- Password minimal 8 karakter
+- **Admin aktif terakhir tidak bisa** dihapus, dinonaktifkan, atau
+  diturunkan perannya — kalau bisa, tidak ada lagi yang mampu mengelola
+  aplikasi
+- Tidak bisa menghapus, menonaktifkan, atau menurunkan **akun sendiri**
+- Saat mengubah akun, password kosong berarti "jangan ganti"
+
+Akun dihapus permanen, bukan *soft delete*: menyimpan akun mati hanya
+memperbesar peluang salah pakai. Untuk menutup akses sementara, pakai status
+**Nonaktif**. Riwayat transaksi yang pernah dibuatnya tetap utuh — kolom
+`user_id` memakai `ON DELETE SET NULL`.
+
+Endpoint: `api/pengguna/{list,save,delete}.php`
+
+> **Catatan:** `wajibAdminApi()` sudah ada di `includes/auth.php` sejak awal
+> tapi belum pernah dipakai — sebelum ini, operator secara teknis bisa
+> menghapus master barang. Endpoint kategori dan pengguna adalah yang
+> pertama menegakkannya. Membatasi endpoint operasional lain (mis. hapus
+> master barang) masih terbuka.
+
+### 14.8 Popup riwayat per barang
 
 Angka pada kolom **MASUK** dan **KELUAR** di dashboard bisa diklik. Sekali
 klik membuka popup berisi seluruh riwayat transaksi barang itu — tanpa perlu
@@ -1934,7 +1999,7 @@ untuk konteks string JavaScript di dalam atribut. Listener-nya didelegasikan
 dari `document` supaya tetap bekerja setelah tabel dirender ulang oleh filter
 atau paginasi.
 
-### 14.8 Masih terbuka
+### 14.9 Masih terbuka
 
 - **PDF picking list asli** untuk uji regresi parser — satu-satunya hal yang
   belum bisa diverifikasi

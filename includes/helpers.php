@@ -123,6 +123,34 @@ function stokAkhirItem(int $masterId): int
     return $row ? (int)$row['akhir'] : 0;
 }
 
+/* -------------------------------------------------------------------------
+ * Kategori
+ *
+ * Daftarnya kini tersimpan di tabel `kategori`, bukan konstanta PHP, supaya
+ * bisa dikelola lewat menu Master. KATEGORI_OPTIONS di config/config.php
+ * hanya dipakai sebagai cadangan bila tabelnya belum ada (mis. database
+ * lama yang belum menjalankan 003_kategori_pengguna.sql).
+ * ---------------------------------------------------------------------- */
+
+/** @return string[] nama kategori aktif, terurut */
+function daftarKategori(): array
+{
+    static $cache = null;
+    if ($cache !== null) {
+        return $cache;
+    }
+    try {
+        $rows = dbAll('SELECT nama FROM kategori
+                        WHERE deleted_at IS NULL AND aktif = 1
+                        ORDER BY urutan, nama');
+        $cache = array_column($rows, 'nama');
+    } catch (Throwable $e) {
+        error_log('Tabel kategori belum ada, memakai daftar bawaan: ' . $e->getMessage());
+        $cache = KATEGORI_OPTIONS;
+    }
+    return $cache;
+}
+
 /** Cari master berdasarkan barcode. */
 function cariMasterByBarcode(string $barcode): ?array
 {
