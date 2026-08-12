@@ -1,0 +1,356 @@
+/* ==========================================================================
+ * login.css — halaman masuk Papan Kendali Gudang
+ *
+ * Bahasa visual mengikuti aplikasi utama ("kertas industri"): tinta gelap
+ * kebiruan, kertas abu, aksen hijau. Elemen penandanya adalah BARCODE —
+ * motif yang sudah dipakai di header dashboard, di sini dinaikkan jadi ide
+ * utama: berkas garis di panel gelap, dan sinar pemindai yang menyapu rak.
+ *
+ * Semua gerak dimatikan bila pengguna meminta prefers-reduced-motion.
+ * ========================================================================== */
+
+:root{
+  --ink:#101A20;  --ink2:#16242C;  --ink3:#1E313A;
+  --paper:#EAEFF1; --card:#FFFFFF;
+  --slate:#5C6E76; --slateLo:#8B9BA3;
+  --line:#DAE2E5;  --lineStrong:#C1CCD0;
+  --safe:#25725C;  --safeLift:#2E8A6F;  --safeGlow:rgba(46,138,111,.35);
+  --danger:#B23A2E; --dangerBg:#FAE7E4; --dangerLine:#E8B3AA;
+  --beam:#E2543C;                     /* sinar pemindai — satu-satunya warna hangat */
+  --amber:#C77F0E;
+
+  --r:14px;
+  --ease:cubic-bezier(.22,.68,.36,1);
+}
+
+*{ box-sizing:border-box; }
+html,body{ margin:0; padding:0; height:100%; }
+
+body{
+  font-family:'Inter',system-ui,sans-serif;
+  color:var(--ink);
+  background:var(--ink);
+  display:flex; align-items:center; justify-content:center;
+  padding:24px;
+  min-height:100vh;
+  overflow-x:hidden;
+}
+
+/* --- Latar: berkas garis barcode yang sangat samar ---------------------- */
+body::before{
+  content:"";
+  position:fixed; inset:0; z-index:0; pointer-events:none;
+  background:
+    radial-gradient(120% 90% at 12% 8%, rgba(46,138,111,.16), transparent 55%),
+    radial-gradient(90% 80% at 92% 92%, rgba(30,49,58,.9), transparent 60%),
+    repeating-linear-gradient(90deg,
+      rgba(255,255,255,.028) 0 2px,
+      transparent 2px 9px);
+}
+
+/* ====================================================================== */
+/* Kartu                                                                  */
+/* ====================================================================== */
+.masuk{
+  position:relative; z-index:1;
+  width:100%; max-width:940px;
+  min-height:560px;
+  display:grid; grid-template-columns:1.05fr .95fr;
+  background:var(--ink2);
+  border:1px solid rgba(255,255,255,.07);
+  border-radius:24px;
+  overflow:hidden;
+  box-shadow:0 32px 80px -24px rgba(0,0,0,.6), 0 2px 0 rgba(255,255,255,.05) inset;
+}
+
+/* ---------------------------------------------------------------- */
+/* Panel kiri — kertas, lengkung organik, ilustrasi rak              */
+/* ---------------------------------------------------------------- */
+.panel{
+  position:relative;
+  padding:34px 32px 26px;
+  display:flex; flex-direction:column;
+  background:var(--card);
+  /* Lengkung elips di sisi kanan — mengikuti bahasa referensi. */
+  border-radius:0 34% 34% 0 / 0 46% 54% 0;
+  z-index:2;
+}
+/* Bayangan blob kedua, memberi kedalaman seperti lapisan kertas. */
+.panel::after{
+  content:"";
+  position:absolute; top:8%; right:-30px; bottom:12%; width:120px;
+  background:rgba(255,255,255,.05);
+  border-radius:0 50% 50% 0 / 0 50% 50% 0;
+  z-index:-1;
+}
+
+.merk{ display:flex; align-items:center; gap:11px; }
+.merk-tanda{
+  width:38px; height:38px; border-radius:10px;
+  background:var(--ink); color:#fff;
+  display:grid; place-items:center; flex:none;
+}
+.merk-tanda svg{ display:block; }
+.merk-nama{
+  font-family:'Barlow Condensed',sans-serif;
+  font-weight:800; font-size:19px; line-height:.98;
+  letter-spacing:.005em; text-transform:uppercase;
+}
+.merk-sub{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:9.5px; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--slateLo); margin-top:3px;
+}
+
+/* Ilustrasi digeser ke kiri, menjauhi lengkung kanan, dan dibesarkan
+   supaya rak terbaca sebagai rak — bukan sekadar lingkaran berisi kotak. */
+.gambar{
+  flex:1; display:flex; align-items:center;
+  padding:10px 0 2px; margin-right:14%;
+}
+.gambar svg{ width:100%; max-width:340px; height:auto; display:block; }
+
+.panel-kaki{ max-width:270px; }
+.panel-kaki h2{
+  font-family:'Barlow Condensed',sans-serif;
+  font-weight:700; font-size:23px; line-height:1.06;
+  margin:0 0 5px; letter-spacing:.004em;
+}
+.panel-kaki p{
+  margin:0; font-size:12.5px; line-height:1.5; color:var(--slate);
+}
+
+/* ---------------------------------------------------------------- */
+/* Panel kanan — formulir di atas tinta                              */
+/* ---------------------------------------------------------------- */
+.form-sisi{
+  position:relative;
+  padding:46px 44px 34px;
+  display:flex; flex-direction:column; justify-content:center;
+  color:#EDF2F4;
+}
+/* Sorot mengikuti kursor (padanan vanilla dari Spotlight Card). */
+.form-sisi::before{
+  content:"";
+  position:absolute; inset:0; pointer-events:none;
+  background:radial-gradient(320px circle at var(--mx,70%) var(--my,26%),
+             rgba(46,138,111,.16), transparent 62%);
+  opacity:0; transition:opacity .45s var(--ease);
+}
+.form-sisi.sorot::before{ opacity:1; }
+
+.judul{
+  font-family:'Barlow Condensed',sans-serif;
+  font-weight:800; font-size:44px; line-height:.92;
+  margin:0 0 4px; letter-spacing:.002em;
+  display:flex;
+}
+/* Split Text: tiap huruf jadi span, animasi bertahap. */
+.judul span{ display:inline-block; }
+.judul .spasi{ width:.26em; }
+
+.judul-sub{
+  font-size:12.5px; color:#93A6AE; margin:0 0 26px; line-height:1.5;
+}
+
+form{ position:relative; }
+
+/* --- Ruas isian: floating label ---------------------------------- */
+.ruas{ position:relative; margin-bottom:15px; }
+.ruas input{
+  width:100%;
+  font-family:'Inter',sans-serif; font-size:14px; color:#F2F6F7;
+  background:rgba(255,255,255,.045);
+  border:1px solid rgba(255,255,255,.13);
+  border-radius:10px;
+  padding:21px 13px 8px;
+  outline:none;
+  transition:border-color .22s var(--ease), background .22s var(--ease),
+             box-shadow .22s var(--ease), transform .22s var(--ease);
+}
+.ruas.ada-ikon input{ padding-right:42px; }
+.ruas input::placeholder{ color:transparent; }
+.ruas label{
+  position:absolute; left:14px; top:15px;
+  font-size:13.5px; color:#8FA3AB;
+  pointer-events:none;
+  transform-origin:left top;
+  transition:transform .2s var(--ease), color .2s var(--ease);
+}
+.ruas input:focus + label,
+.ruas input:not(:placeholder-shown) + label,
+.ruas.terisi label{
+  transform:translateY(-9px) scale(.76);
+  color:#7FB8A2;
+}
+.ruas input:focus{
+  border-color:var(--safeLift);
+  background:rgba(255,255,255,.07);
+  box-shadow:0 0 0 3px var(--safeGlow);
+}
+/* Autofill Chrome mewarisi latar putih — paksa kembali ke tinta. */
+.ruas input:-webkit-autofill,
+.ruas input:-webkit-autofill:focus{
+  -webkit-text-fill-color:#F2F6F7;
+  -webkit-box-shadow:0 0 0 1000px #1B2C34 inset;
+  caret-color:#F2F6F7;
+}
+
+.lihat{
+  position:absolute; right:6px; top:50%; transform:translateY(-50%);
+  background:none; border:none; cursor:pointer;
+  color:#7E939B; padding:8px; border-radius:8px; line-height:0;
+  transition:color .18s var(--ease), background .18s var(--ease);
+}
+.lihat:hover{ color:#CFE0E4; background:rgba(255,255,255,.06); }
+
+.capslock{
+  font-size:11.5px; color:var(--amber); margin:-8px 0 12px;
+  display:flex; align-items:center; gap:5px;
+}
+/* display:flex mengalahkan atribut [hidden] bawaan — kembalikan. */
+.capslock[hidden]{ display:none; }
+
+/* --- Tombol ------------------------------------------------------- */
+.kirim{
+  position:relative; overflow:hidden;
+  width:100%; margin-top:7px;
+  font-family:'Inter',sans-serif; font-size:14px; font-weight:600;
+  color:#fff; background:var(--safe);
+  border:1px solid var(--safeLift); border-radius:10px;
+  padding:13px 16px; cursor:pointer;
+  display:inline-flex; align-items:center; justify-content:center; gap:8px;
+  transition:background .2s var(--ease), transform .12s var(--ease),
+             box-shadow .2s var(--ease);
+}
+.kirim:hover{ background:var(--safeLift); box-shadow:0 8px 22px -8px var(--safeGlow); }
+.kirim:active{ transform:translateY(1px); }
+/* Shiny Text: kilau menyapu tombol, senada dengan sinar pemindai. */
+.kirim::after{
+  content:"";
+  position:absolute; top:0; bottom:0; left:-60%; width:45%;
+  background:linear-gradient(100deg, transparent, rgba(255,255,255,.24), transparent);
+  transform:skewX(-18deg);
+  transition:left .6s var(--ease);
+}
+.kirim:hover::after{ left:115%; }
+.kirim .putar{ display:none; }
+.kirim.sibuk{ pointer-events:none; opacity:.85; }
+.kirim.sibuk .teks{ display:none; }
+.kirim.sibuk .putar{ display:inline-block; }
+
+.putar{
+  width:15px; height:15px; border-radius:50%;
+  border:2px solid rgba(255,255,255,.35); border-top-color:#fff;
+  animation:putar .7s linear infinite;
+}
+@keyframes putar{ to{ transform:rotate(360deg); } }
+
+/* --- Galat -------------------------------------------------------- */
+.galat{
+  display:flex; align-items:flex-start; gap:8px;
+  background:rgba(178,58,46,.16);
+  border:1px solid rgba(232,179,170,.32);
+  color:#F2B7AD;
+  border-radius:10px; padding:10px 12px;
+  font-size:12.5px; font-weight:500; line-height:1.45;
+  margin-bottom:16px;
+}
+.galat svg{ flex:none; margin-top:1px; }
+
+/* --- Kaki --------------------------------------------------------- */
+.form-kaki{
+  margin-top:22px; padding-top:16px;
+  border-top:1px solid rgba(255,255,255,.08);
+  display:flex; justify-content:space-between; align-items:center; gap:12px;
+  font-family:'IBM Plex Mono',monospace;
+  font-size:10px; letter-spacing:.07em; text-transform:uppercase;
+  color:#6E848C;
+}
+.lencana{
+  border:1px solid rgba(255,255,255,.14); border-radius:999px;
+  padding:3px 9px; color:#8FA3AB;
+}
+.catatan-lokal{
+  margin-top:13px; font-size:11.5px; line-height:1.55; color:#8FA3AB;
+  background:rgba(255,255,255,.04);
+  border:1px dashed rgba(255,255,255,.14);
+  border-radius:10px; padding:9px 11px;
+}
+.catatan-lokal b{ color:#CFE0E4; font-family:'IBM Plex Mono',monospace; }
+
+/* ====================================================================== */
+/* Gerak                                                                  */
+/* ====================================================================== */
+
+/* Masuknya halaman: satu urutan bertahap, bukan efek berserakan. */
+@keyframes naik{ from{ opacity:0; transform:translateY(14px); } to{ opacity:1; transform:none; } }
+@keyframes masukKartu{ from{ opacity:0; transform:translateY(22px) scale(.985); } to{ opacity:1; transform:none; } }
+@keyframes hurufNaik{ from{ opacity:0; transform:translateY(24px); } to{ opacity:1; transform:none; } }
+
+.masuk{ animation:masukKartu .6s var(--ease) both; }
+.tahap{ animation:naik .5s var(--ease) both; animation-delay:var(--d,0ms); }
+.judul span{ animation:hurufNaik .45s var(--ease) both; animation-delay:var(--d,0ms); }
+
+/* Sinar pemindai — elemen penanda halaman ini. Menyapu rak seperti
+   pemindai barcode menyapu label. */
+@keyframes sapu{
+  0%   { transform:translateY(0);     opacity:0; }
+  8%   { opacity:1; }
+  85%  { opacity:1; }
+  100% { transform:translateY(150px); opacity:0; }
+}
+.sinar{ animation:sapu 3.6s var(--ease) infinite; transform-origin:center; }
+
+/* Garis barcode di ilustrasi berdenyut halus saat tersapu. */
+@keyframes denyut{ 0%,100%{ opacity:.28; } 50%{ opacity:.85; } }
+.bar-hidup{ animation:denyut 3.6s ease-in-out infinite; }
+
+@media (prefers-reduced-motion:reduce){
+  .masuk,.tahap,.judul span{ animation:none !important; opacity:1 !important; transform:none !important; }
+  .sinar{ animation:none; opacity:.5; }
+  .bar-hidup{ animation:none; opacity:.55; }
+  .kirim::after{ display:none; }
+  .form-sisi::before{ transition:none; }
+  *{ transition-duration:.01ms !important; }
+}
+
+/* ====================================================================== */
+/* Fokus keyboard                                                         */
+/* ====================================================================== */
+:focus-visible{ outline:2px solid var(--safeLift); outline-offset:2px; border-radius:6px; }
+.kirim:focus-visible{ outline-color:#9FD8C3; }
+
+/* ====================================================================== */
+/* Responsif                                                              */
+/* ====================================================================== */
+@media (max-width:860px){
+  body{ align-items:flex-start; padding:16px; }
+  .masuk{
+    grid-template-columns:1fr;
+    max-width:440px; min-height:0;
+    margin:auto;
+  }
+  .panel{
+    border-radius:0;
+    padding:22px 22px 18px;
+    display:block;                 /* susun tegak, bukan berdampingan */
+  }
+  .panel::after{ display:none; }
+  .gambar{ display:none; }
+  .merk{ margin-bottom:14px; }
+  .panel-kaki{ max-width:none; }
+  .panel-kaki h2{ font-size:18px; margin-bottom:3px; }
+  .panel-kaki p{ font-size:12px; }
+  .form-sisi{ padding:28px 22px 22px; }
+  .judul{ font-size:36px; }
+}
+
+@media (max-width:420px){
+  body{ padding:12px; }
+  .masuk{ border-radius:18px; }
+  .panel{ flex-direction:column; align-items:flex-start; }
+  .form-sisi{ padding:26px 20px 20px; }
+  .judul{ font-size:32px; }
+  .form-kaki{ flex-direction:column; align-items:flex-start; gap:7px; }
+}
