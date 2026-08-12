@@ -1,0 +1,20 @@
+# Prototipe sumber — dokumen referensi, bukan bagian aplikasi.
+# Hapus baris ini bila memang ingin ikut diversikan.
+aplikasi-gudang*.html
+
+# Contoh PDF picking list — bisa memuat data pesanan nyata.
+contoh/
+*.pdf
+
+# Kredensial produksi tidak boleh ikut ter-commit.
+config/database.local.php
+
+# Log & sementara
+*.log
+tmp/
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
