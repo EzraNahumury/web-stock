@@ -15,17 +15,28 @@ declare(strict_types=1);
 /*
  * Kredensial nyata TIDAK ditaruh di berkas ini.
  *
- * Bila ada config/database.local.php, berkas itulah yang dipakai dan sisa
- * berkas ini dilewati. Berkas .local sudah masuk .gitignore, jadi:
- *   - kredensial produksi tidak pernah ikut ter-commit ke repositori publik
- *   - `git pull` di server tidak menimpa kredensial yang sudah diisi
+ * Dicari berurutan; yang pertama ketemu dipakai, sisa berkas ini dilewati:
  *
- * Di server cukup unggah config/database.local.php sekali, lalu berkas ini
- * boleh diperbarui bebas lewat git tanpa menyentuh rahasia apa pun.
+ *   1. SATU TINGKAT DI ATAS public_html  -> gudang-config.php
+ *      Paling aman untuk deploy lewat Git. Folder public_html ditimpa
+ *      setiap kali deploy berjalan; berkas di atasnya tidak tersentuh,
+ *      dan tidak bisa diakses lewat web sama sekali.
+ *
+ *   2. config/database.local.php
+ *      Untuk unggah manual lewat FTP/File Manager. Sudah masuk .gitignore.
+ *
+ * Keduanya di luar repositori, jadi kredensial produksi tidak pernah ikut
+ * ter-commit dan `git pull` tidak pernah menimpanya.
  */
-if (is_file(__DIR__ . '/database.local.php')) {
-    require __DIR__ . '/database.local.php';
-    return;
+$sumberKredensial = [
+    dirname(__DIR__, 2) . '/gudang-config.php',   // di atas public_html
+    __DIR__ . '/database.local.php',
+];
+foreach ($sumberKredensial as $berkas) {
+    if (is_file($berkas)) {
+        require $berkas;
+        return;
+    }
 }
 
 $host = strtolower($_SERVER['HTTP_HOST'] ?? 'cli');
