@@ -21,6 +21,18 @@ function db(): PDO
         return $pdo;
     }
 
+    // Kredensial belum diisi sama sekali. Dibedakan dari kegagalan koneksi
+    // biasa, karena penyebab dan perbaikannya sama sekali berbeda.
+    if (APP_ENV === 'belum-diatur') {
+        error_log('Berkas kredensial tidak ditemukan. Unggah gudang-config.php '
+            . 'satu tingkat di atas public_html, atau config/database.local.php.');
+        http_response_code(500);
+        exit(
+            'Kredensial database belum diatur. '
+            . 'Unggah berkas gudang-config.php satu tingkat di atas folder public_html.'
+        );
+    }
+
     $dsn = sprintf('mysql:host=%s;port=%s;dbname=%s;charset=utf8mb4', DB_HOST, DB_PORT, DB_NAME);
 
     try {

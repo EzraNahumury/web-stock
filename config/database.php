@@ -66,5 +66,10 @@ if ($isLokal) {
     define('DB_USER', 'GANTI_USER_DATABASE');
     define('DB_PASS', 'GANTI_PASSWORD_DATABASE');
     define('APP_DEBUG', false);
-    define('APP_ENV', 'produksi');
+    // Ditandai "belum-diatur", bukan "produksi": nilai di atas cuma
+    // placeholder. Tanpa penanda ini, aplikasi mencoba menyambung memakai
+    // "GANTI_NAMA_DATABASE" lalu gagal dengan pesan yang tidak menjelaskan
+    // apa pun — persis kasus yang membuat berkas kredensial tak terunggah
+    // sulit dibedakan dari password yang salah.
+    define('APP_ENV', 'belum-diatur');
 }
