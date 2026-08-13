@@ -12,6 +12,22 @@
 
 declare(strict_types=1);
 
+/*
+ * Kredensial nyata TIDAK ditaruh di berkas ini.
+ *
+ * Bila ada config/database.local.php, berkas itulah yang dipakai dan sisa
+ * berkas ini dilewati. Berkas .local sudah masuk .gitignore, jadi:
+ *   - kredensial produksi tidak pernah ikut ter-commit ke repositori publik
+ *   - `git pull` di server tidak menimpa kredensial yang sudah diisi
+ *
+ * Di server cukup unggah config/database.local.php sekali, lalu berkas ini
+ * boleh diperbarui bebas lewat git tanpa menyentuh rahasia apa pun.
+ */
+if (is_file(__DIR__ . '/database.local.php')) {
+    require __DIR__ . '/database.local.php';
+    return;
+}
+
 $host = strtolower($_SERVER['HTTP_HOST'] ?? 'cli');
 
 $isLokal = $host === 'cli'
