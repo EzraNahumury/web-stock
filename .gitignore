@@ -24,3 +24,6 @@ Thumbs.db
 *.xlsx
 *.xls
 *.csv
+
+# Dump database untuk deploy — memuat data operasional nyata.
+deploy/
