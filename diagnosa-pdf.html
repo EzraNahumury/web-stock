@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Diagnosa Parser PDF — Papan Kendali Gudang</title>
+<style>
+  body{ font-family:system-ui,sans-serif; background:#EEF2F4; color:#101A20;
+        margin:0; padding:24px; line-height:1.5; }
+  .wrap{ max-width:1100px; margin:0 auto; }
+  h1{ font-size:22px; margin:0 0 4px; }
+  .sub{ color:#5C6E76; font-size:13px; margin-bottom:20px; }
+  .kotak{ background:#fff; border:1px solid #E1E8EA; border-radius:12px;
+          padding:16px 18px; margin-bottom:14px; }
+  h2{ font-size:15px; margin:0 0 10px; }
+  pre{ background:#16242C; color:#DDE7EA; padding:12px; border-radius:8px;
+       overflow:auto; font-size:11.5px; line-height:1.45; max-height:460px; margin:0; }
+  .ambil{ display:inline-flex; align-items:center; gap:8px; cursor:pointer;
+          background:#101A20; color:#fff; border-radius:8px; padding:10px 16px;
+          font-size:14px; font-weight:600; }
+  .catat{ background:#FBF0DC; border:1px solid #EAC280; color:#8a5a08;
+          border-radius:8px; padding:10px 14px; font-size:12.5px; margin-bottom:14px; }
+  .salin{ background:#fff; border:1px solid #C9D4D8; border-radius:8px;
+          padding:7px 13px; font-size:13px; cursor:pointer; margin-top:10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Diagnosa Parser PDF</h1>
+  <div class="sub">Memperlihatkan apa yang sebenarnya dibaca parser dari picking list.</div>
+
+  <div class="catat">
+    <b>Berkas PDF tidak diunggah ke mana pun.</b> Seluruh pembacaan terjadi di
+    browser ini. Yang perlu dikirim hanya hasil teks di bawah — tekan
+    <b>Salin hasil</b>, lalu tempel ke percakapan.
+  </div>
+
+  <div class="kotak">
+    <label class="ambil">
+      Pilih PDF picking list
+      <input type="file" accept="application/pdf,.pdf" id="berkas" style="display:none">
+    </label>
+    <span id="status" style="margin-left:12px; color:#5C6E76; font-size:13px;"></span>
+  </div>
+
+  <div class="kotak" id="wadahHasil" style="display:none">
+    <h2>Hasil</h2>
+    <pre id="hasil"></pre>
+    <button class="salin" id="tblSalin">Salin hasil</button>
+  </div>
+
+</div>
+
+<script src="assets/vendor/pdf.min.js"></script>
+<script src="assets/js/pdf-parser.js"></script>
+<script>
+(function(){
+  "use strict";
+  if(window.pdfjsLib){
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdf.worker.min.js";
+  }
+
+  var out = [];
+  function tulis(s){ out.push(s == null ? "" : String(s)); }
+
+  document.getElementById("berkas").addEventListener("change", function(ev){
+    var f = ev.target.files && ev.target.files[0];
+    if(!f) return;
+    document.getElementById("status").textContent = "Membaca " + f.name + "…";
+    var fr = new FileReader();
+    fr.onload = function(e){ jalan(e.target.result, f.name); };
+    fr.readAsArrayBuffer(f);
+  });
+
+  async function jalan(buf, namaBerkas){
+    out = [];
+    try{
+      var pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+
+      tulis("=== BERKAS ===");
+      tulis("nama    : " + namaBerkas);
+      tulis("halaman : " + pdf.numPages);
+      tulis("");
+
+      // Susun ulang baris persis seperti parser aplikasi.
+      var semua = [];
+      for(var p = 1; p <= Math.min(pdf.numPages, 2); p++){
+        var page = await pdf.getPage(p);
+        var isi = await page.getTextContent();
+        var items = isi.items
+          .map(function(it){ return { text:(it.str||""), x:it.transform[4], y:it.transform[5] }; })
+          .filter(function(it){ return it.text.trim(); });
+        items.sort(function(a,b){ return (b.y - a.y) || (a.x - b.x); });
+        var baris = [], yKini = null, brsKini = [];
+        var TOL = 3.5;
+        items.forEach(function(it){
+          if(yKini === null || Math.abs(it.y - yKini) <= TOL){
+            brsKini.push(it);
+            if(yKini === null) yKini = it.y;
+          } else {
+            baris.push(brsKini.sort(function(a,b){ return a.x - b.x; }));
+            brsKini = [it]; yKini = it.y;
+          }
+        });
+        if(brsKini.length) baris.push(brsKini.sort(function(a,b){ return a.x - b.x; }));
+        semua = semua.concat(baris);
+      }
+
+      tulis("=== 30 BARIS MENTAH PERTAMA (x = posisi mendatar) ===");
+      semua.slice(0, 30).forEach(function(brs, i){
+        var potong = brs.map(function(it){
+          return "[x=" + Math.round(it.x) + "] " + it.text;
+        }).join("  |  ");
+        tulis(String(i).padStart(3) + ": " + potong.slice(0, 190));
+      });
+      tulis("");
+
+      // Deteksi header memakai aturan yang sama dengan aplikasi.
+      var idxHeader = -1, kolom = null;
+      for(var i = 0; i < semua.length; i++){
+        var t = semua[i].map(function(it){ return it.text; }).join(" ").toLowerCase();
+        if(t.indexOf("barcode") >= 0 && t.indexOf("nama") >= 0 &&
+           t.indexOf("sku") >= 0 && t.indexOf("qty") >= 0){
+          var b = (typeof buildColumnsFromHeader === "function")
+                    ? buildColumnsFromHeader(semua[i]) : null;
+          if(b){ idxHeader = i; kolom = b; break; }
+        }
+      }
+
+      tulis("=== DETEKSI HEADER ===");
+      if(idxHeader === -1){
+        tulis("TIDAK TERDETEKSI -> aplikasi memakai mode cadangan regex.");
+      } else {
+        tulis("baris header ke-" + idxHeader);
+        tulis("isi          : " + semua[idxHeader].map(function(it){ return it.text; }).join(" | "));
+        tulis("kolom        : " + kolom.map(function(c){ return c.key + "@x" + Math.round(c.x); }).join("  "));
+        if(typeof pilihPenandaBaris === "function"){
+          tulis("penanda baris: " + pilihPenandaBaris(semua, idxHeader, kolom));
+        }
+        tulis("");
+        tulis("=== PEMBAGIAN SEL, 14 BARIS DATA PERTAMA ===");
+        var n = 0;
+        for(var j = idxHeader + 1; j < semua.length && n < 14; j++){
+          if(typeof isNonDataLine === "function" && isNonDataLine(semua[j])){
+            tulis("  (dilewati sbg non-data): " +
+              semua[j].map(function(it){ return it.text; }).join(" ").slice(0, 90));
+            continue;
+          }
+          var a = assignLineToColumns(semua[j], kolom);
+          n++;
+          tulis("  " + JSON.stringify(a).slice(0, 210));
+        }
+      }
+      tulis("");
+
+      tulis("=== HASIL AKHIR PARSER ===");
+      var hasil = extractPickingListRows(semua);
+      tulis("header: " + JSON.stringify(hasil.header));
+      tulis("jumlah baris barang: " + hasil.rows.length);
+      hasil.rows.slice(0, 6).forEach(function(r, i){
+        tulis("  " + (i+1) + ". barcode=" + r.barcode + "  qty=" + r.qty + "  sku=" + r.sku);
+        tulis("     nama    = " + r.nama);
+        tulis("     pesanan = " + String(r.noPesanan).slice(0, 150));
+      });
+
+    }catch(err){
+      tulis("GALAT: " + (err && err.message ? err.message : err));
+    }
+
+    document.getElementById("hasil").textContent = out.join("\n");
+    document.getElementById("wadahHasil").style.display = "block";
+    document.getElementById("status").textContent = "Selesai.";
+  }
+
+  document.getElementById("tblSalin").addEventListener("click", function(){
+    var t = document.getElementById("hasil").textContent;
+    navigator.clipboard.writeText(t).then(function(){
+      document.getElementById("tblSalin").textContent = "Tersalin";
+      setTimeout(function(){
+        document.getElementById("tblSalin").textContent = "Salin hasil";
+      }, 1600);
+    });
+  });
+})();
+</script>
+</body>
+</html>
