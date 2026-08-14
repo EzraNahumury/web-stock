@@ -35,7 +35,7 @@ if ($inisial === '') {
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/css/app.css?v=<?= e(APP_VERSI) ?>">
+<link rel="stylesheet" href="<?= e(aset('assets/css/app.css')) ?>">
 </head>
 <body>
 
@@ -124,9 +124,9 @@ if ($inisial === '') {
   window.KET_KELUAR       = <?= json_encode(KET_KELUAR, JSON_UNESCAPED_UNICODE) ?>;
 </script>
 <script src="assets/vendor/pdf.min.js"></script>
-<script src="assets/js/pdf-parser.js?v=<?= e(APP_VERSI) ?>"></script>
-<script src="assets/js/api.js?v=<?= e(APP_VERSI) ?>"></script>
-<script src="assets/js/grafik.js?v=<?= e(APP_VERSI) ?>"></script>
-<script src="assets/js/app.js?v=<?= e(APP_VERSI) ?>"></script>
+<script src="<?= e(aset('assets/js/pdf-parser.js')) ?>"></script>
+<script src="<?= e(aset('assets/js/api.js')) ?>"></script>
+<script src="<?= e(aset('assets/js/grafik.js')) ?>"></script>
+<script src="<?= e(aset('assets/js/app.js')) ?>"></script>
 </body>
 </html>

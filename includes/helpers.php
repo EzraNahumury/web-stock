@@ -8,6 +8,24 @@ declare(strict_types=1);
 require_once __DIR__ . '/../config/config.php';
 require_once __DIR__ . '/db.php';
 
+/**
+ * URL aset dengan penangkal cache dari waktu ubah berkasnya.
+ *
+ * .htaccess menyimpan CSS/JS di cache browser selama 7 hari. Sebelumnya
+ * penangkalnya memakai APP_VERSI — konstanta yang tidak pernah berubah —
+ * sehingga setiap deploy mengirim berkas baru yang tidak pernah diambil
+ * browser sampai cache-nya kedaluwarsa sendiri.
+ *
+ * Memakai filemtime() membuat URL-nya berubah otomatis begitu isinya
+ * berubah, tanpa perlu menaikkan nomor versi secara manual.
+ */
+function aset(string $relatif): string
+{
+    $penuh = dirname(__DIR__) . '/' . ltrim($relatif, '/');
+    $cap = is_file($penuh) ? (string)filemtime($penuh) : APP_VERSI;
+    return $relatif . '?v=' . $cap;
+}
+
 /** Escape untuk keluaran HTML. */
 function e(?string $s): string
 {
