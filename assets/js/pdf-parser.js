@@ -66,12 +66,11 @@ function extractPickingListRows(lines){
   const rows = [];
   let current = null;
   const penanda = pilihPenandaBaris(lines, headerIdx, cols);
+  const awalBaris = hitungAwalBaris(lines, headerIdx, cols, penanda);
   for(let i=headerIdx+1; i<lines.length; i++){
     if(isNonDataLine(lines[i])) continue; // header berulang / info halaman lain, jangan dianggap data ataupun disambung ke baris berjalan
     const assigned = assignLineToColumns(lines[i], cols);
-    const isNewRow = penanda === "no"
-      ? /^\d+$/.test((assigned.no || "").trim())
-      : tampakBarcode(assigned.barcode);
+    const isNewRow = awalBaris.has(i);
     if(isNewRow){
       if(current) rows.push(finalizePdfRow(current));
       current = { barcode:assigned.barcode||"", nama:assigned.nama?[assigned.nama]:[], sku:assigned.sku||"", qty:assigned.qty||"", noPesanan:assigned.noPesanan||"" };
@@ -134,6 +133,65 @@ function pilihPenandaBaris(lines, headerIdx, cols){
   return berangka >= 2 ? "no" : "barcode";
 }
 
+/**
+ * Tentukan pada indeks baris mana setiap barang dimulai.
+ *
+ * Penanda baris (nomor urut, atau barcode) TIDAK selalu berada di baris teks
+ * pertama sebuah barang. Pada picking list Desty, pdf.js membaca satu baris
+ * tabel sebagai dua baris teks terpisah, karena nomor urut dan Qty dicetak
+ * pada garis dasar yang berbeda dari nama produk:
+ *
+ *     baris N   : [x=238] Kaos Kaki Futsal Pendek A  [x=371] AV-0063  [x=462] 260808...
+ *     baris N+1 : [x=15]  1                          [x=419] 29
+ *
+ * Memulai barang tepat di baris penanda membuat baris N terbuang: ia tiba
+ * saat belum ada barang berjalan, sehingga nama fragmen pertama, SKU, dan
+ * nomor pesanan pertama hilang — dan untuk barang berikutnya, baris N-nya
+ * justru nyangkut ke barang sebelumnya.
+ *
+ * Karena itu awal barang digeser satu baris ke belakang bila baris tepat
+ * sebelum penanda membawa isi kolom Nama atau SKU. Baris sambungan yang
+ * hanya berisi nomor pesanan tidak memenuhi syarat itu, jadi ekor daftar
+ * pesanan barang sebelumnya tetap utuh.
+ *
+ * @return {Set<number>} indeks baris tempat setiap barang dimulai
+ */
+function hitungAwalBaris(lines, headerIdx, cols, penanda){
+  const awal = new Set();
+
+  const adalahPenanda = (a) => penanda === "no"
+    ? /^\d+$/.test((a.no || "").trim())
+    : tampakBarcode(a.barcode);
+
+  const punyaIsi = (a) => ((a.nama || "").trim() !== "") || ((a.sku || "").trim() !== "");
+
+  for(let i=headerIdx+1; i<lines.length; i++){
+    if(isNonDataLine(lines[i])) continue;
+    const a = assignLineToColumns(lines[i], cols);
+    if(!adalahPenanda(a)) continue;
+
+    let mulai = i;
+
+    // Hanya menoleh ke belakang bila baris penanda ini TIDAK membawa isi
+    // barangnya sendiri. Pada layout biasa, baris penanda sudah memuat nama
+    // dan SKU sekaligus — menoleh ke belakang di situ justru merampas baris
+    // sambungan nama milik barang sebelumnya (mis. "EDISI KHUSUS" terlepas
+    // dari "FINGERTAPE HIJAU MUDA"). Pada layout Desty, baris penanda hanya
+    // berisi nomor urut dan Qty, jadi isinya memang ada di baris sebelumnya.
+    if(!punyaIsi(a)){
+      for(let j=i-1; j>headerIdx; j--){
+        if(isNonDataLine(lines[j])) continue;
+        const b = assignLineToColumns(lines[j], cols);
+        // Jangan mengambil baris yang sudah menjadi awal barang lain.
+        if(punyaIsi(b) && !adalahPenanda(b) && !awal.has(j)) mulai = j;
+        break;
+      }
+    }
+    awal.add(mulai);
+  }
+  return awal;
+}
+
 // Baris yang BUKAN baris data barang: header tabel yang tercetak ulang di
 // tiap halaman PDF, atau info ringkasan (Tanggal Cetak, Dicetak Oleh,
 // Jumlah Pesanan, Jumlah Produk, No Pick, nomor halaman). Baris seperti ini
@@ -150,6 +208,16 @@ function isNonDataLine(items){
   if(/\bpick-[\w-]+/i.test(text) && !/^\d/.test(text)) return true;
   if(/no\.?\s*pick/i.test(text)) return true;
   if(/^halaman\b/i.test(t) || /^page\b/i.test(t) || /^\d+\s*\/\s*\d+$/.test(t)) return true;
+
+  // Perabot halaman pada picking list berhalaman banyak. Dicocokkan di mana
+  // pun dalam baris, bukan hanya di awal: pada batas halaman, pdf.js
+  // menggabungkan penomoran halaman dengan judul halaman berikutnya dalam
+  // satu baris, sehingga aturan "^halaman" di atas tidak menangkapnya dan
+  // teksnya bocor ke kolom No. Pesanan barang terakhir.
+  if(/halaman\s*:/i.test(text)) return true;
+  if(/halaman\s+(berikutnya|sebelumnya)/i.test(text)) return true;
+  if(/^picking\s+list\b/i.test(t)) return true;
+  if(/^master\s+warehouse$/i.test(t)) return true;
   return false;
 }
 
@@ -248,7 +316,9 @@ function extractPdfHeaderInfo(lines, uptoIdx){
   return {
     noPicking: get(/(PICK-[\w-]+)/i),
     tanggalCetak: get(/Tanggal Cetak:?\s*([\d\/\-]+)/i),
-    dicetakOleh: get(/Dicetak Oleh:?\s*([A-Za-z0-9 _-]+?)(?:\s+Picking|$)/i),
+    // Berhenti juga di "Master" dan "Halaman": pada berkas nyata teks
+    // sesudahnya ikut tertangkap, menghasilkan "GUDANG AVA Master Warehouse".
+    dicetakOleh: get(/Dicetak Oleh:?\s*([A-Za-z0-9 _-]+?)(?:\s+(?:Picking|Master|Halaman|Jumlah)|$)/i),
     jumlahPesanan: get(/Jumlah Pesanan:?\s*(\d+)/i),
     jumlahProduk: get(/Jumlah [Pp]roduk:?\s*(\d+)/i)
   };
