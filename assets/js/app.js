@@ -999,12 +999,15 @@ function pdfRowStatusBadge(r){
 }
 
 function pdfReviewRowHtml(r, idx){
+  // Nama barang dan No. Pesanan memakai <textarea>, bukan <input>: teks yang
+  // lebih panjang dari kolomnya turun ke baris berikutnya, tidak terpotong.
+  // Tingginya menyesuaikan isi lewat tumbuhkanArea().
   return '<tr>'
-    + '<td><input type="text" class="mono" style="width:130px" value="'+esc(r.barcode)+'" oninput="updatePdfRow('+idx+',\'barcode\',this.value)"></td>'
-    + '<td><input type="text" style="min-width:220px" value="'+esc(r.nama)+'" oninput="updatePdfRow('+idx+',\'nama\',this.value)"></td>'
-    + '<td><input type="text" style="width:90px" value="'+esc(r.sku)+'" oninput="updatePdfRow('+idx+',\'sku\',this.value)"></td>'
-    + '<td class="num"><input type="number" min="0" style="width:70px; text-align:right" value="'+(r.qty||0)+'" oninput="updatePdfRow('+idx+',\'qty\',this.value)"></td>'
-    + '<td><input type="text" style="width:140px" value="'+esc(r.noPesanan)+'" oninput="updatePdfRow('+idx+',\'noPesanan\',this.value)"></td>'
+    + '<td><input type="text" class="mono" value="'+esc(r.barcode)+'" oninput="updatePdfRow('+idx+',\'barcode\',this.value)"></td>'
+    + '<td><textarea rows="1" oninput="updatePdfRow('+idx+',\'nama\',this.value)">'+esc(r.nama)+'</textarea></td>'
+    + '<td><input type="text" class="mono" value="'+esc(r.sku)+'" oninput="updatePdfRow('+idx+',\'sku\',this.value)"></td>'
+    + '<td class="num"><input type="number" min="0" style="text-align:right" value="'+(r.qty||0)+'" oninput="updatePdfRow('+idx+',\'qty\',this.value)"></td>'
+    + '<td><textarea rows="1" class="mono" oninput="updatePdfRow('+idx+',\'noPesanan\',this.value)">'+esc(r.noPesanan)+'</textarea></td>'
     + '<td><select onchange="updatePdfRow('+idx+',\'keterangan\',this.value)">' + KET_KELUAR.map(k=>'<option'+(r.keterangan===k?' selected':'')+'>'+esc(k)+'</option>').join("") + '</select></td>'
     + '<td id="pdfRowStatus'+idx+'">'+pdfRowStatusBadge(r)+'</td>'
     + '<td><button type="button" class="icon-btn" onclick="removePdfReviewRow('+idx+')" aria-label="Hapus baris">'+svgIcon("trash")+'</button></td>'
@@ -1051,7 +1054,7 @@ function renderPdfReview(){
     + '</div>';
 
   html += '<div style="font-size:12.5px; color:var(--slate); margin-bottom:8px;">Cek data di bawah ini sudah sesuai fisik barang atau belum. Ubah bila perlu, lalu tekan <strong>Konfirmasi &amp; Simpan</strong> untuk mencatatnya sebagai barang keluar.</div>';
-  html += '<div class="table-card" style="overflow:auto"><table style="min-width:900px"><thead><tr>'
+  html += '<div class="table-card" style="overflow:auto"><table class="pdf-review"><thead><tr>'
     + ["Barcode","Nama barang","SKU","Qty","No. Pesanan","Keterangan","Status",""].map(h2=>'<th'+(h2==="Qty"?' class="num"':'')+'>'+h2+'</th>').join("")
     + '</tr></thead><tbody id="pdfReviewBody">'
     + pdfImport.rows.map((r,idx)=>pdfReviewRowHtml(r,idx)).join("")
@@ -1063,7 +1066,41 @@ function renderPdfReview(){
       + '<button type="button" class="btn safe" id="pdfConfirmBtn" onclick="confirmPdfReview()">'+svgIcon("check")+'Konfirmasi &amp; Simpan Semua</button>'
     + '</div></div>';
   el.innerHTML = html;
+
+  // Tinggi textarea baru bisa dihitung setelah elemennya masuk ke halaman.
+  tumbuhkanSemuaArea();
 }
+
+/**
+ * Samakan tinggi textarea dengan isinya, supaya teks yang membungkus ke
+ * baris kedua tetap terlihat seluruhnya tanpa perlu digulir.
+ */
+function tumbuhkanArea(el){
+  if(!el) return;
+  el.style.height = "auto";
+  el.style.height = (el.scrollHeight + 2) + "px";
+}
+
+/** Terapkan ke seluruh textarea di tabel review. */
+function tumbuhkanSemuaArea(){
+  const body = $("pdfReviewBody");
+  if(!body) return;
+  body.querySelectorAll("textarea").forEach(tumbuhkanArea);
+}
+
+// Enter di dalam textarea akan menyisipkan baris baru — tidak diinginkan
+// untuk nama barang maupun nomor pesanan. Tekanan Enter diabaikan, dan
+// tinggi disesuaikan ulang setiap kali isinya berubah.
+document.addEventListener("keydown", function(e){
+  if(e.key === "Enter" && e.target.matches && e.target.matches(".pdf-review textarea")){
+    e.preventDefault();
+  }
+});
+document.addEventListener("input", function(e){
+  if(e.target.matches && e.target.matches(".pdf-review textarea")){
+    tumbuhkanArea(e.target);
+  }
+});
 
 let cekBarcodeTertunda = null;
 function updatePdfRow(idx, field, value){
