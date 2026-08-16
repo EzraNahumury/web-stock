@@ -239,7 +239,8 @@ switch ($jenis) {
             }
             $noPesanan = $isKel ? 't.no_pesanan' : "''";
             $bagian[] = "(SELECT '$arah' AS arah, t.id, t.tanggal, t.barcode, t.nama,
-                                 t.jumlah, t.keterangan, t.created_at, $noPesanan AS no_pesanan, t.user_id
+                                 t.jumlah, t.keterangan, t.created_at, $noPesanan AS no_pesanan,
+                                 t.master_id, t.user_id
                             FROM $tabel t WHERE " . implode(' AND ', $where) . ')';
         }
         $gabung = implode(' UNION ALL ', $bagian);
@@ -247,6 +248,9 @@ switch ($jenis) {
         $data = dbAll("SELECT g.*, u.nama_lengkap AS oleh
                          FROM ($gabung) g LEFT JOIN users u ON u.id = g.user_id
                         ORDER BY g.tanggal DESC, g.created_at DESC, g.id DESC", $params);
+
+        // Saldo stok pada akhir tanggal tiap catatan.
+        $saldo = saldoHarian(array_column($data, 'master_id'));
 
         $pdf = new PdfTabel('lanskap');
         $pdf->siapkan('Riwayat Keluar Masuk Barang', [
@@ -258,14 +262,15 @@ switch ($jenis) {
             'Arah'    => $arahMinta === 'semua' ? 'Masuk & keluar' : ucfirst($arahMinta),
             'Baris'   => count($data),
         ], [
-            ['label' => 'Tanggal',      'lebar' => 9],
-            ['label' => 'Arah',         'lebar' => 7],
-            ['label' => 'Barcode',      'lebar' => 12],
-            ['label' => 'Nama barang',  'lebar' => 28],
-            ['label' => 'Jumlah',       'lebar' => 7, 'rata' => 'kanan'],
-            ['label' => 'Keterangan',   'lebar' => 11],
+            ['label' => 'Tanggal',      'lebar' => 8],
+            ['label' => 'Barcode',      'lebar' => 11],
+            ['label' => 'Nama barang',  'lebar' => 26],
+            ['label' => 'Masuk',        'lebar' => 6,  'rata' => 'kanan'],
+            ['label' => 'Keluar',       'lebar' => 6,  'rata' => 'kanan'],
+            ['label' => 'Stok akhir',   'lebar' => 7,  'rata' => 'kanan'],
+            ['label' => 'Keterangan',   'lebar' => 10],
             ['label' => 'No. Pesanan',  'lebar' => 13],
-            ['label' => 'Dicatat oleh', 'lebar' => 12],
+            ['label' => 'Dicatat oleh', 'lebar' => 11],
         ]);
 
         $tMasuk = 0;
@@ -277,13 +282,18 @@ switch ($jenis) {
             } else {
                 $tKeluar += (int)$r['jumlah'];
             }
+            $mid = $r['master_id'] === null ? null : (int)$r['master_id'];
+            $akhir = ($mid !== null && isset($saldo[$mid][$r['tanggal']]))
+                ? number_format($saldo[$mid][$r['tanggal']], 0, ',', '.')
+                : '-';
+
             $pdf->baris([
                 date('d/m/Y', strtotime($r['tanggal'])),
-                [$masuk ? 'Masuk' : 'Keluar', $masuk ? [14, 128, 96] : [178, 58, 46]],
                 $r['barcode'],
                 $r['nama'],
-                [($masuk ? '+' : '-') . number_format((int)$r['jumlah'], 0, ',', '.'),
-                 $masuk ? [14, 128, 96] : [178, 58, 46]],
+                $masuk ? ['+' . number_format((int)$r['jumlah'], 0, ',', '.'), [14, 128, 96]] : '',
+                $masuk ? '' : ['-' . number_format((int)$r['jumlah'], 0, ',', '.'), [178, 58, 46]],
+                $akhir,
                 $r['keterangan'],
                 (string)($r['no_pesanan'] ?? ''),
                 (string)($r['oleh'] ?? '-'),

@@ -1480,13 +1480,18 @@ async function refreshRiwayat(){
     const masuk = r.arah === "masuk";
     return '<tr>'
       + '<td style="white-space:nowrap">' + fmtDate(r.tanggal) + '</td>'
-      + '<td><span class="badge ' + (masuk ? "aman" : "kritis") + '">'
-        + (masuk ? "Masuk" : "Keluar") + '</span></td>'
       + '<td><div class="item-name">' + esc(r.nama)
         + (r.master_id === null ? '<span class="flag-gen">TAK DIKENAL</span>' : '') + '</div>'
         + '<div class="item-sub">' + esc(r.barcode) + '</div></td>'
-      + '<td class="num" style="font-weight:700; color:var(--' + (masuk ? "safe" : "danger") + ')">'
-        + (masuk ? "+" : "-") + fmtNum(r.jumlah) + '</td>'
+      // Masuk dan keluar dipisah jadi dua kolom, jadi kolom Arah tidak lagi
+      // diperlukan — angkanya sendiri sudah menunjukkan arahnya.
+      + '<td class="num" style="font-weight:700; color:var(--safe)">'
+        + (masuk ? "+" + fmtNum(r.jumlah) : '<span style="color:var(--lineStrong)">—</span>') + '</td>'
+      + '<td class="num" style="font-weight:700; color:var(--danger)">'
+        + (!masuk ? "-" + fmtNum(r.jumlah) : '<span style="color:var(--lineStrong)">—</span>') + '</td>'
+      + '<td class="num"><span class="stok-akhir-num">'
+        + (r.stok_akhir === null ? '<span style="color:var(--slateLo); font-weight:400">-</span>'
+                                 : fmtNum(r.stok_akhir)) + '</span></td>'
       + '<td style="color:var(--slate)">' + esc(r.keterangan) + '</td>'
       + '<td class="mono" style="font-size:11px; color:var(--slateLo)">' + esc(r.no_pesanan || "-") + '</td>'
       + '<td style="font-size:11.5px; color:var(--slateLo)">' + esc(r.oleh || "-") + '</td>'
@@ -1494,13 +1499,16 @@ async function refreshRiwayat(){
   }).join("");
 
   if(!d.rows.length){
-    baris = '<tr class="empty-row"><td colspan="7">'
+    baris = '<tr class="empty-row"><td colspan="8">'
       + 'Belum ada pergerakan pada rentang ini.</td></tr>';
   }
 
-  wadah.innerHTML = '<div class="table-card"><table style="min-width:820px"><thead><tr>'
-    + ["Tanggal","Arah","Barang","Jumlah","Keterangan","No. Pesanan","Oleh"]
-        .map((h,i)=>'<th'+(i===3?' class="num"':'')+'>'+h+'</th>').join("")
+  wadah.innerHTML =
+    '<div class="info-box">Kolom <b>Stok akhir</b> menunjukkan posisi stok barang itu '
+    + 'pada <b>akhir tanggal</b> tersebut, bukan jumlah yang bergerak.</div>'
+    + '<div class="table-card"><table style="min-width:940px"><thead><tr>'
+    + ["Tanggal","Barang","Masuk","Keluar","Stok akhir","Keterangan","No. Pesanan","Oleh"]
+        .map((h,i)=>'<th'+(i>=2&&i<=4?' class="num"':'')+'>'+h+'</th>').join("")
     + '</tr></thead><tbody>' + baris + '</tbody></table>'
     + paginationBar(d.total, d.page, d.total_pages, "riwayatGoPage")
     + '</div>';

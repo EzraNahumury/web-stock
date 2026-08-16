@@ -108,6 +108,16 @@ foreach ($rows as &$r) {
 }
 unset($r);
 
+// Saldo stok barang pada akhir tanggal masing-masing catatan. Barang yang
+// barcodenya belum terdaftar di master tidak punya saldo — dibiarkan null.
+$saldo = saldoHarian(array_column($rows, 'master_id'));
+foreach ($rows as &$r) {
+    $r['stok_akhir'] = ($r['master_id'] !== null && isset($saldo[$r['master_id']][$r['tanggal']]))
+        ? $saldo[$r['master_id']][$r['tanggal']]
+        : null;
+}
+unset($r);
+
 jsonOk([
     'rows'         => $rows,
     'total_masuk'  => $totalMasuk,
