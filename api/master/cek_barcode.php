@@ -50,14 +50,20 @@ if (count($bersih) > 5000) {
 
 $tanda = implode(',', array_fill(0, count($bersih), '?'));
 $rows  = dbAll(
-    "SELECT barcode, nama FROM master_barang
+    "SELECT id, barcode, nama, sku FROM master_barang
       WHERE deleted_at IS NULL AND barcode IN ($tanda)",
     $bersih
 );
 
+// Nama dan SKU ikut dikirim supaya tabel review bisa mengisinya otomatis
+// begitu admin mengganti barcode sebuah baris.
 $ditemukan = [];
 foreach ($rows as $r) {
-    $ditemukan[$r['barcode']] = $r['nama'];
+    $ditemukan[$r['barcode']] = [
+        'id'   => (int)$r['id'],
+        'nama' => $r['nama'],
+        'sku'  => $r['sku'],
+    ];
 }
 
 jsonOk(['ditemukan' => $ditemukan ?: (object)[]]);

@@ -292,6 +292,8 @@ const TABS = [
     ikon:'<path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><path d="M3 17v2a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-2"/>' },
   { id:"keluar", label:"Barang keluar", sub:"Impor picking list PDF atau catat manual", grup:"Operasional",
     ikon:'<path d="M12 21V9"/><polyline points="7 14 12 9 17 14"/><path d="M3 7V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2"/>' },
+  { id:"riwayat", label:"Riwayat", sub:"Seluruh pergerakan barang masuk dan keluar", grup:"Operasional",
+    ikon:'<path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/>' },
 
   { id:"master", label:"Barang", sub:"Kelola katalog, barcode, dan ambang stok", grup:"Master",
     ikon:'<path d="M20.6 13.4L12 22l-9-9V4a1 1 0 0 1 1-1h9l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.2"/>' },
@@ -464,7 +466,7 @@ function renderDashboard(){
       + '<option value="aman">Aman</option>'
       + '<option value="belum_diatur">Belum diatur</option>'
     + '</select>'
-    + '<a class="btn ghost" href="api/export/csv.php?jenis=dashboard">' + svgIcon("download") + 'Ekspor CSV</a>'
+    + '<a class="btn ghost" id="dashExport" href="api/export/pdf.php?jenis=dashboard">' + svgIcon("download") + 'Unduh PDF</a>'
     + '</div>';
   html += '<div id="dashResults" class="masuk-tahap" style="--d:180ms"></div>';
   $("content").innerHTML = html;
@@ -632,6 +634,16 @@ async function refreshDashboard(){
       Grafik.angkaNaik(n, Number(n.getAttribute("data-nilai"))));
   }
 
+  // Tautan unduh mengikuti penyaringan yang sedang aktif, supaya yang
+  // tercetak sama persis dengan yang sedang dilihat di layar.
+  const unduh = $("dashExport");
+  if(unduh){
+    unduh.href = "api/export/pdf.php?jenis=dashboard"
+      + "&q=" + encodeURIComponent(dashFilters.q)
+      + "&kategori=" + encodeURIComponent(dashFilters.kategori)
+      + "&status=" + encodeURIComponent(dashFilters.status);
+  }
+
   // Lencana jumlah di menu sisi.
   if(navHitung.perluOrder !== r.perlu_order){
     navHitung.perluOrder = r.perlu_order;
@@ -725,7 +737,7 @@ function renderTransaksiTab(kind){
     + '<div class="search-wrap">' + svgIcon("search") + '<input type="text" id="'+kind+'Cari" placeholder="Cari nama, barcode' + (kind==="keluar"?", no. pesanan":"") + '…" oninput="onTrxSearchInput(\''+kind+'\')"></div>'
     + '<div class="daterange">Dari <input type="date" id="'+kind+'Dari" onchange="onTrxFilterChange(\''+kind+'\')">'
     + ' s/d <input type="date" id="'+kind+'Sampai" onchange="onTrxFilterChange(\''+kind+'\')"></div>'
-    + '<a class="btn ghost" id="'+kind+'Export" href="api/export/csv.php?jenis='+kind+'">' + svgIcon("download") + 'Ekspor CSV</a>'
+    + '<a class="btn ghost" id="'+kind+'Export" href="api/export/pdf.php?jenis='+kind+'">' + svgIcon("download") + 'Unduh PDF</a>'
     + '</div>';
   html += '<div id="'+kind+'Table"></div>';
 
@@ -755,7 +767,8 @@ function onTrxFilterChange(kind){
   f.sampai = $(kind+"Sampai").value;
   f.page   = 1;
   const ex = $(kind+"Export");
-  if(ex) ex.href = "api/export/csv.php?jenis="+kind+"&dari="+encodeURIComponent(f.dari)+"&sampai="+encodeURIComponent(f.sampai);
+  if(ex) ex.href = "api/export/pdf.php?jenis="+kind+"&q="+encodeURIComponent(f.q)
+      + "&dari="+encodeURIComponent(f.dari)+"&sampai="+encodeURIComponent(f.sampai);
   renderTransaksiTable(kind);
 }
 function trxGoPageMasuk(p){ trxFilters.masuk.page = p; renderTransaksiTable("masuk"); }
@@ -1119,8 +1132,40 @@ function updatePdfRow(idx, field, value){
         const el2 = $("pdfRowStatus"+i);
         if(el2) el2.innerHTML = pdfRowStatusBadge(row);
       });
+      ikutkanDataMaster(idx);
     }, 500);
   }
+}
+
+/**
+ * Setelah barcode sebuah baris diganti, ikutkan nama dan SKU dari master.
+ *
+ * Barcode adalah kunci yang menentukan barang mana yang stoknya berkurang.
+ * Membiarkan nama lama menempel pada barcode baru membuat catatan barang
+ * keluar menyebut produk yang berbeda dari yang benar-benar dipotong.
+ */
+function ikutkanDataMaster(idx){
+  const r = pdfImport.rows[idx];
+  if(!r || !r.barcode) return;
+
+  const m = pdfImport.cocok[r.barcode];
+  if(!m || typeof m !== "object") return;   // barcode tak dikenal, biarkan apa adanya
+
+  const namaLama = r.nama;
+  r.nama = m.nama;
+  r.sku  = m.sku || "";
+
+  // Perbarui isi kolomnya langsung, bukan menggambar ulang seluruh tabel —
+  // menggambar ulang akan merebut fokus dari kolom yang sedang diketik.
+  const baris = document.querySelectorAll("#pdfReviewBody tr")[idx];
+  if(baris){
+    const areaNama = baris.querySelector("td:nth-child(2) textarea");
+    const inputSku = baris.querySelector("td:nth-child(3) input");
+    if(areaNama){ areaNama.value = r.nama; tumbuhkanArea(areaNama); }
+    if(inputSku){ inputSku.value = r.sku; }
+  }
+
+  if(namaLama !== r.nama) toast("Nama & SKU disesuaikan: " + r.nama);
 }
 
 function addPdfReviewRow(){
@@ -1210,7 +1255,7 @@ function renderMaster(){
     + '<button type="button" class="btn ghost" id="mCancelBtn" style="display:none" onclick="cancelEditMaster()">'+svgIcon("x")+'Batal</button></div>';
   html += '</form>';
   html += '<div class="toolbar"><div class="search-wrap">'+svgIcon("search")+'<input type="text" id="masterSearch" placeholder="Cari SKU, barcode, atau nama…" oninput="onMasterSearchInput()"></div>'
-    + '<a class="btn ghost" href="api/export/csv.php?jenis=master">'+svgIcon("download")+'Ekspor CSV</a></div>';
+    + '<a class="btn ghost" id="masterExport" href="api/export/pdf.php?jenis=master">'+svgIcon("download")+'Unduh PDF</a></div>';
   html += '<div id="masterResults"></div>';
   $("content").innerHTML = html;
   $("masterSearch").value = masterFilters.q;
@@ -1248,6 +1293,9 @@ async function refreshMasterTable(){
     + '</tr>'
   ).join("");
   if(data.rows.length===0) rows = '<tr class="empty-row"><td colspan="7">Tidak ada barang yang cocok.</td></tr>';
+
+  const unduhM = $("masterExport");
+  if(unduhM) unduhM.href = "api/export/pdf.php?jenis=master&q=" + encodeURIComponent(masterFilters.q);
 
   wadah.innerHTML = '<div class="table-card"><table style="min-width:720px"><thead><tr>'
     + ["SKU","Barcode","Nama barang","Stok awal","Stok minimal","Kategori",""].map(h=>'<th>'+h+'</th>').join("")
@@ -1333,6 +1381,129 @@ async function deleteMaster(id){
     toast(res.pesan || "Dihapus.");
     refreshMasterTable();
   }catch(e){ tampilGalat(e); }
+}
+
+/* ================================================================== */
+/* Riwayat — gabungan barang masuk dan keluar                         */
+/* ================================================================== */
+let riwayatFilter = { q:"", dari:"", sampai:"", jenis:"semua", page:1 };
+
+function renderRiwayat(){
+  let html = '<div class="toolbar">'
+    + '<div class="search-wrap">' + svgIcon("search")
+      + '<input type="text" id="rwCari" placeholder="Cari nama, barcode, atau no. pesanan…" oninput="onRiwayatCari()"></div>'
+    + '<select id="rwJenis" onchange="onRiwayatFilter()">'
+      + '<option value="semua">Masuk &amp; keluar</option>'
+      + '<option value="masuk">Barang masuk saja</option>'
+      + '<option value="keluar">Barang keluar saja</option>'
+    + '</select>'
+    + '<div class="daterange">Dari <input type="date" id="rwDari" onchange="onRiwayatFilter()">'
+      + ' s/d <input type="date" id="rwSampai" onchange="onRiwayatFilter()"></div>'
+    + '<button type="button" class="btn ghost" onclick="resetRiwayat()">' + svgIcon("x") + 'Reset</button>'
+    + '<a class="btn ghost" id="rwUnduh" href="api/export/pdf.php?jenis=riwayat">' + svgIcon("download") + 'Unduh PDF</a>'
+    + '</div>'
+    + '<div class="stat-row" id="rwRingkas"></div>'
+    + '<div id="rwHasil"></div>';
+
+  $("content").innerHTML = html;
+  $("rwCari").value   = riwayatFilter.q;
+  $("rwJenis").value  = riwayatFilter.jenis;
+  $("rwDari").value   = riwayatFilter.dari;
+  $("rwSampai").value = riwayatFilter.sampai;
+  refreshRiwayat();
+}
+
+const onRiwayatCari = debounce(function(){
+  riwayatFilter.q = $("rwCari").value;
+  riwayatFilter.page = 1;
+  refreshRiwayat();
+}, 300);
+
+function onRiwayatFilter(){
+  riwayatFilter.q      = $("rwCari").value;
+  riwayatFilter.jenis  = $("rwJenis").value;
+  riwayatFilter.dari   = $("rwDari").value;
+  riwayatFilter.sampai = $("rwSampai").value;
+  riwayatFilter.page   = 1;
+  refreshRiwayat();
+}
+
+function resetRiwayat(){
+  riwayatFilter = { q:"", dari:"", sampai:"", jenis:"semua", page:1 };
+  $("rwCari").value = ""; $("rwJenis").value = "semua";
+  $("rwDari").value = ""; $("rwSampai").value = "";
+  refreshRiwayat();
+}
+
+function riwayatGoPage(p){ riwayatFilter.page = p; refreshRiwayat(); }
+
+async function refreshRiwayat(){
+  const wadah = $("rwHasil");
+  if(!wadah) return;
+
+  let d;
+  try{
+    d = await API.get("riwayat/list.php", {
+      q: riwayatFilter.q, dari: riwayatFilter.dari,
+      sampai: riwayatFilter.sampai, jenis: riwayatFilter.jenis,
+      page: riwayatFilter.page
+    });
+  }catch(e){ tampilGalat(e); return; }
+
+  // Tautan unduh mengikuti penyaringan yang sedang aktif.
+  const unduh = $("rwUnduh");
+  if(unduh){
+    unduh.href = "api/export/pdf.php?jenis=riwayat"
+      + "&q=" + encodeURIComponent(riwayatFilter.q)
+      + "&arah=" + encodeURIComponent(riwayatFilter.jenis)
+      + "&dari=" + encodeURIComponent(riwayatFilter.dari)
+      + "&sampai=" + encodeURIComponent(riwayatFilter.sampai);
+  }
+
+  const ringkas = $("rwRingkas");
+  if(ringkas){
+    ringkas.innerHTML =
+        statCard({ label:"Catatan", nilai:d.total, ikon:"unit", nada:"biru" })
+      + statCard({ label:"Total masuk", nilai:d.total_masuk, ikon:"sku", nada:"safe",
+                   tone:"safe", kaki:"unit diterima" })
+      + statCard({ label:"Total keluar", nilai:d.total_keluar, ikon:"alert", nada:"danger",
+                   tone:"danger", kaki:"unit dikeluarkan" })
+      + statCard({ label:"Selisih", nilai:Math.abs(d.selisih), ikon:"tag",
+                   nada:d.selisih >= 0 ? "safe" : "danger",
+                   tone:d.selisih >= 0 ? "safe" : "danger",
+                   kaki:d.selisih >= 0 ? "lebih banyak masuk" : "lebih banyak keluar" });
+    ringkas.querySelectorAll(".stat-value[data-nilai]").forEach(n =>
+      Grafik.angkaNaik(n, Number(n.getAttribute("data-nilai"))));
+  }
+
+  let baris = d.rows.map(r => {
+    const masuk = r.arah === "masuk";
+    return '<tr>'
+      + '<td style="white-space:nowrap">' + fmtDate(r.tanggal) + '</td>'
+      + '<td><span class="badge ' + (masuk ? "aman" : "kritis") + '">'
+        + (masuk ? "Masuk" : "Keluar") + '</span></td>'
+      + '<td><div class="item-name">' + esc(r.nama)
+        + (r.master_id === null ? '<span class="flag-gen">TAK DIKENAL</span>' : '') + '</div>'
+        + '<div class="item-sub">' + esc(r.barcode) + '</div></td>'
+      + '<td class="num" style="font-weight:700; color:var(--' + (masuk ? "safe" : "danger") + ')">'
+        + (masuk ? "+" : "-") + fmtNum(r.jumlah) + '</td>'
+      + '<td style="color:var(--slate)">' + esc(r.keterangan) + '</td>'
+      + '<td class="mono" style="font-size:11px; color:var(--slateLo)">' + esc(r.no_pesanan || "-") + '</td>'
+      + '<td style="font-size:11.5px; color:var(--slateLo)">' + esc(r.oleh || "-") + '</td>'
+      + '</tr>';
+  }).join("");
+
+  if(!d.rows.length){
+    baris = '<tr class="empty-row"><td colspan="7">'
+      + 'Belum ada pergerakan pada rentang ini.</td></tr>';
+  }
+
+  wadah.innerHTML = '<div class="table-card"><table style="min-width:820px"><thead><tr>'
+    + ["Tanggal","Arah","Barang","Jumlah","Keterangan","No. Pesanan","Oleh"]
+        .map((h,i)=>'<th'+(i===3?' class="num"':'')+'>'+h+'</th>').join("")
+    + '</tr></thead><tbody>' + baris + '</tbody></table>'
+    + paginationBar(d.total, d.page, d.total_pages, "riwayatGoPage")
+    + '</div>';
 }
 
 /* ================================================================== */
@@ -1712,6 +1883,7 @@ function renderContent(){
   if(tab==="dashboard") renderDashboard();
   else if(tab==="masuk") renderTransaksiTab("masuk");
   else if(tab==="keluar") renderTransaksiTab("keluar");
+  else if(tab==="riwayat") renderRiwayat();
   else if(tab==="master") renderMaster();
   else if(tab==="kategori") renderKategori();
   else if(tab==="pengguna") renderPengguna();

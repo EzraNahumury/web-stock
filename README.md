@@ -1456,7 +1456,7 @@ pemeriksaan klien saja tidak pernah cukup).
 | Metode | Endpoint | Parameter | Respons |
 |---|---|---|---|
 | GET | `api/dashboard/stats.php` | `q`, `kategori`, `status`, `page` | `{ok, rows[], ringkasan:{total_sku,total_stok,perlu_order,kategori}, …}` |
-| GET | `api/export/csv.php` | `jenis=dashboard\|masuk\|keluar`, `dari`, `sampai` | file CSV (UTF-8 BOM agar rapi di Excel) |
+| GET | `api/export/pdf.php` | `jenis=dashboard\|masuk\|keluar\|riwayat\|master` + filter layar asalnya | berkas PDF |
 
 ---
 
@@ -1519,7 +1519,7 @@ pemeriksaan klien saja tidak pernah cukup).
 
 ### Tahap 6 — Nilai tambah
 
-- [ ] Ekspor CSV ([F3](#83-fungsional--ux))
+- [x] Ekspor PDF ([F3](#83-fungsional--ux))
 - [ ] Filter rentang tanggal di riwayat masuk/keluar
 - [ ] Laporan mutasi stok per periode
 - [ ] Impor master massal via CSV
@@ -1628,7 +1628,7 @@ node tools\uji_parser.mjs                       22 asersi parser (butuh: npm i p
 | D7 | Kategori dipaksa terisi | Opsi `— Tanpa kategori —` bernilai kosong |
 | F1 | Riwayat terpotong 200 baris | Paginasi server + filter rentang tanggal |
 | F2 | Hapus tanpa konfirmasi | Dialog konfirmasi + soft delete `deleted_at` |
-| F3 | Tidak ada ekspor | `api/export/csv.php` untuk 4 jenis data |
+| F3 | Tidak ada ekspor | `api/export/pdf.php` untuk 5 jenis laporan |
 | F4 | Tidak ada jejak audit | Tabel `activity_log` terisi di semua operasi tulis |
 | F5 | Dropdown keterangan tidak reset | Direset setelah simpan |
 | F6 | `computeStats()` dua kali | Agregasi pindah ke SQL `GROUP BY` |
@@ -2043,7 +2043,8 @@ C:\web-stock\
 │   ├── master/                 list, save, delete, cek_barcode
 │   ├── masuk/  keluar/         list, create, delete
 │   ├── import/                 check (deteksi ganda), commit (transaksional)
-│   └── export/csv.php          Ekspor 4 jenis data
+│   ├── export/pdf.php          Ekspor 5 jenis laporan
+│   └── riwayat/list.php        Riwayat gabungan masuk + keluar
 ├── assets/
 │   ├── css/app.css             CSS prototipe + tambahan versi PHP
 │   ├── js/pdf-parser.js        Parser PDF — SALINAN UTUH prototipe
