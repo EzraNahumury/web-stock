@@ -10,6 +10,10 @@
 
 SET NAMES utf8mb4;
 
+-- Dilewati otomatis bila keadaan yang dituju sudah tercapai, supaya
+-- penerapan ulang tidak menghapus data yang sudah ada.
+-- @lewati-jika-tabel: kategori
+
 -- ---------------------------------------------------------------------------
 -- kategori
 --

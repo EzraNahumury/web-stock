@@ -14,6 +14,10 @@
 
 SET NAMES utf8mb4;
 
+-- Dilewati otomatis bila keadaan yang dituju sudah tercapai, supaya
+-- penerapan ulang tidak menghapus data yang sudah ada.
+-- @lewati-jika-terisi: master_barang
+
 -- Kosongkan dulu supaya impor ulang tidak menabrak UNIQUE barcode.
 DELETE FROM master_barang;
 ALTER TABLE master_barang AUTO_INCREMENT = 1;

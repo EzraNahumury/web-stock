@@ -10,6 +10,14 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/helpers.php';
+// Terapkan migrasi database yang belum dijalankan. Aman dipanggil tiap
+// permintaan: yang sudah pernah diterapkan dicatat dan tidak diulang.
+require_once __DIR__ . '/includes/migrasi.php';
+$statusMigrasi = jalankanMigrasi();
+if ($statusMigrasi['galat'] !== null) {
+    http_response_code(500);
+    exit('Pembaruan struktur database gagal. Periksa log server.');
+}
 
 wajibLoginHalaman();
 

@@ -13,6 +13,10 @@
 -- ============================================================================
 
 SET NAMES utf8mb4;
+
+-- Dilewati otomatis bila keadaan yang dituju sudah tercapai, supaya
+-- penerapan ulang tidak menghapus data yang sudah ada.
+-- @lewati-jika-tabel: master_barang
 SET FOREIGN_KEY_CHECKS = 0;
 
 -- ---------------------------------------------------------------------------

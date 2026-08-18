@@ -1814,6 +1814,24 @@ phpMyAdmin dari hPanel → pilih database → tab **Import**:
 4. sql/004_pertukaran.sql         tabel riwayat pertukaran produk
 ```
 
+**Sejak versi ini migrasi berjalan otomatis.** Berkas di `sql/` diterapkan
+sendiri saat halaman pertama dibuka, dan yang sudah pernah dijalankan
+dicatat di tabel `migrasi` sehingga tidak terulang. Impor manual di atas
+hanya diperlukan untuk memasang database dari nol dengan cepat.
+
+Migrasi lama bersifat merusak bila diulang — 001 diawali `DROP TABLE`, 002
+diawali `DELETE FROM master_barang`. Karena itu tiap berkas menyatakan
+syarat lewatnya sendiri:
+
+```
+-- @lewati-jika-tabel: master_barang     lewati bila tabel itu sudah ada
+-- @lewati-jika-terisi: master_barang    lewati bila tabel itu sudah berisi
+```
+
+Database yang sudah berisi data otomatis ter-baseline: berkas lama dicatat
+sebagai dilewati tanpa dijalankan, dan hanya migrasi baru yang benar-benar
+dieksekusi.
+
 Urutannya wajib. `003` mengambil kategori yang benar-benar dipakai dari
 `master_barang`, jadi harus dijalankan setelah `002`.
 
