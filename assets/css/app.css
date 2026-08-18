@@ -763,3 +763,22 @@ tbody tr:hover{ background:#FAFCFC; }
   .tukar-banding{ grid-template-columns:1fr; }
   .tukar-panah{ transform:rotate(90deg); }
 }
+
+/* Dialog "Rapikan nama": contoh perubahan sebelum diterapkan */
+.rapikan-daftar{
+  margin-top:12px; max-height:240px; overflow:auto;
+  border:1px solid var(--line); border-radius:9px;
+}
+.rapikan-contoh{
+  padding:9px 12px; border-bottom:1px solid var(--line); font-size:12px;
+}
+.rapikan-contoh:last-child{ border-bottom:none; }
+.rapikan-lama{
+  color:var(--danger); text-decoration:line-through;
+  text-decoration-color:var(--dangerLine); line-height:1.4;
+}
+.rapikan-baru{
+  display:flex; align-items:center; gap:6px; margin-top:4px;
+  color:var(--safe); font-weight:600; line-height:1.4;
+}
+.rapikan-baru svg{ flex:none; opacity:.7; }

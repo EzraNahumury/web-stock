@@ -743,6 +743,10 @@ function renderTransaksiTab(kind){
     + '<div class="search-wrap">' + svgIcon("search") + '<input type="text" id="'+kind+'Cari" placeholder="Cari nama, barcode' + (kind==="keluar"?", no. pesanan":"") + '…" oninput="onTrxSearchInput(\''+kind+'\')"></div>'
     + '<div class="daterange">Dari <input type="date" id="'+kind+'Dari" onchange="onTrxFilterChange(\''+kind+'\')">'
     + ' s/d <input type="date" id="'+kind+'Sampai" onchange="onTrxFilterChange(\''+kind+'\')"></div>'
+    + (sayaAdmin()
+        ? '<button type="button" class="btn ghost" onclick="rapikanNama()" title="Ganti nama panjang dari PDF dengan nama pendek di master barang">'
+          + svgIcon("tukar") + 'Rapikan nama</button>'
+        : '')
     + '<a class="btn ghost" id="'+kind+'Export" href="api/export/pdf.php?jenis='+kind+'">' + svgIcon("download") + 'Unduh PDF</a>'
     + '</div>';
   html += '<div id="'+kind+'Table"></div>';
@@ -1554,6 +1558,85 @@ async function deleteMaster(id){
     toast(res.pesan || "Dihapus.");
     refreshMasterTable();
   }catch(e){ tampilGalat(e); }
+}
+
+
+/**
+ * Samakan nama pada catatan transaksi dengan nama di master barang.
+ *
+ * Catatan yang dibuat sebelum perbaikan "nama ikut master" masih memakai
+ * judul etalase marketplace dari picking list — panjang dan sulit dibaca.
+ * Karena barcodenya sudah cocok master, produknya sudah pasti sama.
+ *
+ * Dihitung dulu dan ditunjukkan contohnya sebelum apa pun diubah: ini
+ * menulis ulang banyak baris sekaligus, jadi admin harus tahu persis apa
+ * yang akan terjadi.
+ */
+async function rapikanNama(){
+  let pra;
+  try{
+    pra = await API.post("master/samakan_nama.php", { pratinjau:true });
+  }catch(e){ tampilGalat(e); return; }
+
+  if(!pra.jumlah){
+    toast("Semua nama sudah sama dengan master. Tidak ada yang perlu dirapikan.");
+    return;
+  }
+
+  const contoh = (pra.contoh || []).map(c =>
+    '<div class="rapikan-contoh">'
+    + '<div class="rapikan-lama">' + esc(c.nama_lama) + '</div>'
+    + '<div class="rapikan-baru">' + svgIcon("tukar") + esc(c.nama_baru) + '</div>'
+    + '</div>'
+  ).join("");
+
+  const ok = await konfirmasiIsi(
+    "Rapikan " + fmtNum(pra.jumlah) + " nama catatan?",
+    '<p>Nama panjang dari PDF akan diganti dengan nama pendek yang tercatat di '
+    + '<b>Master barang</b>. Barcode, jumlah, tanggal, dan nomor pesanan tidak berubah.</p>'
+    + '<div class="rapikan-daftar">' + contoh + '</div>'
+    + '<div class="info-box" style="margin:12px 0 0;">Baris yang barcodenya belum terdaftar '
+    + 'di master dibiarkan apa adanya — tidak ada nama master untuk menggantinya.</div>',
+    "Rapikan sekarang"
+  );
+  if(!ok) return;
+
+  setSaveStatus("saving");
+  try{
+    const res = await API.post("master/samakan_nama.php", {});
+    setSaveStatus("ok");
+    toast(res.pesan || "Nama dirapikan.");
+    if(tab === "masuk" || tab === "keluar") renderTransaksiTable(tab);
+    else if(tab === "riwayat") refreshRiwayat();
+  }catch(e){ tampilGalat(e); }
+}
+
+/** Dialog konfirmasi dengan isi HTML, bukan sekadar satu kalimat. */
+function konfirmasiIsi(judul, isiHtml, labelYa){
+  return new Promise(resolve => {
+    const m = modalKonten(true);
+    let selesai = false;
+    m.isi(
+      '<div class="modal-head"><h3>' + esc(judul) + '</h3>'
+      + '<button type="button" class="icon-btn" data-act="tutup" aria-label="Tutup">' + svgIcon("x") + '</button></div>'
+      + '<div style="font-size:13px; color:var(--slate); line-height:1.55;">' + isiHtml + '</div>'
+      + '<div class="modal-act" style="margin-top:16px;">'
+        + '<button type="button" class="btn ghost" data-act="tutup">Batal</button>'
+        + '<button type="button" class="btn" data-act="ya">' + esc(labelYa || "Lanjutkan") + '</button>'
+      + '</div>'
+    );
+    m.el.addEventListener("click", ev => {
+      if(ev.target.closest('[data-act="ya"]')){ selesai = true; m.tutup(); resolve(true); }
+      else if(ev.target.closest('[data-act="tutup"]')){ selesai = true; m.tutup(); resolve(false); }
+    });
+    // Tutup lewat Escape atau klik latar juga dihitung sebagai batal.
+    const amati = setInterval(() => {
+      if(!document.body.contains(m.el)){
+        clearInterval(amati);
+        if(!selesai) resolve(false);
+      }
+    }, 200);
+  });
 }
 
 /* ================================================================== */
