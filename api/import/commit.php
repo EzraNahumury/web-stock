@@ -70,11 +70,20 @@ foreach ($rows as $i => $r) {
     if (!is_array($r)) {
         continue;
     }
-    $baris   = $i + 1;
+    $baris = $i + 1;
+
+    // Hanya baris yang dicentang admin yang disimpan. Baris tak tercentang
+    // dilewati diam-diam, bukan dianggap galat: mengabaikan sebagian baris
+    // memang tujuan tombol centangnya.
+    if (array_key_exists('pilih', $r) && !$r['pilih']) {
+        continue;
+    }
+
     $barcode = ambilStr($r, 'barcode', 50);
     $nama    = ambilStr($r, 'nama', 255);
     $qty     = ambilInt($r, 'qty', 0);
     $ket     = pilihanValid(ambilStr($r, 'keterangan', 50), KET_KELUAR);
+    $sku     = ambilStr($r, 'sku', 50);
     $noPes   = ambilStr($r, 'noPesanan', 100);
 
     if ($barcode === '') {
@@ -93,13 +102,30 @@ foreach ($rows as $i => $r) {
         $nama = $master ? $master['nama'] : '(tanpa nama)';
     }
 
+    // Keadaan baris sebagaimana terbaca dari PDF, dikirim klien apa adanya.
+    // Dipakai mendeteksi apakah admin menukar produknya sebelum menyimpan.
+    $asli = is_array($r['asli'] ?? null) ? $r['asli'] : [];
+    $barcodeLama = mb_substr(trim((string)($asli['barcode'] ?? '')), 0, 50);
+    $skuLama     = mb_substr(trim((string)($asli['sku'] ?? '')), 0, 50);
+    $namaLama    = mb_substr(trim((string)($asli['nama'] ?? '')), 0, 255);
+
+    $tukarBarcode = $barcodeLama !== '' && $barcodeLama !== $barcode;
+    $tukarSku     = $skuLama !== '' && $skuLama !== $sku;
+
     $bersih[] = [
         'barcode'    => $barcode,
         'nama'       => $nama,
+        'sku'        => $sku,
         'qty'        => $qty,
         'keterangan' => $ket,
         'no_pesanan' => $noPes !== '' ? $noPes : ($noPicking !== '' ? $noPicking : $fileName),
         'master_id'  => $master ? (int)$master['id'] : null,
+        'tukar'      => ($tukarBarcode || $tukarSku) ? [
+            'barcode_lama' => $barcodeLama,
+            'nama_lama'    => $namaLama,
+            'sku_lama'     => $skuLama,
+            'alasan'       => $tukarBarcode && $tukarSku ? 'keduanya' : ($tukarBarcode ? 'barcode' : 'sku'),
+        ] : null,
     ];
 }
 
@@ -107,7 +133,7 @@ if ($galat) {
     jsonError('Ada baris yang belum lengkap.', 422, ['detail' => $galat]);
 }
 if (!$bersih) {
-    jsonError('Tidak ada baris valid untuk disimpan.');
+    jsonError('Tidak ada baris yang dicentang untuk disimpan.');
 }
 
 // --- Cek kecukupan stok (audit D3) ---------------------------------------
@@ -187,6 +213,17 @@ $hasil = dbTransaksi(static function (PDO $pdo) use (
             (tanggal, master_id, barcode, nama, jumlah, keterangan, no_pesanan, batch_id, user_id)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
     );
+    // Pertukaran produk dicatat di transaksi yang sama dengan barang
+    // keluarnya: kalau salah satunya gagal, keduanya batal, sehingga tidak
+    // pernah ada stok terpotong tanpa jejak pertukarannya.
+    $stTukar = $pdo->prepare(
+        'INSERT INTO pertukaran_barang
+            (tanggal, barcode_lama, nama_lama, sku_lama,
+             master_id_baru, barcode_baru, nama_baru, sku_baru,
+             jumlah, no_pesanan, alasan, batch_id, keluar_id, user_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    );
+
     foreach ($bersih as $b) {
         $stRow->execute([
             $tanggal,
@@ -199,6 +236,26 @@ $hasil = dbTransaksi(static function (PDO $pdo) use (
             $batchId,
             userId(),
         ]);
+        $keluarId = (int)$pdo->lastInsertId();
+
+        if ($b['tukar'] !== null) {
+            $stTukar->execute([
+                $tanggal,
+                $b['tukar']['barcode_lama'],
+                $b['tukar']['nama_lama'],
+                $b['tukar']['sku_lama'],
+                $b['master_id'],
+                $b['barcode'],
+                $b['nama'],
+                $b['sku'],
+                $b['qty'],
+                mb_substr($b['no_pesanan'], 0, 255),
+                $b['tukar']['alasan'],
+                $batchId,
+                $keluarId,
+                userId(),
+            ]);
+        }
     }
 
     return $batchId;
@@ -210,9 +267,20 @@ catatAktivitas('import', 'batch', $hasil, [
     'baris'      => count($bersih),
 ]);
 
+$jmlTukar = 0;
+foreach ($bersih as $b) {
+    if ($b['tukar'] !== null) {
+        $jmlTukar++;
+    }
+}
+if ($jmlTukar > 0) {
+    $peringatan[] = $jmlTukar . ' baris produknya ditukar. Tercatat di menu Pertukaran barang.';
+}
+
 jsonOk([
     'batch_id'     => $hasil,
     'tersimpan'    => count($bersih),
+    'pertukaran'   => $jmlTukar,
     'tanpa_master' => $tanpaMaster,
     'peringatan'   => $peringatan,
     'pesan'        => count($bersih) . ' barang keluar berhasil disimpan.',

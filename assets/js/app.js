@@ -24,7 +24,7 @@ let kategoriOptions = [];
 let editingMasterId = null;
 
 let pdfImport = { status:"idle", header:null, rows:[], fileName:"", fileHash:"",
-                  tanggal:"", cocok:{}, duplikat:null };
+                  tanggal:"", cocok:{}, cocokSku:{}, duplikat:null };
 
 if(window["pdfjsLib"]){
   pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdf.worker.min.js";
@@ -59,6 +59,7 @@ function svgIcon(name){
     edit:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>',
     check:'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>',
     x:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+    tukar:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>',
     download:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
   };
   return icons[name] || "";
@@ -294,6 +295,11 @@ const TABS = [
     ikon:'<path d="M12 21V9"/><polyline points="7 14 12 9 17 14"/><path d="M3 7V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2"/>' },
   { id:"riwayat", label:"Riwayat", sub:"Seluruh pergerakan barang masuk dan keluar", grup:"Operasional",
     ikon:'<path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/>' },
+
+  { id:"pertukaran", label:"Pertukaran barang", sub:"Produk yang ditukar saat meninjau impor PDF", grup:"Operasional",
+    ikon:'<polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>' },
+  { id:"opname", label:"Laporan stock opname", sub:"Perbandingan stok sistem dengan hitungan fisik", grup:"Operasional",
+    ikon:'<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>' },
 
   { id:"master", label:"Barang", sub:"Kelola katalog, barcode, dan ambang stok", grup:"Master",
     ikon:'<path d="M20.6 13.4L12 22l-9-9V4a1 1 0 0 1 1-1h9l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.2"/>' },
@@ -926,17 +932,17 @@ function handlePdfUpload(event){
   const reader = new FileReader();
   reader.onload = function(e){ prosesPdf(e.target.result, file.name); };
   reader.onerror = function(){
-    pdfImport = { status:"error", header:null, rows:[], fileName:file.name, fileHash:"", tanggal:"", cocok:{}, duplikat:null };
+    pdfImport = { status:"error", header:null, rows:[], fileName:file.name, fileHash:"", tanggal:"", cocok:{}, cocokSku:{}, duplikat:null };
     renderPdfImportStatus(); renderPdfReview();
   };
-  pdfImport = { status:"parsing", header:null, rows:[], fileName:file.name, fileHash:"", tanggal:"", cocok:{}, duplikat:null };
+  pdfImport = { status:"parsing", header:null, rows:[], fileName:file.name, fileHash:"", tanggal:"", cocok:{}, cocokSku:{}, duplikat:null };
   renderPdfImportStatus(); renderPdfReview();
   reader.readAsArrayBuffer(file);
 }
 
 async function prosesPdf(arrayBuffer, fileName){
   if(!window["pdfjsLib"]){
-    pdfImport = { status:"error", header:null, rows:[], fileName, fileHash:"", tanggal:"", cocok:{}, duplikat:null };
+    pdfImport = { status:"error", header:null, rows:[], fileName, fileHash:"", tanggal:"", cocok:{}, cocokSku:{}, duplikat:null };
     renderPdfImportStatus(); renderPdfReview();
     toast("Pembaca PDF gagal dimuat.", "err");
     return;
@@ -958,29 +964,59 @@ async function prosesPdf(arrayBuffer, fileName){
     pdfImport = {
       status: parsed.rows.length ? "ready" : "empty",
       header: parsed.header, rows: parsed.rows,
-      fileName, fileHash: hash, tanggal, cocok:{}, duplikat:null
+      fileName, fileHash: hash, tanggal, cocok:{}, cocokSku:{}, duplikat:null
     };
 
     if(parsed.rows.length){
       await cekBarcodeMassal();
+      samakanDenganMaster();
       await cekDuplikatImpor();
     }
   }catch(err){
     console.error(err);
-    pdfImport = { status:"error", header:null, rows:[], fileName, fileHash:"", tanggal:"", cocok:{}, duplikat:null };
+    pdfImport = { status:"error", header:null, rows:[], fileName, fileHash:"", tanggal:"", cocok:{}, cocokSku:{}, duplikat:null };
   }
   renderPdfImportStatus();
   renderPdfReview();
 }
 
-/** Cek semua barcode sekaligus, bukan satu permintaan per baris. */
+/** Cek semua barcode dan SKU sekaligus, bukan satu permintaan per baris. */
 async function cekBarcodeMassal(){
-  const daftar = pdfImport.rows.map(r => r.barcode).filter(b => b);
-  if(!daftar.length){ pdfImport.cocok = {}; return; }
+  const barcodes = pdfImport.rows.map(r => r.barcode).filter(b => b);
+  const skus     = pdfImport.rows.map(r => r.sku).filter(b => b);
+  if(!barcodes.length && !skus.length){
+    pdfImport.cocok = {}; pdfImport.cocokSku = {}; return;
+  }
   try{
-    const res = await API.post("master/cek_barcode.php", { barcodes: daftar });
-    pdfImport.cocok = res.ditemukan || {};
-  }catch(e){ pdfImport.cocok = {}; }
+    const res = await API.post("master/cek_barcode.php", { barcodes: barcodes, skus: skus });
+    pdfImport.cocok    = res.ditemukan || {};
+    pdfImport.cocokSku = res.ditemukan_sku || {};
+  }catch(e){ pdfImport.cocok = {}; pdfImport.cocokSku = {}; }
+}
+
+/**
+ * Ganti nama dan SKU hasil baca PDF dengan yang tercatat di master.
+ *
+ * Picking list marketplace memakai judul etalase yang panjang, penuh kata
+ * kunci pencarian ("Kaos Kaki Futsal Pendek Anti Slip Olahraga Sepak Bola
+ * Tebal Sebetis Dewasa... Variant: Putih"). Yang dipakai gudang adalah nama
+ * pendek di master. Karena barcodenya sudah cocok, produknya sudah pasti
+ * sama — jadi nama master yang dipakai.
+ *
+ * Setelah itu keadaan tiap baris dipotret sebagai `asli`. Potret inilah
+ * pembanding untuk mendeteksi pertukaran: perubahan barcode atau SKU SETELAH
+ * titik ini berarti admin sengaja menukar produknya.
+ */
+function samakanDenganMaster(){
+  pdfImport.rows.forEach(r => {
+    const m = r.barcode ? pdfImport.cocok[r.barcode] : null;
+    if(m && typeof m === "object"){
+      r.nama = m.nama;
+      r.sku  = m.sku || "";
+    }
+    r.pilih = true;                       // semua baris tercentang secara bawaan
+    r.asli  = { barcode: r.barcode, nama: r.nama, sku: r.sku };
+  });
 }
 
 async function cekDuplikatImpor(){
@@ -1011,19 +1047,43 @@ function pdfRowStatusBadge(r){
                : '<span class="badge rendah">'+svgIcon("alert")+'Tak dikenal</span>';
 }
 
+/** Apakah baris ini produknya sudah ditukar dari hasil baca PDF? */
+function barisDitukar(r){
+  if(!r || !r.asli) return false;
+  return (r.asli.barcode || "") !== (r.barcode || "")
+      || (r.asli.sku || "")     !== (r.sku || "");
+}
+
+/** Sel status + ikon pertukaran, dirender ulang sendiri saat baris berubah. */
+function selStatusPdf(r, idx){
+  let html = pdfRowStatusBadge(r);
+  if(barisDitukar(r)){
+    html += '<button type="button" class="icon-btn tukar" data-tukar="' + idx + '"'
+      + ' title="Produk ditukar - klik untuk melihat perbandingannya"'
+      + ' aria-label="Lihat detail pertukaran">' + svgIcon("tukar") + '</button>';
+  }
+  return html;
+}
+
 function pdfReviewRowHtml(r, idx){
   // Nama barang dan No. Pesanan memakai <textarea>, bukan <input>: teks yang
   // lebih panjang dari kolomnya turun ke baris berikutnya, tidak terpotong.
   // Tingginya menyesuaikan isi lewat tumbuhkanArea().
-  return '<tr>'
+  const dicentang = r.pilih !== false;
+  return '<tr class="' + (dicentang ? "" : "tak-dipilih") + '">'
     + '<td><input type="text" class="mono" value="'+esc(r.barcode)+'" oninput="updatePdfRow('+idx+',\'barcode\',this.value)"></td>'
     + '<td><textarea rows="1" oninput="updatePdfRow('+idx+',\'nama\',this.value)">'+esc(r.nama)+'</textarea></td>'
     + '<td><input type="text" class="mono" value="'+esc(r.sku)+'" oninput="updatePdfRow('+idx+',\'sku\',this.value)"></td>'
     + '<td class="num"><input type="number" min="0" style="text-align:right" value="'+(r.qty||0)+'" oninput="updatePdfRow('+idx+',\'qty\',this.value)"></td>'
     + '<td><textarea rows="1" class="mono" oninput="updatePdfRow('+idx+',\'noPesanan\',this.value)">'+esc(r.noPesanan)+'</textarea></td>'
     + '<td><select onchange="updatePdfRow('+idx+',\'keterangan\',this.value)">' + KET_KELUAR.map(k=>'<option'+(r.keterangan===k?' selected':'')+'>'+esc(k)+'</option>').join("") + '</select></td>'
-    + '<td id="pdfRowStatus'+idx+'">'+pdfRowStatusBadge(r)+'</td>'
-    + '<td><button type="button" class="icon-btn" onclick="removePdfReviewRow('+idx+')" aria-label="Hapus baris">'+svgIcon("trash")+'</button></td>'
+    + '<td id="pdfRowStatus'+idx+'">' + selStatusPdf(r, idx) + '</td>'
+    + '<td class="aksi-baris">'
+      + '<label class="centang" title="Centang untuk ikut disimpan">'
+        + '<input type="checkbox" ' + (dicentang ? "checked" : "") + ' data-pilih="' + idx + '"'
+        + ' aria-label="Ikutkan baris ini saat menyimpan"></label>'
+      + '<button type="button" class="icon-btn bahaya" onclick="removePdfReviewRow('+idx+')" aria-label="Hapus baris">'+svgIcon("trash")+'</button>'
+    + '</td>'
     + '</tr>';
 }
 
@@ -1067,8 +1127,13 @@ function renderPdfReview(){
     + '</div>';
 
   html += '<div style="font-size:12.5px; color:var(--slate); margin-bottom:8px;">Cek data di bawah ini sudah sesuai fisik barang atau belum. Ubah bila perlu, lalu tekan <strong>Konfirmasi &amp; Simpan</strong> untuk mencatatnya sebagai barang keluar.</div>';
+  html += '<div class="pilih-bar">'
+    + '<label class="centang"><input type="checkbox" id="pdfPilihSemua" checked'
+      + ' aria-label="Centang semua baris"> Centang semua</label>'
+    + '<span id="pdfRingkasPilih"></span>'
+    + '</div>';
   html += '<div class="table-card" style="overflow:auto"><table class="pdf-review"><thead><tr>'
-    + ["Barcode","Nama barang","SKU","Qty","No. Pesanan","Keterangan","Status",""].map(h2=>'<th'+(h2==="Qty"?' class="num"':'')+'>'+h2+'</th>').join("")
+    + ["Barcode","Nama barang","SKU","Qty","No. Pesanan","Keterangan","Status","Pilih"].map(h2=>'<th'+(h2==="Qty"?' class="num"':'')+'>'+h2+'</th>').join("")
     + '</tr></thead><tbody id="pdfReviewBody">'
     + pdfImport.rows.map((r,idx)=>pdfReviewRowHtml(r,idx)).join("")
     + '</tbody></table></div>';
@@ -1082,6 +1147,7 @@ function renderPdfReview(){
 
   // Tinggi textarea baru bisa dihitung setelah elemennya masuk ke halaman.
   tumbuhkanSemuaArea();
+  ringkasPilihan();
 }
 
 /**
@@ -1120,58 +1186,161 @@ function updatePdfRow(idx, field, value){
   const r = pdfImport.rows[idx];
   if(!r) return;
   r[field] = field==="qty" ? (parseInt(value,10)||0) : value;
-  if(field==="barcode"){
-    const statusEl = $("pdfRowStatus"+idx);
-    if(statusEl) statusEl.innerHTML = pdfRowStatusBadge(r);
-    // Barcode baru mungkin belum ada di peta cocok — periksa ulang, ditunda
-    // supaya mengetik tidak memicu permintaan tiap huruf.
+
+  // Barcode DAN SKU sama-sama menentukan produk mana yang stoknya dipotong,
+  // jadi keduanya memicu pencarian ulang ke master.
+  if(field==="barcode" || field==="sku"){
+    segarkanSelStatus(idx);
     clearTimeout(cekBarcodeTertunda);
     cekBarcodeTertunda = setTimeout(async ()=>{
       await cekBarcodeMassal();
-      pdfImport.rows.forEach((row,i)=>{
-        const el2 = $("pdfRowStatus"+i);
-        if(el2) el2.innerHTML = pdfRowStatusBadge(row);
-      });
-      ikutkanDataMaster(idx);
+      ikutkanDataMaster(idx, field);
+      pdfImport.rows.forEach((row,i)=> segarkanSelStatus(i));
     }, 500);
   }
 }
 
+/** Gambar ulang sel Status satu baris saja, tanpa menyentuh isian lain. */
+function segarkanSelStatus(idx){
+  const el = $("pdfRowStatus"+idx);
+  const r  = pdfImport.rows[idx];
+  if(el && r) el.innerHTML = selStatusPdf(r, idx);
+}
+
 /**
- * Setelah barcode sebuah baris diganti, ikutkan nama dan SKU dari master.
+ * Setelah barcode atau SKU sebuah baris diganti, ikutkan data master.
  *
  * Barcode adalah kunci yang menentukan barang mana yang stoknya berkurang.
  * Membiarkan nama lama menempel pada barcode baru membuat catatan barang
  * keluar menyebut produk yang berbeda dari yang benar-benar dipotong.
+ *
+ * @param {string} asal kolom yang barusan diubah: "barcode" atau "sku"
  */
-function ikutkanDataMaster(idx){
+function ikutkanDataMaster(idx, asal){
   const r = pdfImport.rows[idx];
-  if(!r || !r.barcode) return;
+  if(!r) return;
 
-  const m = pdfImport.cocok[r.barcode];
-  if(!m || typeof m !== "object") return;   // barcode tak dikenal, biarkan apa adanya
+  let m = null;
+  if(asal === "sku" && r.sku){
+    m = pdfImport.cocokSku[r.sku];
+    // SKU tidak dijamin unik di master; beri tahu agar admin memastikan.
+    if(m && m.ganda) toast("SKU " + r.sku + " dipakai lebih dari satu barang. Pakai barcode bila ragu.", "err");
+    if(m && typeof m === "object") r.barcode = m.barcode || r.barcode;
+  } else if(r.barcode){
+    m = pdfImport.cocok[r.barcode];
+  }
+  if(!m || typeof m !== "object") return;   // tidak dikenal, biarkan apa adanya
 
   const namaLama = r.nama;
   r.nama = m.nama;
   r.sku  = m.sku || "";
 
-  // Perbarui isi kolomnya langsung, bukan menggambar ulang seluruh tabel —
+  // Perbarui isi kolomnya langsung, bukan menggambar ulang seluruh tabel -
   // menggambar ulang akan merebut fokus dari kolom yang sedang diketik.
   const baris = document.querySelectorAll("#pdfReviewBody tr")[idx];
   if(baris){
+    const inputBc  = baris.querySelector("td:nth-child(1) input");
     const areaNama = baris.querySelector("td:nth-child(2) textarea");
     const inputSku = baris.querySelector("td:nth-child(3) input");
+    if(inputBc && document.activeElement !== inputBc)   inputBc.value  = r.barcode;
     if(areaNama){ areaNama.value = r.nama; tumbuhkanArea(areaNama); }
-    if(inputSku){ inputSku.value = r.sku; }
+    if(inputSku && document.activeElement !== inputSku) inputSku.value = r.sku;
   }
+  segarkanSelStatus(idx);
 
-  if(namaLama !== r.nama) toast("Nama & SKU disesuaikan: " + r.nama);
+  if(namaLama !== r.nama) toast("Produk disesuaikan: " + r.nama);
+}
+
+
+/* ---------------------------------------------------------------- */
+/* Centang baris & dialog pertukaran                                 */
+/* ---------------------------------------------------------------- */
+
+/** Baris baru ikut tercentang, dan punya potret asal seperti baris dari PDF. */
+function siapkanBarisBaru(r){
+  if(r.pilih === undefined) r.pilih = true;
+  if(!r.asli) r.asli = { barcode:r.barcode || "", nama:r.nama || "", sku:r.sku || "" };
+  return r;
+}
+
+function setPilihSemua(nilai){
+  pdfImport.rows.forEach(r => { r.pilih = !!nilai; });
+  renderPdfReview();
+}
+
+/** Ringkasan berapa baris yang akan ikut tersimpan. */
+function ringkasPilihan(){
+  const total = pdfImport.rows.length;
+  const dipilih = pdfImport.rows.filter(r => r.pilih !== false).length;
+  const el = $("pdfRingkasPilih");
+  if(el){
+    el.innerHTML = '<b>' + fmtNum(dipilih) + '</b> dari ' + fmtNum(total)
+      + ' baris akan disimpan.'
+      + (dipilih < total ? ' Baris yang tidak dicentang dilewati.' : '');
+  }
+  const kotakSemua = $("pdfPilihSemua");
+  if(kotakSemua){
+    kotakSemua.checked = dipilih === total && total > 0;
+    kotakSemua.indeterminate = dipilih > 0 && dipilih < total;
+  }
+}
+
+/** Dialog perbandingan produk lama vs produk baru. */
+function bukaDialogTukar(idx){
+  const r = pdfImport.rows[idx];
+  if(!r || !r.asli) return;
+
+  const sisi = (judul, barcode, nama, sku, warna) =>
+    '<div class="tukar-sisi ' + warna + '">'
+    + '<div class="tukar-judul">' + esc(judul) + '</div>'
+    + '<div class="tukar-nama">' + esc(nama || "(tanpa nama)") + '</div>'
+    + '<div class="tukar-kode">Barcode: <b>' + esc(barcode || "-") + '</b></div>'
+    + '<div class="tukar-kode">SKU: <b>' + esc(sku || "-") + '</b></div>'
+    + '</div>';
+
+  const beda = [];
+  if((r.asli.barcode || "") !== (r.barcode || "")) beda.push("barcode");
+  if((r.asli.sku || "") !== (r.sku || "")) beda.push("SKU");
+
+  const m = modalKonten(true);
+  m.isi(
+    '<div class="modal-head"><div>'
+    + '<h3>Pertukaran produk</h3>'
+    + '<div style="font-size:12.5px; color:var(--slate); margin-top:2px;">'
+    + 'Yang diubah: ' + esc(beda.join(" dan ")) + '. Stok yang dipotong berpindah ke produk baru.</div>'
+    + '</div>'
+    + '<button type="button" class="icon-btn" data-act="tutup" aria-label="Tutup">' + svgIcon("x") + '</button>'
+    + '</div>'
+    + '<div class="tukar-banding">'
+      + sisi("Produk dari PDF", r.asli.barcode, r.asli.nama, r.asli.sku, "lama")
+      + '<div class="tukar-panah">' + svgIcon("tukar") + '</div>'
+      + sisi("Produk pengganti", r.barcode, r.nama, r.sku, "baru")
+    + '</div>'
+    + '<div class="info-box" style="margin-top:14px; margin-bottom:0;">'
+    + 'Qty <b>' + fmtNum(r.qty || 0) + '</b> akan dipotong dari produk pengganti. '
+    + 'Pertukaran ini tercatat di menu <b>Pertukaran barang</b> setelah disimpan.</div>'
+    + '<div class="modal-act" style="margin-top:16px;">'
+      + '<button type="button" class="btn ghost" data-act="batalkan-tukar">Kembalikan ke produk PDF</button>'
+      + '<button type="button" class="btn" data-act="tutup">Tutup</button>'
+    + '</div>'
+  );
+
+  m.el.addEventListener("click", ev => {
+    if(ev.target.closest('[data-act="batalkan-tukar"]')){
+      r.barcode = r.asli.barcode;
+      r.nama    = r.asli.nama;
+      r.sku     = r.asli.sku;
+      m.tutup();
+      renderPdfReview();
+      toast("Dikembalikan ke produk asli dari PDF.");
+    }
+  });
 }
 
 function addPdfReviewRow(){
   if(pdfImport.status !== "ready"){ pdfImport.status = "ready"; pdfImport.header = pdfImport.header || {}; }
   if(!pdfImport.tanggal) pdfImport.tanggal = todayISO();
-  pdfImport.rows.push({ barcode:"", nama:"", sku:"", qty:0, noPesanan:"", keterangan:"Pesanan MP" });
+  pdfImport.rows.push(siapkanBarisBaru({ barcode:"", nama:"", sku:"", qty:0, noPesanan:"", keterangan:"Pesanan MP" }));
   renderPdfReview();
 }
 
@@ -1183,7 +1352,7 @@ function removePdfReviewRow(idx){
 }
 
 function cancelPdfReview(){
-  pdfImport = { status:"idle", header:null, rows:[], fileName:"", fileHash:"", tanggal:"", cocok:{}, duplikat:null };
+  pdfImport = { status:"idle", header:null, rows:[], fileName:"", fileHash:"", tanggal:"", cocok:{}, cocokSku:{}, duplikat:null };
   const fi = $("pdfFileInput");
   if(fi) fi.value = "";
   renderPdfImportStatus();
@@ -1194,8 +1363,12 @@ async function confirmPdfReview(){
   const rows = pdfImport.rows;
   if(!rows.length){ toast("Tidak ada data untuk disimpan.", "err"); return; }
 
-  const invalid = rows.some(r => !r.barcode || !r.qty);
-  if(invalid){ toast("Lengkapi Barcode dan Qty di semua baris sebelum konfirmasi.", "err"); return; }
+  // Hanya baris tercentang yang divalidasi dan disimpan.
+  const dipilih = rows.filter(r => r.pilih !== false);
+  if(!dipilih.length){ toast("Centang minimal satu baris untuk disimpan.", "err"); return; }
+
+  const invalid = dipilih.some(r => !r.barcode || !r.qty);
+  if(invalid){ toast("Lengkapi Barcode dan Qty di semua baris yang dicentang.", "err"); return; }
 
   if(pdfImport.duplikat){
     const ok = await konfirmasi(
@@ -1511,6 +1684,136 @@ async function refreshRiwayat(){
         .map((h,i)=>'<th'+(i>=2&&i<=4?' class="num"':'')+'>'+h+'</th>').join("")
     + '</tr></thead><tbody>' + baris + '</tbody></table>'
     + paginationBar(d.total, d.page, d.total_pages, "riwayatGoPage")
+    + '</div>';
+}
+
+/* ================================================================== */
+/* Pertukaran barang                                                  */
+/* ================================================================== */
+let tukarFilter = { q:"", dari:"", sampai:"", page:1 };
+
+function renderPertukaran(){
+  $("content").innerHTML =
+    '<div class="toolbar">'
+    + '<div class="search-wrap">' + svgIcon("search")
+      + '<input type="text" id="tkCari" placeholder="Cari barcode, nama produk, atau no. pesanan…" oninput="onTukarCari()"></div>'
+    + '<div class="daterange">Dari <input type="date" id="tkDari" onchange="onTukarFilter()">'
+      + ' s/d <input type="date" id="tkSampai" onchange="onTukarFilter()"></div>'
+    + '<button type="button" class="btn ghost" onclick="resetTukar()">' + svgIcon("x") + 'Reset</button>'
+    + '<a class="btn ghost" id="tkUnduh" href="api/export/pdf.php?jenis=pertukaran">' + svgIcon("download") + 'Unduh PDF</a>'
+    + '</div>'
+    + '<div class="stat-row" id="tkRingkas"></div>'
+    + '<div id="tkHasil"></div>';
+  $("tkCari").value   = tukarFilter.q;
+  $("tkDari").value   = tukarFilter.dari;
+  $("tkSampai").value = tukarFilter.sampai;
+  refreshPertukaran();
+}
+
+const onTukarCari = debounce(function(){
+  tukarFilter.q = $("tkCari").value;
+  tukarFilter.page = 1;
+  refreshPertukaran();
+}, 300);
+
+function onTukarFilter(){
+  tukarFilter.q      = $("tkCari").value;
+  tukarFilter.dari   = $("tkDari").value;
+  tukarFilter.sampai = $("tkSampai").value;
+  tukarFilter.page   = 1;
+  refreshPertukaran();
+}
+
+function resetTukar(){
+  tukarFilter = { q:"", dari:"", sampai:"", page:1 };
+  $("tkCari").value = ""; $("tkDari").value = ""; $("tkSampai").value = "";
+  refreshPertukaran();
+}
+
+function tukarGoPage(p){ tukarFilter.page = p; refreshPertukaran(); }
+
+async function refreshPertukaran(){
+  const wadah = $("tkHasil");
+  if(!wadah) return;
+
+  let d;
+  try{
+    d = await API.get("pertukaran/list.php", {
+      q: tukarFilter.q, dari: tukarFilter.dari,
+      sampai: tukarFilter.sampai, page: tukarFilter.page
+    });
+  }catch(e){ tampilGalat(e); return; }
+
+  const unduh = $("tkUnduh");
+  if(unduh){
+    unduh.href = "api/export/pdf.php?jenis=pertukaran"
+      + "&q=" + encodeURIComponent(tukarFilter.q)
+      + "&dari=" + encodeURIComponent(tukarFilter.dari)
+      + "&sampai=" + encodeURIComponent(tukarFilter.sampai);
+  }
+
+  const ringkas = $("tkRingkas");
+  if(ringkas){
+    ringkas.innerHTML =
+        statCard({ label:"Pertukaran", nilai:d.total, ikon:"tag", nada:"amber",
+                   kaki:"baris yang ditukar" })
+      + statCard({ label:"Unit berpindah", nilai:d.total_unit, ikon:"unit", nada:"biru",
+                   kaki:"pcs pindah produk" });
+    ringkas.querySelectorAll(".stat-value[data-nilai]").forEach(n =>
+      Grafik.angkaNaik(n, Number(n.getAttribute("data-nilai"))));
+  }
+
+  const labelAlasan = { barcode:"Barcode", sku:"SKU", keduanya:"Barcode & SKU" };
+
+  let baris = d.rows.map(r =>
+    '<tr>'
+    + '<td style="white-space:nowrap">' + fmtDate(r.tanggal) + '</td>'
+    + '<td><div class="item-name" style="color:var(--danger)">' + esc(r.nama_lama || "(tanpa nama)") + '</div>'
+      + '<div class="item-sub">' + esc(r.barcode_lama || "-")
+      + (r.sku_lama ? ' · ' + esc(r.sku_lama) : '') + '</div></td>'
+    + '<td class="num" style="color:var(--slateLo)">' + svgIcon("tukar") + '</td>'
+    + '<td><div class="item-name" style="color:var(--safe)">' + esc(r.nama_baru || "(tanpa nama)") + '</div>'
+      + '<div class="item-sub">' + esc(r.barcode_baru || "-")
+      + (r.sku_baru ? ' · ' + esc(r.sku_baru) : '') + '</div></td>'
+    + '<td class="num" style="font-weight:700">' + fmtNum(r.jumlah) + '</td>'
+    + '<td><span class="badge rendah">' + esc(labelAlasan[r.alasan] || r.alasan) + '</span></td>'
+    + '<td class="mono" style="font-size:11px; color:var(--slateLo)">' + esc(r.no_picking || "-") + '</td>'
+    + '<td style="font-size:11.5px; color:var(--slateLo)">' + esc(r.oleh || "-") + '</td>'
+    + '</tr>'
+  ).join("");
+
+  if(!d.rows.length){
+    baris = '<tr class="empty-row"><td colspan="8">'
+      + 'Belum ada pertukaran produk pada rentang ini.</td></tr>';
+  }
+
+  wadah.innerHTML =
+    '<div class="info-box">Tercatat di sini ketika admin mengganti barcode atau SKU sebuah baris '
+    + 'saat meninjau impor PDF, sehingga stok yang dipotong berpindah ke produk lain.</div>'
+    + '<div class="table-card"><table style="min-width:940px"><thead><tr>'
+    + ["Tanggal","Produk dari PDF","","Produk pengganti","Qty","Yang diubah","No. Pick","Oleh"]
+        .map((h,i)=>'<th'+(i===4?' class="num"':'')+'>'+esc(h)+'</th>').join("")
+    + '</tr></thead><tbody>' + baris + '</tbody></table>'
+    + paginationBar(d.total, d.page, d.total_pages, "tukarGoPage")
+    + '</div>';
+}
+
+/* ================================================================== */
+/* Laporan stock opname — belum tersedia                              */
+/* ================================================================== */
+function renderOpname(){
+  $("content").innerHTML =
+    '<div class="panel" style="text-align:center; padding:56px 24px;">'
+    + '<div style="width:56px; height:56px; border-radius:16px; margin:0 auto 16px;'
+      + ' background:var(--paper); color:var(--slate); display:grid; place-items:center;">'
+      + '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
+      + ' stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">'
+      + '<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>'
+    + '</div>'
+    + '<h2 style="font-size:22px; margin-bottom:6px;">Coming soon</h2>'
+    + '<p style="font-size:13px; color:var(--slate); max-width:420px; margin:0 auto; line-height:1.6;">'
+    + 'Laporan stock opname akan membandingkan stok menurut sistem dengan hasil hitungan '
+    + 'fisik di gudang, lalu menampilkan selisihnya per barang.</p>'
     + '</div>';
 }
 
@@ -1892,6 +2195,8 @@ function renderContent(){
   else if(tab==="masuk") renderTransaksiTab("masuk");
   else if(tab==="keluar") renderTransaksiTab("keluar");
   else if(tab==="riwayat") renderRiwayat();
+  else if(tab==="pertukaran") renderPertukaran();
+  else if(tab==="opname") renderOpname();
   else if(tab==="master") renderMaster();
   else if(tab==="kategori") renderKategori();
   else if(tab==="pengguna") renderPengguna();
@@ -1937,6 +2242,24 @@ document.addEventListener("click", function(e){
     if(hasil) hasil.scrollIntoView({ behavior:"smooth", block:"start" });
     return;
   }
+
+  // Centang baris pada tabel review impor PDF.
+  const kotak = e.target.closest && e.target.closest("[data-pilih]");
+  if(kotak){
+    const i = Number(kotak.getAttribute("data-pilih"));
+    if(pdfImport.rows[i]){
+      pdfImport.rows[i].pilih = kotak.checked;
+      const tr = kotak.closest("tr");
+      if(tr) tr.classList.toggle("tak-dipilih", !kotak.checked);
+      ringkasPilihan();
+    }
+    return;
+  }
+  if(e.target.id === "pdfPilihSemua"){ setPilihSemua(e.target.checked); return; }
+
+  // Ikon pertukaran -> dialog perbandingan produk lama vs baru.
+  const tbTukar = e.target.closest && e.target.closest("[data-tukar]");
+  if(tbTukar){ bukaDialogTukar(Number(tbTukar.getAttribute("data-tukar"))); return; }
 
   // Angka MASUK / KELUAR di dashboard -> popup riwayat.
   // Didelegasikan dari document supaya tetap bekerja setelah tabel

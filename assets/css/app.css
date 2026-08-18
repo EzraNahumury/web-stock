@@ -696,3 +696,70 @@ tbody tr:hover{ background:#FAFCFC; }
 .pdf-review th:nth-child(6), .pdf-review td:nth-child(6){ width:140px; }  /* Keterangan */
 .pdf-review th:nth-child(7), .pdf-review td:nth-child(7){ width:130px; }  /* Status */
 .pdf-review th:nth-child(8), .pdf-review td:nth-child(8){ width:44px;  }  /* Hapus */
+
+/* ======================================================================
+   Centang baris & pertukaran produk di tabel review impor PDF
+   ====================================================================== */
+.pilih-bar{
+  display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+  background:var(--paper); border:1px solid var(--line);
+  border-radius:9px; padding:9px 13px; margin-bottom:10px;
+  font-size:12.5px; color:var(--slate);
+}
+.pilih-bar b{ color:var(--ink); }
+
+.centang{
+  display:inline-flex; align-items:center; gap:7px;
+  cursor:pointer; font-size:12.5px; font-weight:500; color:var(--ink);
+  user-select:none;
+}
+.centang input[type=checkbox]{
+  width:17px; height:17px; margin:0; cursor:pointer;
+  accent-color:var(--safe); flex:none;
+}
+
+.pdf-review td.aksi-baris{
+  white-space:nowrap;
+  display:flex; align-items:center; gap:4px; justify-content:center;
+  padding-top:12px;
+}
+
+/* Baris yang tidak dicentang tetap terlihat, tapi jelas tidak ikut
+   tersimpan — dipudarkan, bukan disembunyikan, supaya admin tahu apa
+   yang sedang dilewati. */
+.pdf-review tr.tak-dipilih{ background:#FAFBFC; }
+.pdf-review tr.tak-dipilih td:not(.aksi-baris){ opacity:.42; }
+
+.icon-btn.tukar{ color:var(--amber); }
+.icon-btn.tukar:hover{ color:#9A6209; background:var(--amberBg); }
+
+/* Dialog perbandingan produk lama vs baru */
+.tukar-banding{
+  display:grid; grid-template-columns:1fr auto 1fr;
+  align-items:stretch; gap:12px; margin-top:14px;
+}
+.tukar-sisi{
+  border:1px solid var(--line); border-radius:10px; padding:13px 15px;
+  background:var(--paper); min-width:0;
+}
+.tukar-sisi.lama{ border-color:var(--dangerLine); background:var(--dangerBg); }
+.tukar-sisi.baru{ border-color:var(--safeLine);  background:var(--safeBg); }
+.tukar-judul{
+  font-size:10px; font-weight:700; letter-spacing:.07em; text-transform:uppercase;
+  color:var(--slate); margin-bottom:7px;
+}
+.tukar-nama{ font-size:13.5px; font-weight:600; line-height:1.35; margin-bottom:8px; }
+.tukar-kode{
+  font-family:'IBM Plex Mono',monospace; font-size:11px;
+  color:var(--slate); line-height:1.7;
+}
+.tukar-kode b{ color:var(--ink); }
+.tukar-panah{
+  display:grid; place-items:center; color:var(--slateLo);
+  align-self:center;
+}
+
+@media (max-width:640px){
+  .tukar-banding{ grid-template-columns:1fr; }
+  .tukar-panah{ transform:rotate(90deg); }
+}

@@ -23,9 +23,10 @@ wajibLoginApi();
 $in = jsonInput();
 wajibCsrf($in);
 
-$daftar = $in['barcodes'] ?? [];
-if (!is_array($daftar)) {
-    jsonError('Format barcodes tidak valid.');
+$daftar    = $in['barcodes'] ?? [];
+$daftarSku = $in['skus'] ?? [];
+if (!is_array($daftar) || !is_array($daftarSku)) {
+    jsonError('Format barcodes/skus tidak valid.');
 }
 
 // Bersihkan, buang duplikat dan yang kosong.
@@ -41,29 +42,75 @@ foreach ($daftar as $b) {
 }
 $bersih = array_keys($bersih);
 
-if (!$bersih) {
-    jsonOk(['ditemukan' => (object)[]]);
-}
 if (count($bersih) > 5000) {
     jsonError('Terlalu banyak barcode dalam satu permintaan.');
 }
 
-$tanda = implode(',', array_fill(0, count($bersih), '?'));
-$rows  = dbAll(
-    "SELECT id, barcode, nama, sku FROM master_barang
-      WHERE deleted_at IS NULL AND barcode IN ($tanda)",
-    $bersih
-);
-
-// Nama dan SKU ikut dikirim supaya tabel review bisa mengisinya otomatis
-// begitu admin mengganti barcode sebuah baris.
 $ditemukan = [];
-foreach ($rows as $r) {
-    $ditemukan[$r['barcode']] = [
-        'id'   => (int)$r['id'],
-        'nama' => $r['nama'],
-        'sku'  => $r['sku'],
-    ];
+if ($bersih) {
+    $tanda = implode(',', array_fill(0, count($bersih), '?'));
+    $rows  = dbAll(
+        "SELECT id, barcode, nama, sku FROM master_barang
+          WHERE deleted_at IS NULL AND barcode IN ($tanda)",
+        $bersih
+    );
+    // Nama dan SKU ikut dikirim supaya tabel review bisa mengisinya otomatis
+    // begitu admin mengganti barcode sebuah baris.
+    foreach ($rows as $r) {
+        $ditemukan[$r['barcode']] = [
+            'id'   => (int)$r['id'],
+            'nama' => $r['nama'],
+            'sku'  => $r['sku'],
+        ];
+    }
 }
 
-jsonOk(['ditemukan' => $ditemukan ?: (object)[]]);
+/* --- Pencarian lewat SKU --------------------------------------------------
+ * Admin juga boleh menukar produk dengan mengetik SKU, bukan hanya barcode.
+ * SKU TIDAK dijamin unik di master (data sumber punya beberapa yang kembar),
+ * jadi kecocokan ganda ditandai agar antarmuka bisa memperingatkan alih-alih
+ * diam-diam memilih salah satu.
+ * ------------------------------------------------------------------------ */
+$bersihSku = [];
+foreach ($daftarSku as $v) {
+    if (!is_scalar($v)) {
+        continue;
+    }
+    $v = mb_substr(trim((string)$v), 0, 50);
+    if ($v !== '') {
+        $bersihSku[$v] = true;
+    }
+}
+$bersihSku = array_keys($bersihSku);
+
+$ditemukanSku = [];
+if ($bersihSku) {
+    if (count($bersihSku) > 5000) {
+        jsonError('Terlalu banyak SKU dalam satu permintaan.');
+    }
+    $tandaS = implode(',', array_fill(0, count($bersihSku), '?'));
+    $rowsS  = dbAll(
+        "SELECT id, barcode, nama, sku FROM master_barang
+          WHERE deleted_at IS NULL AND sku <> '' AND sku IN ($tandaS)
+          ORDER BY id",
+        $bersihSku
+    );
+    foreach ($rowsS as $r) {
+        if (isset($ditemukanSku[$r['sku']])) {
+            $ditemukanSku[$r['sku']]['ganda'] = true;
+            continue;   // kemunculan pertama yang dipakai
+        }
+        $ditemukanSku[$r['sku']] = [
+            'id'      => (int)$r['id'],
+            'barcode' => $r['barcode'],
+            'nama'    => $r['nama'],
+            'sku'     => $r['sku'],
+            'ganda'   => false,
+        ];
+    }
+}
+
+jsonOk([
+    'ditemukan'     => $ditemukan ?: (object)[],
+    'ditemukan_sku' => $ditemukanSku ?: (object)[],
+]);

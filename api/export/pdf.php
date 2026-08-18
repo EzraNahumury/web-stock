@@ -307,6 +307,69 @@ switch ($jenis) {
         break;
 
     /* ------------------------------------------------------------------ */
+    case 'pertukaran':
+        $where  = ['1=1'];
+        $params = [];
+        if ($q !== '') {
+            $where[] = '(t.barcode_lama LIKE ? OR t.nama_lama LIKE ? OR t.barcode_baru LIKE ?
+                         OR t.nama_baru LIKE ? OR t.no_pesanan LIKE ?)';
+            $pola = polaLike($q);
+            for ($i = 0; $i < 5; $i++) {
+                $params[] = $pola;
+            }
+        }
+        if ($dari !== '' && ambilTanggal(['d' => $dari], 'd') !== null) {
+            $where[] = 't.tanggal >= ?';
+            $params[] = $dari;
+        }
+        if ($sampai !== '' && ambilTanggal(['d' => $sampai], 'd') !== null) {
+            $where[] = 't.tanggal <= ?';
+            $params[] = $sampai;
+        }
+        $data = dbAll('SELECT t.*, u.nama_lengkap AS oleh
+                         FROM pertukaran_barang t LEFT JOIN users u ON u.id = t.user_id
+                        WHERE ' . implode(' AND ', $where) . '
+                        ORDER BY t.tanggal DESC, t.id DESC', $params);
+
+        $pdf = new PdfTabel('lanskap');
+        $pdf->siapkan('Riwayat Pertukaran Barang', [
+            'Dicetak' => $waktu,
+            'Oleh'    => $oleh,
+            'Periode' => ($dari !== '' || $sampai !== '')
+                ? (($dari !== '' ? $dari : 'awal') . ' s/d ' . ($sampai !== '' ? $sampai : 'kini'))
+                : 'Semua',
+            'Baris'   => count($data),
+        ], [
+            ['label' => 'Tanggal',        'lebar' => 8],
+            ['label' => 'Barcode lama',   'lebar' => 11],
+            ['label' => 'Produk lama',    'lebar' => 21],
+            ['label' => 'Barcode baru',   'lebar' => 11],
+            ['label' => 'Produk baru',    'lebar' => 21],
+            ['label' => 'Qty',            'lebar' => 5, 'rata' => 'kanan'],
+            ['label' => 'Alasan',         'lebar' => 7],
+            ['label' => 'Oleh',           'lebar' => 10],
+        ]);
+
+        $totalUnit = 0;
+        foreach ($data as $r) {
+            $totalUnit += (int)$r['jumlah'];
+            $pdf->baris([
+                date('d/m/Y', strtotime($r['tanggal'])),
+                [$r['barcode_lama'], [178, 58, 46]],
+                $r['nama_lama'],
+                [$r['barcode_baru'], [14, 128, 96]],
+                $r['nama_baru'],
+                number_format((int)$r['jumlah'], 0, ',', '.'),
+                $r['alasan'],
+                (string)($r['oleh'] ?? '-'),
+            ]);
+        }
+        $pdf->ringkasan(count($data) . ' pertukaran  ·  total '
+            . number_format($totalUnit, 0, ',', '.') . ' pcs berpindah produk');
+        $pdf->kirim('pertukaran-barang-' . date('Ymd-His') . '.pdf');
+        break;
+
+    /* ------------------------------------------------------------------ */
     case 'master':
         $where  = ['deleted_at IS NULL'];
         $params = [];

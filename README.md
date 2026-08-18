@@ -1811,6 +1811,7 @@ phpMyAdmin dari hPanel → pilih database → tab **Import**:
 1. sql/001_schema.sql             7 tabel + akun admin awal
 2. sql/002_seed_master.sql        1.404 barang, 79.123 unit, 350 ambang (108 KB)
 3. sql/003_kategori_pengguna.sql  tabel kategori + 11 kategori awal
+4. sql/004_pertukaran.sql         tabel riwayat pertukaran produk
 ```
 
 Urutannya wajib. `003` mengambil kategori yang benar-benar dipakai dari
