@@ -308,6 +308,10 @@ const TABS = [
   { id:"pengguna", label:"Pengguna", sub:"Kelola akun yang bisa masuk ke aplikasi", grup:"Master",
     adminSaja:true,
     ikon:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13A4 4 0 0 1 16 11"/>' },
+
+  { id:"aktivitas", label:"Log aktivitas", sub:"Jejak siapa melakukan apa, lengkap dengan jamnya", grup:"Sistem",
+    adminSaja:true,
+    ikon:'<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>' },
 ];
 
 /** Peran pengguna yang sedang masuk. */
@@ -1860,7 +1864,7 @@ async function refreshPertukaran(){
       + (r.sku_baru ? ' · ' + esc(r.sku_baru) : '') + '</div></td>'
     + '<td class="num" style="font-weight:700">' + fmtNum(r.jumlah) + '</td>'
     + '<td><span class="badge rendah">' + esc(labelAlasan[r.alasan] || r.alasan) + '</span></td>'
-    + '<td class="mono" style="font-size:11px; color:var(--slateLo)">' + esc(r.no_picking || "-") + '</td>'
+    + '<td class="mono" style="font-size:11px; color:var(--slateLo)">' + esc(r.no_pesanan || "-") + '</td>'
     + '<td style="font-size:11.5px; color:var(--slateLo)">' + esc(r.oleh || "-") + '</td>'
     + '</tr>'
   ).join("");
@@ -1874,7 +1878,7 @@ async function refreshPertukaran(){
     '<div class="info-box">Tercatat di sini ketika admin mengganti barcode atau SKU sebuah baris '
     + 'saat meninjau impor PDF, sehingga stok yang dipotong berpindah ke produk lain.</div>'
     + '<div class="table-card"><table style="min-width:940px"><thead><tr>'
-    + ["Tanggal","Produk dari PDF","","Produk pengganti","Qty","Yang diubah","No. Pick","Oleh"]
+    + ["Tanggal","Produk dari PDF","","Produk pengganti","Qty","Yang diubah","No. Pesanan","Oleh"]
         .map((h,i)=>'<th'+(i===4?' class="num"':'')+'>'+esc(h)+'</th>').join("")
     + '</tr></thead><tbody>' + baris + '</tbody></table>'
     + paginationBar(d.total, d.page, d.total_pages, "tukarGoPage")
@@ -1897,6 +1901,160 @@ function renderOpname(){
     + '<p style="font-size:13px; color:var(--slate); max-width:420px; margin:0 auto; line-height:1.6;">'
     + 'Laporan stock opname akan membandingkan stok menurut sistem dengan hasil hitungan '
     + 'fisik di gudang, lalu menampilkan selisihnya per barang.</p>'
+    + '</div>';
+}
+
+/* ================================================================== */
+/* Log aktivitas                                                      */
+/* ================================================================== */
+let logFilter = { q:"", dari:"", sampai:"", aksi:"", entitas:"", user:"", page:1 };
+// Pilihan dropdown datang dari server dan hanya memuat nilai yang benar-benar
+// ada di log; disimpan agar tidak hilang saat tabel digambar ulang.
+let logOpsi = { aksi:[], entitas:[], user:[] };
+
+/** Pecah "YYYY-MM-DD HH:MM:SS" jadi tanggal dan jam siap tampil. */
+function pecahWaktu(s){
+  if(!s) return { tgl:"-", jam:"" };
+  const d = new Date(String(s).replace(" ", "T"));
+  if(isNaN(d)) return { tgl:String(s), jam:"" };
+  return {
+    tgl: d.toLocaleDateString("id-ID", {day:"2-digit", month:"short", year:"numeric"}),
+    jam: d.toLocaleTimeString("id-ID", {hour:"2-digit", minute:"2-digit", second:"2-digit"})
+  };
+}
+
+function opsiSelect(daftar, terpilih, kosong){
+  let h = '<option value="">' + esc(kosong) + '</option>';
+  daftar.forEach(o => {
+    h += '<option value="' + esc(o.nilai) + '"'
+       + (String(o.nilai) === String(terpilih) ? ' selected' : '') + '>'
+       + esc(o.label) + '</option>';
+  });
+  return h;
+}
+
+function renderAktivitas(){
+  $("content").innerHTML =
+    '<div class="toolbar">'
+    + '<div class="search-wrap">' + svgIcon("search")
+      + '<input type="text" id="lgCari" placeholder="Cari nama barang, pengguna, atau no. picking&hellip;" oninput="onLogCari()"></div>'
+    + '<select id="lgAksi" onchange="onLogFilter()"><option value="">Semua aksi</option></select>'
+    + '<select id="lgModul" onchange="onLogFilter()"><option value="">Semua modul</option></select>'
+    + '<select id="lgUser" onchange="onLogFilter()"><option value="">Semua pengguna</option></select>'
+    + '<div class="daterange">Dari <input type="date" id="lgDari" onchange="onLogFilter()">'
+      + ' s/d <input type="date" id="lgSampai" onchange="onLogFilter()"></div>'
+    + '<button type="button" class="btn ghost" onclick="resetLog()">' + svgIcon("x") + 'Reset</button>'
+    + '<a class="btn ghost" id="lgUnduh" href="api/export/pdf.php?jenis=aktivitas">' + svgIcon("download") + 'Unduh PDF</a>'
+    + '</div>'
+    + '<div class="stat-row" id="lgRingkas"></div>'
+    + '<div id="lgHasil"></div>';
+  $("lgCari").value   = logFilter.q;
+  $("lgDari").value   = logFilter.dari;
+  $("lgSampai").value = logFilter.sampai;
+  refreshLog();
+}
+
+const onLogCari = debounce(function(){
+  logFilter.q = $("lgCari").value;
+  logFilter.page = 1;
+  refreshLog();
+}, 300);
+
+function onLogFilter(){
+  logFilter.q       = $("lgCari").value;
+  logFilter.aksi    = $("lgAksi").value;
+  logFilter.entitas = $("lgModul").value;
+  logFilter.user    = $("lgUser").value;
+  logFilter.dari    = $("lgDari").value;
+  logFilter.sampai  = $("lgSampai").value;
+  logFilter.page    = 1;
+  refreshLog();
+}
+
+function resetLog(){
+  logFilter = { q:"", dari:"", sampai:"", aksi:"", entitas:"", user:"", page:1 };
+  $("lgCari").value = ""; $("lgDari").value = ""; $("lgSampai").value = "";
+  $("lgAksi").value = ""; $("lgModul").value = ""; $("lgUser").value = "";
+  refreshLog();
+}
+
+function logGoPage(p){ logFilter.page = p; refreshLog(); }
+
+async function refreshLog(){
+  const wadah = $("lgHasil");
+  if(!wadah) return;
+
+  let d;
+  try{
+    d = await API.get("aktivitas/list.php", {
+      q: logFilter.q, dari: logFilter.dari, sampai: logFilter.sampai,
+      aksi: logFilter.aksi, entitas: logFilter.entitas,
+      user: logFilter.user, page: logFilter.page
+    });
+  }catch(e){ tampilGalat(e); return; }
+
+  logOpsi = d.opsi || logOpsi;
+  const selAksi = $("lgAksi"), selModul = $("lgModul"), selUser = $("lgUser");
+  if(selAksi)  selAksi.innerHTML  = opsiSelect(logOpsi.aksi, logFilter.aksi, "Semua aksi");
+  if(selModul) selModul.innerHTML = opsiSelect(logOpsi.entitas, logFilter.entitas, "Semua modul");
+  if(selUser){
+    selUser.innerHTML = opsiSelect(
+      logOpsi.user.map(u => ({ nilai:u.id, label:u.nama_lengkap || u.username })),
+      logFilter.user, "Semua pengguna");
+  }
+
+  const unduh = $("lgUnduh");
+  if(unduh){
+    unduh.href = "api/export/pdf.php?jenis=aktivitas"
+      + "&q=" + encodeURIComponent(logFilter.q)
+      + "&aksi=" + encodeURIComponent(logFilter.aksi)
+      + "&entitas=" + encodeURIComponent(logFilter.entitas)
+      + "&user=" + encodeURIComponent(logFilter.user)
+      + "&dari=" + encodeURIComponent(logFilter.dari)
+      + "&sampai=" + encodeURIComponent(logFilter.sampai);
+  }
+
+  const ringkas = $("lgRingkas");
+  if(ringkas){
+    ringkas.innerHTML =
+        statCard({ label:"Aktivitas tercatat", nilai:d.total, ikon:"unit", nada:"biru",
+                   kaki:"sesuai penyaring" })
+      + statCard({ label:"Hari ini", nilai:d.hari_ini, ikon:"tag", nada:"safe",
+                   kaki:"kejadian sejak tengah malam" })
+      + statCard({ label:"Pengguna aktif", nilai:d.orang_hari, ikon:"sku", nada:"amber",
+                   kaki:"akun bergerak hari ini" });
+    ringkas.querySelectorAll(".stat-value[data-nilai]").forEach(n =>
+      Grafik.angkaNaik(n, Number(n.getAttribute("data-nilai"))));
+  }
+
+  let baris = d.rows.map(r => {
+    const w = pecahWaktu(r.created_at);
+    const nada = r.nada === "bahaya" ? " bahaya" : (r.nada === "aman" ? " aman" : "");
+    return '<tr>'
+      + '<td style="white-space:nowrap"><div class="log-tgl">' + esc(w.tgl) + '</div>'
+        + '<div class="log-jam">' + esc(w.jam) + '</div></td>'
+      + '<td><div class="log-judul' + nada + '">' + esc(r.judul) + '</div>'
+        + (r.rincian ? '<div class="item-sub">' + esc(r.rincian) + '</div>' : '') + '</td>'
+      + '<td><span class="badge netral">' + esc(r.modul) + '</span></td>'
+      + '<td style="font-size:11.5px; color:var(--slateLo)">' + esc(r.oleh || r.username || "-") + '</td>'
+      + '<td class="mono" style="font-size:11px; color:var(--slateLo)">' + esc(r.ip || "-") + '</td>'
+      + '</tr>';
+  }).join("");
+
+  if(!d.rows.length){
+    baris = '<tr class="empty-row"><td colspan="5">'
+      + 'Belum ada aktivitas pada penyaring ini.</td></tr>';
+  }
+
+  wadah.innerHTML =
+    '<div class="info-box">Setiap penyimpanan, perubahan, penghapusan, impor PDF, unduhan '
+    + 'laporan, dan percobaan masuk tercatat di sini lengkap dengan jamnya. Catatan log '
+    + 'tidak bisa diubah atau dihapus dari aplikasi.</div>'
+    + '<div class="table-card"><table style="min-width:860px"><thead><tr>'
+    + ["Waktu","Aktivitas","Modul","Oleh","IP"]
+        .map(h => '<th>' + esc(h) + '</th>').join("")
+    + '</tr></thead><tbody>' + baris + '</tbody></table>'
+    + paginationBar(d.total, d.page, d.total_pages, "logGoPage")
     + '</div>';
 }
 
@@ -2280,6 +2438,7 @@ function renderContent(){
   else if(tab==="riwayat") renderRiwayat();
   else if(tab==="pertukaran") renderPertukaran();
   else if(tab==="opname") renderOpname();
+  else if(tab==="aktivitas") renderAktivitas();
   else if(tab==="master") renderMaster();
   else if(tab==="kategori") renderKategori();
   else if(tab==="pengguna") renderPengguna();

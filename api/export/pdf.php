@@ -2,7 +2,8 @@
 /**
  * GET api/export/pdf.php — ekspor laporan sebagai PDF.
  *
- * Parameter: jenis = dashboard | masuk | keluar | master
+ * Parameter: jenis = dashboard | masuk | keluar | riwayat | pertukaran |
+ *                    master | aktivitas
  *            filter mengikuti layar asalnya, jadi yang tercetak sama dengan
  *            yang sedang dilihat:
  *              dashboard : q, kategori, status
@@ -16,6 +17,7 @@ require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/helpers.php';
 require_once __DIR__ . '/../../includes/response.php';
 require_once __DIR__ . '/../../includes/pdf.php';
+require_once __DIR__ . '/../../includes/aktivitas.php';
 
 wajibMetode('GET');
 
@@ -46,8 +48,27 @@ $warnaStatus = [
     'belum_diatur' => [139, 155, 163],
 ];
 
+// Log aktivitas memuat gerak seluruh akun; hanya admin boleh mencetaknya.
+// Diperiksa sebelum apa pun dicatat, supaya permintaan yang ditolak tidak
+// meninggalkan jejak unduhan yang tidak pernah terjadi.
+if ($jenis === 'aktivitas' && !adalahAdmin()) {
+    http_response_code(403);
+    exit('Hanya admin yang boleh mengunduh log aktivitas.');
+}
+
 $waktu = date('d/m/Y H:i');
 $oleh  = (userSaatIni()['nama_lengkap'] ?? '-');
+
+// Pencetakan laporan ikut masuk jejak aktivitas. Di gudang, siapa mengunduh
+// data apa dan kapan sama pentingnya dengan siapa mengubahnya.
+if (in_array($jenis, ['dashboard', 'masuk', 'keluar', 'riwayat', 'pertukaran', 'master', 'aktivitas'], true)) {
+    catatAktivitas('ekspor', 'laporan', null, array_filter([
+        'jenis'  => $jenis,
+        'dari'   => $dari,
+        'sampai' => $sampai,
+        'cari'   => $q,
+    ], static function ($v) { return $v !== ''; }));
+}
 
 switch ($jenis) {
 
@@ -341,13 +362,14 @@ switch ($jenis) {
             'Baris'   => count($data),
         ], [
             ['label' => 'Tanggal',        'lebar' => 8],
-            ['label' => 'Barcode lama',   'lebar' => 11],
-            ['label' => 'Produk lama',    'lebar' => 21],
-            ['label' => 'Barcode baru',   'lebar' => 11],
-            ['label' => 'Produk baru',    'lebar' => 21],
+            ['label' => 'Barcode lama',   'lebar' => 10],
+            ['label' => 'Produk lama',    'lebar' => 19],
+            ['label' => 'Barcode baru',   'lebar' => 10],
+            ['label' => 'Produk baru',    'lebar' => 19],
             ['label' => 'Qty',            'lebar' => 5, 'rata' => 'kanan'],
             ['label' => 'Alasan',         'lebar' => 7],
-            ['label' => 'Oleh',           'lebar' => 10],
+            ['label' => 'No. Pesanan',    'lebar' => 13],
+            ['label' => 'Oleh',           'lebar' => 9],
         ]);
 
         $totalUnit = 0;
@@ -361,6 +383,7 @@ switch ($jenis) {
                 $r['nama_baru'],
                 number_format((int)$r['jumlah'], 0, ',', '.'),
                 $r['alasan'],
+                (string)($r['no_pesanan'] ?? ''),
                 (string)($r['oleh'] ?? '-'),
             ]);
         }
@@ -406,6 +429,90 @@ switch ($jenis) {
         }
         $pdf->ringkasan(count($data) . ' barang dalam katalog');
         $pdf->kirim('master-barang-' . date('Ymd-His') . '.pdf');
+        break;
+
+    /* ------------------------------------------------------------------ */
+    case 'aktivitas':
+        $aksi    = ambilStr($_GET, 'aksi', 50);
+        $entitas = ambilStr($_GET, 'entitas', 50);
+        $userId  = ambilInt($_GET, 'user', 0);
+
+        $where  = ['1=1'];
+        $params = [];
+        if ($q !== '') {
+            $where[] = '(a.detail LIKE ? OR u.nama_lengkap LIKE ? OR u.username LIKE ?
+                         OR a.aksi LIKE ? OR a.entitas LIKE ? OR a.ip LIKE ?)';
+            $pola = polaLike($q);
+            for ($i = 0; $i < 6; $i++) {
+                $params[] = $pola;
+            }
+        }
+        if ($dari !== '' && ambilTanggal(['d' => $dari], 'd') !== null) {
+            $where[] = 'a.created_at >= ?';
+            $params[] = $dari . ' 00:00:00';
+        }
+        if ($sampai !== '' && ambilTanggal(['d' => $sampai], 'd') !== null) {
+            $where[] = 'a.created_at <= ?';
+            $params[] = $sampai . ' 23:59:59';
+        }
+        if ($aksi !== '') {
+            $where[] = 'a.aksi = ?';
+            $params[] = $aksi;
+        }
+        if ($entitas !== '') {
+            $where[] = 'a.entitas = ?';
+            $params[] = $entitas;
+        }
+        if ($userId > 0) {
+            $where[] = 'a.user_id = ?';
+            $params[] = $userId;
+        }
+
+        $data = dbAll(
+            'SELECT a.aksi, a.entitas, a.detail, a.ip, a.created_at,
+                    u.nama_lengkap AS oleh, u.username
+               FROM activity_log a
+               LEFT JOIN users u ON u.id = a.user_id
+              WHERE ' . implode(' AND ', $where) . '
+              ORDER BY a.created_at DESC, a.id DESC',
+            $params
+        );
+
+        $pdf = new PdfTabel('lanskap');
+        $pdf->siapkan('Log Aktivitas', [
+            'Dicetak' => $waktu,
+            'Oleh'    => $oleh,
+            'Periode' => ($dari !== '' || $sampai !== '')
+                ? (($dari !== '' ? $dari : 'awal') . ' s/d ' . ($sampai !== '' ? $sampai : 'kini'))
+                : 'Semua',
+            'Aksi'    => $aksi !== '' ? labelAksi($aksi) : 'Semua',
+            'Modul'   => $entitas !== '' ? modulAktivitas($entitas) : 'Semua',
+            'Baris'   => count($data),
+        ], [
+            ['label' => 'Tanggal',   'lebar' => 8],
+            ['label' => 'Jam',       'lebar' => 6],
+            ['label' => 'Aktivitas', 'lebar' => 17],
+            ['label' => 'Rincian',   'lebar' => 32],
+            ['label' => 'Modul',     'lebar' => 10],
+            ['label' => 'Oleh',      'lebar' => 13],
+            ['label' => 'IP',        'lebar' => 9],
+        ]);
+
+        foreach ($data as $r) {
+            $label = labelAktivitas($r);
+            $t = strtotime($r['created_at']);
+            $pdf->baris([
+                date('d/m/Y', $t),
+                date('H:i:s', $t),
+                [$label['judul'], $label['nada'] === 'bahaya' ? [178, 58, 46] : null],
+                $label['rincian'],
+                $label['modul'],
+                (string)($r['oleh'] ?? ($r['username'] ?? '-')),
+                (string)$r['ip'],
+            ]);
+        }
+        $pdf->ringkasan(count($data) . ' aktivitas tercatat');
+        $pdf->kirim('log-aktivitas-' . date('Ymd-His') . '.pdf');
         break;
 
     /* ------------------------------------------------------------------ */

@@ -51,10 +51,9 @@ $meta   = metaPaginasi($total, $page);
 $offset = ($meta['page'] - 1) * PAGE_SIZE;
 
 $rows = dbAll(
-    "SELECT t.*, u.nama_lengkap AS oleh, b.no_picking
+    "SELECT t.*, u.nama_lengkap AS oleh
        FROM pertukaran_barang t
-       LEFT JOIN users u        ON u.id = t.user_id
-       LEFT JOIN import_batch b ON b.id = t.batch_id
+       LEFT JOIN users u ON u.id = t.user_id
      $sqlWhere
      ORDER BY t.tanggal DESC, t.id DESC
      LIMIT " . PAGE_SIZE . " OFFSET $offset",

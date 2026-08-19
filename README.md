@@ -1456,7 +1456,27 @@ pemeriksaan klien saja tidak pernah cukup).
 | Metode | Endpoint | Parameter | Respons |
 |---|---|---|---|
 | GET | `api/dashboard/stats.php` | `q`, `kategori`, `status`, `page` | `{ok, rows[], ringkasan:{total_sku,total_stok,perlu_order,kategori}, …}` |
-| GET | `api/export/pdf.php` | `jenis=dashboard\|masuk\|keluar\|riwayat\|master` + filter layar asalnya | berkas PDF |
+| GET | `api/export/pdf.php` | `jenis=dashboard\|masuk\|keluar\|riwayat\|pertukaran\|master\|aktivitas` + filter layar asalnya | berkas PDF |
+
+### Log aktivitas
+
+| Metode | Endpoint | Parameter | Respons |
+|---|---|---|---|
+| GET | `api/aktivitas/list.php` | `q`, `dari`, `sampai`, `aksi`, `entitas`, `user`, `page` | `{ok, rows[], hari_ini, orang_hari, opsi:{aksi[],entitas[],user[]}, …}` |
+
+Hanya admin. Tiap baris sudah diterjemahkan server jadi kalimat
+(`judul`, `rincian`, `modul`, `nada`) oleh `includes/aktivitas.php`, supaya
+tampilan layar dan PDF tidak pernah berbeda kata. Kolom `detail` mentah
+tidak ikut dikirim.
+
+Yang tercatat: masuk, keluar dari sistem, percobaan masuk gagal, input dan
+penghapusan barang masuk/keluar, impor picking list PDF, perubahan master
+barang, kategori, pengguna, penyamaan nama transaksi, dan setiap unduhan
+laporan PDF. Pencatatan unduhan terjadi **sesudah** pemeriksaan hak akses,
+jadi permintaan yang ditolak tidak meninggalkan jejak unduhan palsu.
+
+Log tidak bisa diubah atau dihapus lewat aplikasi — tidak ada endpoint
+tulis untuk `activity_log`.
 
 ---
 
@@ -1812,6 +1832,7 @@ phpMyAdmin dari hPanel → pilih database → tab **Import**:
 2. sql/002_seed_master.sql        1.404 barang, 79.123 unit, 350 ambang (108 KB)
 3. sql/003_kategori_pengguna.sql  tabel kategori + 11 kategori awal
 4. sql/004_pertukaran.sql         tabel riwayat pertukaran produk
+5. sql/005_indeks_aktivitas.sql   indeks waktu untuk halaman Log aktivitas
 ```
 
 **Sejak versi ini migrasi berjalan otomatis.** Berkas di `sql/` diterapkan
@@ -1826,7 +1847,12 @@ syarat lewatnya sendiri:
 ```
 -- @lewati-jika-tabel: master_barang     lewati bila tabel itu sudah ada
 -- @lewati-jika-terisi: master_barang    lewati bila tabel itu sudah berisi
+-- @lewati-jika-indeks: activity_log.idx_waktu   lewati bila indeks sudah ada
 ```
+
+Penjaga ketiga ada karena `ADD INDEX` tidak punya bentuk `IF NOT EXISTS`
+yang berlaku di MySQL maupun MariaDB sekaligus; keberadaan indeksnya
+diperiksa dari PHP lewat `information_schema.STATISTICS`.
 
 Database yang sudah berisi data otomatis ter-baseline: berkas lama dicatat
 sebagai dilewati tanpa dijalankan, dan hanya migrasi baru yang benar-benar

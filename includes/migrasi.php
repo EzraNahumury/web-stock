@@ -17,6 +17,7 @@
  *
  *   -- @lewati-jika-tabel: master_barang     lewati bila tabel itu sudah ada
  *   -- @lewati-jika-terisi: master_barang    lewati bila tabel itu sudah berisi
+ *   -- @lewati-jika-indeks: tabel.nama_indeks  lewati bila indeks itu sudah ada
  *
  * Berkas yang dilewati tetap tercatat sebagai sudah diterapkan, jadi
  * database lama otomatis ter-"baseline" pada pemeriksaan pertama dan hanya
@@ -148,7 +149,24 @@ function migrasiPerluDilewati(string $isi): bool
             }
         }
     }
+    // ADD INDEX tidak punya bentuk "IF NOT EXISTS" yang berlaku di MySQL
+    // maupun MariaDB sekaligus, jadi keberadaannya diperiksa dari sini.
+    if (preg_match('/--\s*@lewati-jika-indeks:\s*([A-Za-z0-9_]+)\.([A-Za-z0-9_]+)/', $isi, $m)) {
+        if (indeksAda($m[1], $m[2])) {
+            return true;
+        }
+    }
     return false;
+}
+
+/** Apakah indeks bernama ini sudah terpasang pada tabel tersebut? */
+function indeksAda(string $tabel, string $indeks): bool
+{
+    return (int)dbValue(
+        'SELECT COUNT(*) FROM information_schema.STATISTICS
+          WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ?',
+        [$tabel, $indeks]
+    ) > 0;
 }
 
 /**

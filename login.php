@@ -36,6 +36,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             exit;
         } else {
             $galat = 'Username atau password salah.';
+            // Percobaan gagal ikut dicatat: pola percobaan beruntun pada satu
+            // username hanya terlihat bila kegagalannya juga meninggalkan jejak.
+            // Password tidak pernah ikut disimpan.
+            catatAktivitas('login_gagal', 'auth', null, ['username' => $username]);
             usleep(400000);   // perlambat percobaan beruntun
         }
     }
