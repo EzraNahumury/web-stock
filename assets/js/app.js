@@ -1,5 +1,5 @@
 /* ==========================================================================
- * app.js — antarmuka Papan Kendali Gudang
+ * app.js — antarmuka Warehouse AVA
  *
  * Diturunkan dari prototipe "aplikasi-gudang (2).html". Struktur render,
  * markup, dan tampilannya dipertahankan sama; yang berubah hanya sumber
@@ -293,12 +293,14 @@ const TABS = [
     ikon:'<path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><path d="M3 17v2a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-2"/>' },
   { id:"keluar", label:"Barang keluar", sub:"Impor picking list PDF atau catat manual", grup:"Operasional",
     ikon:'<path d="M12 21V9"/><polyline points="7 14 12 9 17 14"/><path d="M3 7V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2"/>' },
-  { id:"riwayat", label:"Riwayat", sub:"Seluruh pergerakan barang masuk dan keluar", grup:"Operasional",
+  { id:"riwayat", label:"Riwayat", sub:"Stok awal, masuk, keluar, dan akhir per barang", grup:"Operasional",
     ikon:'<path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/>' },
 
   { id:"pertukaran", label:"Pertukaran barang", sub:"Produk yang ditukar saat meninjau impor PDF", grup:"Operasional",
     ikon:'<polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>' },
-  { id:"opname", label:"Laporan stock opname", sub:"Perbandingan stok sistem dengan hitungan fisik", grup:"Operasional",
+  { id:"retur", label:"Retur", sub:"Barang kembali dari pembeli", grup:"Operasional",
+    ikon:'<polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/>' },
+  { id:"opname", label:"Laporan stok opname", sub:"Stok sistem dibanding hitungan fisik dan Accurate", grup:"Operasional",
     ikon:'<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>' },
 
   { id:"master", label:"Barang", sub:"Kelola katalog, barcode, dan ambang stok", grup:"Master",
@@ -364,7 +366,7 @@ function judulHalaman(){
   const h = $("judulHalaman"), p = $("subJudulHalaman");
   if(h) h.textContent = t.label;
   if(p) p.textContent = t.sub;
-  document.title = t.label + " — " + (window.APP_USER ? "Papan Kendali Gudang" : "Gudang");
+  document.title = t.label + " — " + (window.APP_NAMA || "Warehouse AVA");
 }
 
 function switchTab(id){
@@ -1646,17 +1648,13 @@ function konfirmasiIsi(judul, isiHtml, labelYa){
 /* ================================================================== */
 /* Riwayat — gabungan barang masuk dan keluar                         */
 /* ================================================================== */
-let riwayatFilter = { q:"", dari:"", sampai:"", jenis:"semua", page:1 };
+let riwayatFilter = { q:"", dari:"", sampai:"", kategori:"Semua", page:1 };
 
 function renderRiwayat(){
   let html = '<div class="toolbar">'
     + '<div class="search-wrap">' + svgIcon("search")
-      + '<input type="text" id="rwCari" placeholder="Cari nama, barcode, atau no. pesanan…" oninput="onRiwayatCari()"></div>'
-    + '<select id="rwJenis" onchange="onRiwayatFilter()">'
-      + '<option value="semua">Masuk &amp; keluar</option>'
-      + '<option value="masuk">Barang masuk saja</option>'
-      + '<option value="keluar">Barang keluar saja</option>'
-    + '</select>'
+      + '<input type="text" id="rwCari" placeholder="Cari nama barang, SKU, atau barcode&hellip;" oninput="onRiwayatCari()"></div>'
+    + '<select id="rwKategori" onchange="onRiwayatFilter()"><option value="Semua">Semua kategori</option></select>'
     + '<div class="daterange">Dari <input type="date" id="rwDari" onchange="onRiwayatFilter()">'
       + ' s/d <input type="date" id="rwSampai" onchange="onRiwayatFilter()"></div>'
     + '<button type="button" class="btn ghost" onclick="resetRiwayat()">' + svgIcon("x") + 'Reset</button>'
@@ -1667,7 +1665,6 @@ function renderRiwayat(){
 
   $("content").innerHTML = html;
   $("rwCari").value   = riwayatFilter.q;
-  $("rwJenis").value  = riwayatFilter.jenis;
   $("rwDari").value   = riwayatFilter.dari;
   $("rwSampai").value = riwayatFilter.sampai;
   refreshRiwayat();
@@ -1680,17 +1677,17 @@ const onRiwayatCari = debounce(function(){
 }, 300);
 
 function onRiwayatFilter(){
-  riwayatFilter.q      = $("rwCari").value;
-  riwayatFilter.jenis  = $("rwJenis").value;
-  riwayatFilter.dari   = $("rwDari").value;
-  riwayatFilter.sampai = $("rwSampai").value;
-  riwayatFilter.page   = 1;
+  riwayatFilter.q        = $("rwCari").value;
+  riwayatFilter.kategori = $("rwKategori").value;
+  riwayatFilter.dari     = $("rwDari").value;
+  riwayatFilter.sampai   = $("rwSampai").value;
+  riwayatFilter.page     = 1;
   refreshRiwayat();
 }
 
 function resetRiwayat(){
-  riwayatFilter = { q:"", dari:"", sampai:"", jenis:"semua", page:1 };
-  $("rwCari").value = ""; $("rwJenis").value = "semua";
+  riwayatFilter = { q:"", dari:"", sampai:"", kategori:"Semua", page:1 };
+  $("rwCari").value = ""; $("rwKategori").value = "Semua";
   $("rwDari").value = ""; $("rwSampai").value = "";
   refreshRiwayat();
 }
@@ -1704,18 +1701,29 @@ async function refreshRiwayat(){
   let d;
   try{
     d = await API.get("riwayat/list.php", {
-      q: riwayatFilter.q, dari: riwayatFilter.dari,
-      sampai: riwayatFilter.sampai, jenis: riwayatFilter.jenis,
+      q: riwayatFilter.q, kategori: riwayatFilter.kategori,
+      dari: riwayatFilter.dari, sampai: riwayatFilter.sampai,
       page: riwayatFilter.page
     });
   }catch(e){ tampilGalat(e); return; }
+
+  // Dropdown kategori diisi dari server, sama sumbernya dengan dashboard.
+  const selKat = $("rwKategori");
+  if(selKat && d.kategori_options){
+    const isi = ['Semua'].concat(d.kategori_options)
+      .map(k => '<option value="' + esc(k) + '">' + esc(k === "Semua" ? "Semua kategori" : k) + '</option>').join("");
+    if(selKat.innerHTML !== isi){
+      selKat.innerHTML = isi;
+      selKat.value = riwayatFilter.kategori;
+    }
+  }
 
   // Tautan unduh mengikuti penyaringan yang sedang aktif.
   const unduh = $("rwUnduh");
   if(unduh){
     unduh.href = "api/export/pdf.php?jenis=riwayat"
       + "&q=" + encodeURIComponent(riwayatFilter.q)
-      + "&arah=" + encodeURIComponent(riwayatFilter.jenis)
+      + "&kategori=" + encodeURIComponent(riwayatFilter.kategori)
       + "&dari=" + encodeURIComponent(riwayatFilter.dari)
       + "&sampai=" + encodeURIComponent(riwayatFilter.sampai);
   }
@@ -1723,52 +1731,51 @@ async function refreshRiwayat(){
   const ringkas = $("rwRingkas");
   if(ringkas){
     ringkas.innerHTML =
-        statCard({ label:"Catatan", nilai:d.total, ikon:"unit", nada:"biru" })
-      + statCard({ label:"Total masuk", nilai:d.total_masuk, ikon:"sku", nada:"safe",
-                   tone:"safe", kaki:"unit diterima" })
-      + statCard({ label:"Total keluar", nilai:d.total_keluar, ikon:"alert", nada:"danger",
-                   tone:"danger", kaki:"unit dikeluarkan" })
-      + statCard({ label:"Selisih", nilai:Math.abs(d.selisih), ikon:"tag",
-                   nada:d.selisih >= 0 ? "safe" : "danger",
-                   tone:d.selisih >= 0 ? "safe" : "danger",
-                   kaki:d.selisih >= 0 ? "lebih banyak masuk" : "lebih banyak keluar" });
+        statCard({ label:"Barang", nilai:d.total, ikon:"sku", nada:"biru",
+                   kaki:riwayatFilter.kategori && riwayatFilter.kategori !== "Semua"
+                        ? "kategori " + riwayatFilter.kategori : "seluruh kategori" })
+      + statCard({ label:"Stok awal", nilai:d.total_awal, ikon:"unit", nada:"",
+                   kaki:riwayatFilter.dari ? "posisi sebelum " + fmtDate(riwayatFilter.dari) : "stok awal master" })
+      + statCard({ label:"Stok masuk", nilai:d.total_masuk, ikon:"tag", nada:"safe", tone:"safe",
+                   kaki:"unit diterima" })
+      + statCard({ label:"Stok keluar", nilai:d.total_keluar, ikon:"alert", nada:"danger", tone:"danger",
+                   kaki:"unit dikeluarkan" })
+      + statCard({ label:"Stok akhir", nilai:d.total_akhir, ikon:"unit", nada:"biru",
+                   kaki:"posisi setelah periode" });
     ringkas.querySelectorAll(".stat-value[data-nilai]").forEach(n =>
       Grafik.angkaNaik(n, Number(n.getAttribute("data-nilai"))));
   }
 
-  let baris = d.rows.map(r => {
-    const masuk = r.arah === "masuk";
-    return '<tr>'
-      + '<td style="white-space:nowrap">' + fmtDate(r.tanggal) + '</td>'
-      + '<td><div class="item-name">' + esc(r.nama)
-        + (r.master_id === null ? '<span class="flag-gen">TAK DIKENAL</span>' : '') + '</div>'
-        + '<div class="item-sub">' + esc(r.barcode) + '</div></td>'
-      // Masuk dan keluar dipisah jadi dua kolom, jadi kolom Arah tidak lagi
-      // diperlukan — angkanya sendiri sudah menunjukkan arahnya.
-      + '<td class="num" style="font-weight:700; color:var(--safe)">'
-        + (masuk ? "+" + fmtNum(r.jumlah) : '<span style="color:var(--lineStrong)">—</span>') + '</td>'
-      + '<td class="num" style="font-weight:700; color:var(--danger)">'
-        + (!masuk ? "-" + fmtNum(r.jumlah) : '<span style="color:var(--lineStrong)">—</span>') + '</td>'
-      + '<td class="num"><span class="stok-akhir-num">'
-        + (r.stok_akhir === null ? '<span style="color:var(--slateLo); font-weight:400">-</span>'
-                                 : fmtNum(r.stok_akhir)) + '</span></td>'
-      + '<td style="color:var(--slate)">' + esc(r.keterangan) + '</td>'
-      + '<td class="mono" style="font-size:11px; color:var(--slateLo)">' + esc(r.no_pesanan || "-") + '</td>'
-      + '<td style="font-size:11.5px; color:var(--slateLo)">' + esc(r.oleh || "-") + '</td>'
-      + '</tr>';
-  }).join("");
+  let baris = d.rows.map(r =>
+    '<tr>'
+    + '<td class="mono" style="font-size:11px; color:var(--slateLo)">' + esc(r.sku || "-") + '</td>'
+    + '<td><div class="item-name">' + esc(r.nama) + '</div>'
+      + '<div class="item-sub">' + esc(r.barcode) + '</div></td>'
+    + '<td>' + (r.kategori
+        ? '<span class="badge netral">' + esc(r.kategori) + '</span>'
+        : '<span style="color:var(--slateLo); font-size:11px">-</span>') + '</td>'
+    + '<td class="num">' + fmtNum(r.stok_awal) + '</td>'
+    + '<td class="num" style="font-weight:700; color:var(--safe)">'
+      + (r.masuk > 0 ? "+" + fmtNum(r.masuk) : '<span style="color:var(--lineStrong); font-weight:400">—</span>') + '</td>'
+    + '<td class="num" style="font-weight:700; color:var(--danger)">'
+      + (r.keluar > 0 ? "-" + fmtNum(r.keluar) : '<span style="color:var(--lineStrong); font-weight:400">—</span>') + '</td>'
+    + '<td class="num"><span class="stok-akhir-num">' + fmtNum(r.stok_akhir) + '</span></td>'
+    + '</tr>'
+  ).join("");
 
   if(!d.rows.length){
-    baris = '<tr class="empty-row"><td colspan="8">'
-      + 'Belum ada pergerakan pada rentang ini.</td></tr>';
+    baris = '<tr class="empty-row"><td colspan="7">'
+      + 'Tidak ada barang pada penyaring ini.</td></tr>';
   }
 
   wadah.innerHTML =
-    '<div class="info-box">Kolom <b>Stok akhir</b> menunjukkan posisi stok barang itu '
-    + 'pada <b>akhir tanggal</b> tersebut, bukan jumlah yang bergerak.</div>'
-    + '<div class="table-card"><table style="min-width:940px"><thead><tr>'
-    + ["Tanggal","Barang","Masuk","Keluar","Stok akhir","Keterangan","No. Pesanan","Oleh"]
-        .map((h,i)=>'<th'+(i>=2&&i<=4?' class="num"':'')+'>'+h+'</th>').join("")
+    '<div class="info-box"><b>Stok awal</b> adalah posisi barang sebelum tanggal mulai; '
+    + '<b>stok akhir</b> posisinya setelah seluruh pergerakan pada rentang itu dihitung. '
+    + 'Barang yang tidak bergerak tetap ditampilkan — kalau disembunyikan, laporan per '
+    + 'kategori jadi tidak lengkap.</div>'
+    + '<div class="table-card"><table style="min-width:900px"><thead><tr>'
+    + ["SKU","Barang","Kategori","Stok awal","Stok masuk","Stok keluar","Stok akhir"]
+        .map((h,i)=>'<th'+(i>=3?' class="num"':'')+'>'+h+'</th>').join("")
     + '</tr></thead><tbody>' + baris + '</tbody></table>'
     + paginationBar(d.total, d.page, d.total_pages, "riwayatGoPage")
     + '</div>';
@@ -1886,176 +1893,674 @@ async function refreshPertukaran(){
 }
 
 /* ================================================================== */
-/* Laporan stock opname — belum tersedia                              */
+/* Retur barang                                                       */
 /* ================================================================== */
-function renderOpname(){
-  $("content").innerHTML =
-    '<div class="panel" style="text-align:center; padding:56px 24px;">'
-    + '<div style="width:56px; height:56px; border-radius:16px; margin:0 auto 16px;'
-      + ' background:var(--paper); color:var(--slate); display:grid; place-items:center;">'
-      + '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
-      + ' stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">'
-      + '<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>'
+let returFilter = { q:"", dari:"", sampai:"", status:"", page:1 };
+let editReturId = null;
+let returStatusOptions = [];
+let returStatusMasuk = "Lengkap";   // ditimpa oleh jawaban server
+
+function renderRetur(){
+  let html = '<form class="form-card" id="rtForm" onsubmit="submitRetur(event)">'
+    + '<div class="form-grid">'
+    + '<div><label class="field-label" for="rtTanggal">Tanggal</label>'
+      + '<input type="date" id="rtTanggal" value="' + todayISO() + '"></div>'
+    + '<div class="span2"><label class="field-label" for="rtNoPesanan">No. pesanan</label>'
+      + '<input type="text" id="rtNoPesanan" maxlength="100" placeholder="Contoh: 260504HBRHB311"></div>'
+    + '<div class="span2 picker-wrap"><label class="field-label" for="rtPicker">Cari barang (nama / SKU / barcode)</label>'
+      + '<input type="text" id="rtPicker" placeholder="Ketik nama, SKU, atau barcode&hellip;" autocomplete="off"'
+        + ' oninput="onReturPicker()" onfocus="onReturPicker()">'
+      + '<div id="rtPickerList" class="picker-list" style="display:none"></div></div>'
+    + '<div><label class="field-label" for="rtSku">SKU</label>'
+      + '<input type="text" id="rtSku" class="mono" maxlength="50" placeholder="Contoh: AV-0063"></div>'
+    + '<div><label class="field-label" for="rtBarcode">Barcode</label>'
+      + '<input type="text" id="rtBarcode" class="mono" maxlength="50" placeholder="Opsional"></div>'
+    + '<div class="span2"><label class="field-label" for="rtNama">Nama produk</label>'
+      + '<input type="text" id="rtNama" maxlength="255" placeholder="Terisi sendiri bila barangnya dikenal"></div>'
+    + '<div><label class="field-label" for="rtJumlah">Qty</label>'
+      + '<input type="number" id="rtJumlah" min="1" value="1"></div>'
+    + '<div><label class="field-label" for="rtStatus">Keterangan retur</label>'
+      + '<select id="rtStatus"></select></div>'
+    + '<div class="span2"><label class="field-label" for="rtKet">Ket.</label>'
+      + '<input type="text" id="rtKet" maxlength="255" placeholder="Contoh: tidak bisa di proses"></div>'
     + '</div>'
-    + '<h2 style="font-size:22px; margin-bottom:6px;">Coming soon</h2>'
-    + '<p style="font-size:13px; color:var(--slate); max-width:420px; margin:0 auto; line-height:1.6;">'
-    + 'Laporan stock opname akan membandingkan stok menurut sistem dengan hasil hitungan '
-    + 'fisik di gudang, lalu menampilkan selisihnya per barang.</p>'
-    + '</div>';
-}
+    + '<div style="display:flex; gap:8px;">'
+      + '<button type="submit" class="btn" id="rtSubmit">' + svgIcon("plus") + 'Catat retur</button>'
+      + '<button type="button" class="btn ghost" id="rtBatal" style="display:none" onclick="batalEditRetur()">'
+        + svgIcon("x") + 'Batal</button>'
+    + '</div></form>'
 
-/* ================================================================== */
-/* Log aktivitas                                                      */
-/* ================================================================== */
-let logFilter = { q:"", dari:"", sampai:"", aksi:"", entitas:"", user:"", page:1 };
-// Pilihan dropdown datang dari server dan hanya memuat nilai yang benar-benar
-// ada di log; disimpan agar tidak hilang saat tabel digambar ulang.
-let logOpsi = { aksi:[], entitas:[], user:[] };
-
-/** Pecah "YYYY-MM-DD HH:MM:SS" jadi tanggal dan jam siap tampil. */
-function pecahWaktu(s){
-  if(!s) return { tgl:"-", jam:"" };
-  const d = new Date(String(s).replace(" ", "T"));
-  if(isNaN(d)) return { tgl:String(s), jam:"" };
-  return {
-    tgl: d.toLocaleDateString("id-ID", {day:"2-digit", month:"short", year:"numeric"}),
-    jam: d.toLocaleTimeString("id-ID", {hour:"2-digit", minute:"2-digit", second:"2-digit"})
-  };
-}
-
-function opsiSelect(daftar, terpilih, kosong){
-  let h = '<option value="">' + esc(kosong) + '</option>';
-  daftar.forEach(o => {
-    h += '<option value="' + esc(o.nilai) + '"'
-       + (String(o.nilai) === String(terpilih) ? ' selected' : '') + '>'
-       + esc(o.label) + '</option>';
-  });
-  return h;
-}
-
-function renderAktivitas(){
-  $("content").innerHTML =
-    '<div class="toolbar">'
+    + '<div class="toolbar">'
     + '<div class="search-wrap">' + svgIcon("search")
-      + '<input type="text" id="lgCari" placeholder="Cari nama barang, pengguna, atau no. picking&hellip;" oninput="onLogCari()"></div>'
-    + '<select id="lgAksi" onchange="onLogFilter()"><option value="">Semua aksi</option></select>'
-    + '<select id="lgModul" onchange="onLogFilter()"><option value="">Semua modul</option></select>'
-    + '<select id="lgUser" onchange="onLogFilter()"><option value="">Semua pengguna</option></select>'
-    + '<div class="daterange">Dari <input type="date" id="lgDari" onchange="onLogFilter()">'
-      + ' s/d <input type="date" id="lgSampai" onchange="onLogFilter()"></div>'
-    + '<button type="button" class="btn ghost" onclick="resetLog()">' + svgIcon("x") + 'Reset</button>'
-    + '<a class="btn ghost" id="lgUnduh" href="api/export/pdf.php?jenis=aktivitas">' + svgIcon("download") + 'Unduh PDF</a>'
+      + '<input type="text" id="rtCari" placeholder="Cari no. pesanan, SKU, atau nama produk&hellip;" oninput="onReturCari()"></div>'
+    + '<select id="rtFStatus" onchange="onReturFilter()"><option value="">Semua keterangan</option></select>'
+    + '<div class="daterange">Dari <input type="date" id="rtDari" onchange="onReturFilter()">'
+      + ' s/d <input type="date" id="rtSampai" onchange="onReturFilter()"></div>'
+    + '<button type="button" class="btn ghost" onclick="resetRetur()">' + svgIcon("x") + 'Reset</button>'
+    + '<a class="btn ghost" id="rtUnduh" href="api/export/pdf.php?jenis=retur">' + svgIcon("download") + 'Unduh PDF</a>'
     + '</div>'
-    + '<div class="stat-row" id="lgRingkas"></div>'
-    + '<div id="lgHasil"></div>';
-  $("lgCari").value   = logFilter.q;
-  $("lgDari").value   = logFilter.dari;
-  $("lgSampai").value = logFilter.sampai;
-  refreshLog();
+    + '<div class="stat-row" id="rtRingkas"></div>'
+    + '<div id="rtHasil"></div>';
+
+  $("content").innerHTML = html;
+  $("rtCari").value   = returFilter.q;
+  $("rtDari").value   = returFilter.dari;
+  $("rtSampai").value = returFilter.sampai;
+  refreshRetur();
 }
 
-const onLogCari = debounce(function(){
-  logFilter.q = $("lgCari").value;
-  logFilter.page = 1;
-  refreshLog();
+const onReturPicker = debounce(async function(){
+  const el = $("rtPicker"), listEl = $("rtPickerList");
+  if(!el || !listEl) return;
+  const q = el.value.trim();
+  if(!q){ listEl.style.display = "none"; listEl.innerHTML = ""; return; }
+
+  let data;
+  try{ data = await API.masterPick(q); }catch(e){ return; }
+  if(el.value.trim() !== q) return;   // ketikan sudah berubah saat respons tiba
+
+  if(!data.rows.length){
+    listEl.innerHTML = '<div class="picker-item">Tidak ditemukan — isi manual di bawah.</div>';
+    listEl.style.display = "block";
+    return;
+  }
+  listEl.innerHTML = data.rows.map(m =>
+    '<div class="picker-item" data-bc="' + esc(m.barcode) + '" data-sku="' + esc(m.sku || "") + '"'
+    + ' data-nama="' + esc(m.nama) + '" onclick="pilihBarangRetur(this)">'
+    + '<div>' + esc(m.nama) + '</div>'
+    + '<div class="sub">' + esc(m.sku || "-") + ' · ' + esc(m.barcode) + '</div></div>'
+  ).join("");
+  listEl.style.display = "block";
+}, 250);
+
+function pilihBarangRetur(el){
+  $("rtBarcode").value = el.getAttribute("data-bc") || "";
+  $("rtSku").value     = el.getAttribute("data-sku") || "";
+  $("rtNama").value    = el.getAttribute("data-nama") || "";
+  $("rtPicker").value  = el.getAttribute("data-nama") || "";
+  $("rtPickerList").style.display = "none";
+}
+
+const onReturCari = debounce(function(){
+  returFilter.q = $("rtCari").value;
+  returFilter.page = 1;
+  refreshRetur();
 }, 300);
 
-function onLogFilter(){
-  logFilter.q       = $("lgCari").value;
-  logFilter.aksi    = $("lgAksi").value;
-  logFilter.entitas = $("lgModul").value;
-  logFilter.user    = $("lgUser").value;
-  logFilter.dari    = $("lgDari").value;
-  logFilter.sampai  = $("lgSampai").value;
-  logFilter.page    = 1;
-  refreshLog();
+function onReturFilter(){
+  returFilter.q      = $("rtCari").value;
+  returFilter.status = $("rtFStatus").value;
+  returFilter.dari   = $("rtDari").value;
+  returFilter.sampai = $("rtSampai").value;
+  returFilter.page   = 1;
+  refreshRetur();
 }
 
-function resetLog(){
-  logFilter = { q:"", dari:"", sampai:"", aksi:"", entitas:"", user:"", page:1 };
-  $("lgCari").value = ""; $("lgDari").value = ""; $("lgSampai").value = "";
-  $("lgAksi").value = ""; $("lgModul").value = ""; $("lgUser").value = "";
-  refreshLog();
+function resetRetur(){
+  returFilter = { q:"", dari:"", sampai:"", status:"", page:1 };
+  $("rtCari").value = ""; $("rtFStatus").value = "";
+  $("rtDari").value = ""; $("rtSampai").value = "";
+  refreshRetur();
 }
 
-function logGoPage(p){ logFilter.page = p; refreshLog(); }
+function returGoPage(p){ returFilter.page = p; refreshRetur(); }
 
-async function refreshLog(){
-  const wadah = $("lgHasil");
+async function refreshRetur(){
+  const wadah = $("rtHasil");
   if(!wadah) return;
 
   let d;
   try{
-    d = await API.get("aktivitas/list.php", {
-      q: logFilter.q, dari: logFilter.dari, sampai: logFilter.sampai,
-      aksi: logFilter.aksi, entitas: logFilter.entitas,
-      user: logFilter.user, page: logFilter.page
+    d = await API.get("retur/list.php", {
+      q: returFilter.q, status: returFilter.status,
+      dari: returFilter.dari, sampai: returFilter.sampai, page: returFilter.page
     });
   }catch(e){ tampilGalat(e); return; }
 
-  logOpsi = d.opsi || logOpsi;
-  const selAksi = $("lgAksi"), selModul = $("lgModul"), selUser = $("lgUser");
-  if(selAksi)  selAksi.innerHTML  = opsiSelect(logOpsi.aksi, logFilter.aksi, "Semua aksi");
-  if(selModul) selModul.innerHTML = opsiSelect(logOpsi.entitas, logFilter.entitas, "Semua modul");
-  if(selUser){
-    selUser.innerHTML = opsiSelect(
-      logOpsi.user.map(u => ({ nilai:u.id, label:u.nama_lengkap || u.username })),
-      logFilter.user, "Semua pengguna");
+  // Pilihan status datang dari server supaya layar dan validasi tak pernah beda.
+  if(d.status_masuk) returStatusMasuk = d.status_masuk;
+  if(d.status_options && d.status_options.length){
+    returStatusOptions = d.status_options;
+    const sel = $("rtStatus");
+    if(sel && !sel.options.length){
+      sel.innerHTML = returStatusOptions.map(v => '<option value="' + esc(v) + '">' + esc(v) + '</option>').join("");
+    }
+    const fs = $("rtFStatus");
+    if(fs && fs.options.length <= 1){
+      fs.innerHTML = '<option value="">Semua keterangan</option>'
+        + returStatusOptions.map(v => '<option value="' + esc(v) + '">' + esc(v) + '</option>').join("");
+      fs.value = returFilter.status;
+    }
   }
 
-  const unduh = $("lgUnduh");
+  const unduh = $("rtUnduh");
   if(unduh){
-    unduh.href = "api/export/pdf.php?jenis=aktivitas"
-      + "&q=" + encodeURIComponent(logFilter.q)
-      + "&aksi=" + encodeURIComponent(logFilter.aksi)
-      + "&entitas=" + encodeURIComponent(logFilter.entitas)
-      + "&user=" + encodeURIComponent(logFilter.user)
-      + "&dari=" + encodeURIComponent(logFilter.dari)
-      + "&sampai=" + encodeURIComponent(logFilter.sampai);
+    unduh.href = "api/export/pdf.php?jenis=retur"
+      + "&q=" + encodeURIComponent(returFilter.q)
+      + "&status=" + encodeURIComponent(returFilter.status)
+      + "&dari=" + encodeURIComponent(returFilter.dari)
+      + "&sampai=" + encodeURIComponent(returFilter.sampai);
   }
 
-  const ringkas = $("lgRingkas");
+  const ringkas = $("rtRingkas");
   if(ringkas){
     ringkas.innerHTML =
-        statCard({ label:"Aktivitas tercatat", nilai:d.total, ikon:"unit", nada:"biru",
-                   kaki:"sesuai penyaring" })
-      + statCard({ label:"Hari ini", nilai:d.hari_ini, ikon:"tag", nada:"safe",
-                   kaki:"kejadian sejak tengah malam" })
-      + statCard({ label:"Pengguna aktif", nilai:d.orang_hari, ikon:"sku", nada:"amber",
-                   kaki:"akun bergerak hari ini" });
+        statCard({ label:"Retur", nilai:d.total, ikon:"tag", nada:"biru", kaki:"baris tercatat" })
+      + statCard({ label:"Unit diretur", nilai:d.total_unit, ikon:"unit", nada:"", kaki:"pcs dikembalikan" })
+      + statCard({ label:"Masuk stok", nilai:d.unit_ke_stok, ikon:"sku", nada:"safe", tone:"safe",
+                   kaki:"sudah lengkap" })
+      + statCard({ label:"Tertahan", nilai:d.unit_tertahan, ikon:"alert", nada:"amber",
+                   kaki:"belum menambah stok" });
     ringkas.querySelectorAll(".stat-value[data-nilai]").forEach(n =>
       Grafik.angkaNaik(n, Number(n.getAttribute("data-nilai"))));
   }
 
   let baris = d.rows.map(r => {
-    const w = pecahWaktu(r.created_at);
-    const nada = r.nada === "bahaya" ? " bahaya" : (r.nada === "aman" ? " aman" : "");
+    // Yang menentukan stok bertambah adalah statusnya. masuk_id tetap terisi
+    // meski returnya dibatalkan, supaya baris barang masuknya bisa dipakai
+    // ulang kalau statusnya dikembalikan.
+    const masukStok = r.status === returStatusMasuk;
     return '<tr>'
-      + '<td style="white-space:nowrap"><div class="log-tgl">' + esc(w.tgl) + '</div>'
-        + '<div class="log-jam">' + esc(w.jam) + '</div></td>'
-      + '<td><div class="log-judul' + nada + '">' + esc(r.judul) + '</div>'
-        + (r.rincian ? '<div class="item-sub">' + esc(r.rincian) + '</div>' : '') + '</td>'
-      + '<td><span class="badge netral">' + esc(r.modul) + '</span></td>'
-      + '<td style="font-size:11.5px; color:var(--slateLo)">' + esc(r.oleh || r.username || "-") + '</td>'
-      + '<td class="mono" style="font-size:11px; color:var(--slateLo)">' + esc(r.ip || "-") + '</td>'
+      + '<td style="white-space:nowrap">' + fmtDate(r.tanggal) + '</td>'
+      + '<td class="mono" style="font-size:11px">' + esc(r.no_pesanan || "-") + '</td>'
+      + '<td class="mono" style="font-size:11px; color:var(--slateLo)">' + esc(r.sku || "-") + '</td>'
+      + '<td><div class="item-name">' + esc(r.nama)
+        + (r.master_id === null ? '<span class="flag-gen">TAK DIKENAL</span>' : '') + '</div>'
+        + '<div class="item-sub">' + esc(r.barcode || "-") + '</div></td>'
+      + '<td class="num" style="font-weight:700">' + fmtNum(r.jumlah) + '</td>'
+      + '<td><span class="badge ' + (masukStok ? 'aman' : 'kritis') + '">' + esc(r.status) + '</span>'
+        + (masukStok ? '<div class="item-sub" style="font-family:Inter">stok bertambah</div>' : '') + '</td>'
+      + '<td style="font-size:11.5px; color:var(--slate)">' + esc(r.keterangan || "-") + '</td>'
+      + '<td class="num" style="white-space:nowrap">'
+        + '<button class="icon-btn" onclick="editRetur(' + r.id + ')" aria-label="Ubah retur">' + svgIcon("edit") + '</button>'
+        + '<button class="icon-btn bahaya" onclick="hapusRetur(' + r.id + ')" aria-label="Hapus retur">' + svgIcon("trash") + '</button>'
+        + '</td>'
       + '</tr>';
   }).join("");
 
   if(!d.rows.length){
-    baris = '<tr class="empty-row"><td colspan="5">'
-      + 'Belum ada aktivitas pada penyaring ini.</td></tr>';
+    baris = '<tr class="empty-row"><td colspan="8">Belum ada retur pada penyaring ini.</td></tr>';
+  }
+
+  returRows = d.rows;
+
+  wadah.innerHTML =
+    '<div class="info-box">Retur berketerangan <b>Lengkap</b> langsung menambah stok lewat '
+    + 'barang masuk "Retur Masuk". Yang belum selesai dicatat saja dan belum menyentuh stok, '
+    + 'sampai keterangannya diubah.</div>'
+    + '<div class="table-card"><table style="min-width:980px"><thead><tr>'
+    + ["Tanggal","No. pesanan","SKU","Nama produk","Qty","Keterangan retur","Ket.",""]
+        .map((h,i)=>'<th'+(i===4?' class="num"':'')+'>'+esc(h)+'</th>').join("")
+    + '</tr></thead><tbody>' + baris + '</tbody></table>'
+    + paginationBar(d.total, d.page, d.total_pages, "returGoPage")
+    + '</div>';
+}
+
+let returRows = [];
+
+function editRetur(id){
+  const r = returRows.find(x => x.id === id);
+  if(!r) return;
+  editReturId = id;
+  $("rtTanggal").value   = r.tanggal;
+  $("rtNoPesanan").value = r.no_pesanan || "";
+  $("rtSku").value       = r.sku || "";
+  $("rtBarcode").value   = r.barcode || "";
+  $("rtNama").value      = r.nama || "";
+  $("rtPicker").value    = r.nama || "";
+  $("rtJumlah").value    = r.jumlah;
+  $("rtStatus").value    = r.status;
+  $("rtKet").value       = r.keterangan || "";
+  $("rtSubmit").innerHTML = svgIcon("check") + "Simpan perubahan";
+  $("rtBatal").style.display = "";
+  $("rtForm").scrollIntoView({ behavior:"smooth", block:"start" });
+}
+
+function batalEditRetur(){
+  editReturId = null;
+  $("rtForm").reset();
+  $("rtTanggal").value = todayISO();
+  $("rtJumlah").value = 1;
+  $("rtPicker").value = "";
+  $("rtSubmit").innerHTML = svgIcon("plus") + "Catat retur";
+  $("rtBatal").style.display = "none";
+}
+
+async function submitRetur(e){
+  e.preventDefault();
+  const body = {
+    tanggal:    $("rtTanggal").value || todayISO(),
+    no_pesanan: $("rtNoPesanan").value.trim(),
+    sku:        $("rtSku").value.trim(),
+    barcode:    $("rtBarcode").value.trim(),
+    nama:       $("rtNama").value.trim(),
+    jumlah:     Number($("rtJumlah").value),
+    status:     $("rtStatus").value,
+    keterangan: $("rtKet").value.trim()
+  };
+  if(editReturId) body.id = editReturId;
+
+  if(!body.sku && !body.barcode){
+    toast("Isi SKU atau barcode barangnya dulu.", "err");
+    return;
+  }
+  if(!body.jumlah || body.jumlah < 1){
+    toast("Qty minimal 1.", "err");
+    return;
+  }
+
+  const tombol = $("rtSubmit");
+  if(tombol) tombol.disabled = true;
+  setSaveStatus("saving");
+  try{
+    const res = await API.post("retur/save.php", body);
+    setSaveStatus("ok");
+    toast(res.pesan || "Tersimpan.");
+    (res.peringatan || []).forEach(p => toast(p, "err"));
+    batalEditRetur();
+    returFilter.page = 1;
+    refreshRetur();
+  }catch(err){
+    tampilGalat(err);
+  }finally{
+    if(tombol) tombol.disabled = false;
+  }
+}
+
+async function hapusRetur(id){
+  const r = returRows.find(x => x.id === id);
+  const ikutStok = r && r.status === returStatusMasuk;
+  const ya = await konfirmasi(
+    "Hapus retur ini?",
+    ikutStok
+      ? "Barang masuk yang dihasilkannya ikut dibatalkan, jadi stok berkurang lagi sebanyak "
+        + fmtNum(r.jumlah) + " pcs."
+      : "Retur ini belum menyentuh stok, jadi tidak ada stok yang berubah.",
+    "Hapus"
+  );
+  if(!ya) return;
+
+  setSaveStatus("saving");
+  try{
+    const res = await API.post("retur/delete.php", { id:id });
+    setSaveStatus("ok");
+    toast(res.pesan || "Dihapus.");
+    refreshRetur();
+  }catch(e){ tampilGalat(e); }
+}
+
+/* ================================================================== */
+/* Laporan stok opname                                                */
+/* ================================================================== */
+let opnameSesiId = null;                                   // null = daftar sesi
+let opnameFilter = { q:"", kategori:"Semua", hanya:"semua", page:1 };
+let opnameCariSesi = "";
+let opnameSesiPage = 1;
+
+function renderOpname(){
+  if(opnameSesiId === null) renderOpnameDaftar();
+  else renderOpnameDetail();
+}
+
+/* --- Daftar sesi --------------------------------------------------- */
+function renderOpnameDaftar(){
+  const bolehUbah = sayaAdmin();
+  let html = "";
+
+  if(bolehUbah){
+    html += '<form class="form-card" id="opForm" onsubmit="submitOpname(event)">'
+      + '<div class="form-grid">'
+      + '<div class="span2"><label class="field-label" for="opNama">Nama laporan</label>'
+        + '<input type="text" id="opNama" maxlength="150" placeholder="Contoh: LAPORAN STOK OPNAME JUNI 2026" required></div>'
+      + '<div><label class="field-label" for="opPeriode">Periode</label>'
+        + '<input type="text" id="opPeriode" maxlength="50" placeholder="Contoh: JUNI 2026"></div>'
+      + '<div><label class="field-label" for="opTanggal">Tanggal opname</label>'
+        + '<input type="date" id="opTanggal" value="' + todayISO() + '"></div>'
+      + '<div><label class="field-label" for="opKategori">Kategori</label>'
+        + '<select id="opKategori"><option value="">Seluruh kategori</option></select></div>'
+      + '<div class="span2"><label class="field-label" for="opCatatan">Catatan</label>'
+        + '<input type="text" id="opCatatan" maxlength="255" placeholder="Opsional"></div>'
+      + '</div>'
+      + '<button type="submit" class="btn" id="opSubmit">' + svgIcon("plus") + 'Buat laporan opname</button>'
+      + '</form>';
+  }else{
+    html += '<div class="info-box">Hanya admin yang bisa membuat laporan opname baru. '
+      + 'Laporan yang sudah ada tetap bisa dibuka dan diisi.</div>';
+  }
+
+  html += '<div class="toolbar">'
+    + '<div class="search-wrap">' + svgIcon("search")
+      + '<input type="text" id="opCari" placeholder="Cari nama laporan atau periode&hellip;" oninput="onOpnameCari()"></div>'
+    + '</div>'
+    + '<div id="opHasil"></div>';
+
+  $("content").innerHTML = html;
+  const c = $("opCari");
+  if(c) c.value = opnameCariSesi;
+  refreshOpnameDaftar();
+}
+
+const onOpnameCari = debounce(function(){
+  opnameCariSesi = $("opCari").value;
+  opnameSesiPage = 1;
+  refreshOpnameDaftar();
+}, 300);
+
+async function refreshOpnameDaftar(){
+  const wadah = $("opHasil");
+  if(!wadah) return;
+
+  let d;
+  try{ d = await API.get("opname/list.php", { q: opnameCariSesi, page: opnameSesiPage }); }
+  catch(e){ tampilGalat(e); return; }
+
+  const selKat = $("opKategori");
+  if(selKat && selKat.options.length <= 1 && d.kategori_options){
+    selKat.innerHTML = '<option value="">Seluruh kategori</option>'
+      + d.kategori_options.map(k => '<option value="' + esc(k) + '">' + esc(k) + '</option>').join("");
+  }
+
+  let baris = d.rows.map(r => {
+    const lengkap = r.jml_item > 0 ? Math.round((r.jml_dicek / r.jml_item) * 100) : 0;
+    return '<tr>'
+      + '<td><div class="item-name">' + esc(r.nama) + '</div>'
+        + '<div class="item-sub" style="font-family:Inter">'
+        + (r.periode ? esc(r.periode) + ' · ' : '') + fmtDate(r.tanggal)
+        + (r.kategori ? ' · ' + esc(r.kategori) : '') + '</div></td>'
+      + '<td class="num">' + fmtNum(r.jml_item) + '</td>'
+      + '<td class="num">' + fmtNum(r.jml_dicek) + ' <span style="color:var(--slateLo); font-weight:400">('
+        + lengkap + '%)</span></td>'
+      + '<td class="num" style="font-weight:700; color:' + (r.jml_selisih > 0 ? 'var(--danger)' : 'var(--slateLo)') + '">'
+        + fmtNum(r.jml_selisih) + '</td>'
+      + '<td>' + (r.status === "selesai"
+          ? '<span class="badge aman">' + svgIcon("check") + 'Selesai</span>'
+          : '<span class="badge rendah">Draft</span>') + '</td>'
+      + '<td style="font-size:11.5px; color:var(--slateLo)">' + esc(r.oleh || "-") + '</td>'
+      + '<td class="num" style="white-space:nowrap">'
+        + '<button class="btn ghost" onclick="bukaOpname(' + r.id + ')">Buka</button>'
+        + (sayaAdmin()
+            ? '<button class="icon-btn bahaya" onclick="hapusOpname(' + r.id + ')" aria-label="Hapus laporan">'
+              + svgIcon("trash") + '</button>'
+            : '')
+        + '</td>'
+      + '</tr>';
+  }).join("");
+
+  if(!d.rows.length){
+    baris = '<tr class="empty-row"><td colspan="7">'
+      + 'Belum ada laporan opname. Buat satu untuk mulai menghitung.</td></tr>';
   }
 
   wadah.innerHTML =
-    '<div class="info-box">Setiap penyimpanan, perubahan, penghapusan, impor PDF, unduhan '
-    + 'laporan, dan percobaan masuk tercatat di sini lengkap dengan jamnya. Catatan log '
-    + 'tidak bisa diubah atau dihapus dari aplikasi.</div>'
-    + '<div class="table-card"><table style="min-width:860px"><thead><tr>'
-    + ["Waktu","Aktivitas","Modul","Oleh","IP"]
-        .map(h => '<th>' + esc(h) + '</th>').join("")
+    '<div class="info-box">Isi laporan dibekukan saat dibuat: kolom <b>stok akhir</b> menyimpan '
+    + 'posisi menurut sistem pada tanggal opname, dan tidak ikut berubah oleh transaksi '
+    + 'sesudahnya. <b>Selisih barang</b> = stok hitung &minus; stok accurate.</div>'
+    + '<div class="table-card"><table style="min-width:900px"><thead><tr>'
+    + ["Laporan","Barang","Dicek","Berselisih","Status","Dibuat oleh",""]
+        .map((h,i)=>'<th'+(i>=1&&i<=3?' class="num"':'')+'>'+esc(h)+'</th>').join("")
     + '</tr></thead><tbody>' + baris + '</tbody></table>'
-    + paginationBar(d.total, d.page, d.total_pages, "logGoPage")
+    + paginationBar(d.total, d.page, d.total_pages, "opnameGoPage")
     + '</div>';
+}
+
+function opnameGoPage(p){ opnameSesiPage = p; refreshOpnameDaftar(); }
+
+async function submitOpname(e){
+  e.preventDefault();
+  const body = {
+    nama:     $("opNama").value.trim(),
+    periode:  $("opPeriode").value.trim(),
+    tanggal:  $("opTanggal").value || todayISO(),
+    kategori: $("opKategori").value,
+    catatan:  $("opCatatan").value.trim()
+  };
+  if(!body.nama){ toast("Isi nama laporannya dulu.", "err"); return; }
+
+  const tombol = $("opSubmit");
+  if(tombol) tombol.disabled = true;
+  setSaveStatus("saving");
+  try{
+    const res = await API.post("opname/save.php", body);
+    setSaveStatus("ok");
+    toast(res.pesan || "Tersimpan.");
+    $("opForm").reset();
+    $("opTanggal").value = todayISO();
+    opnameSesiPage = 1;
+    bukaOpname(res.id);
+  }catch(err){
+    tampilGalat(err);
+  }finally{
+    if(tombol) tombol.disabled = false;
+  }
+}
+
+async function hapusOpname(id){
+  const ya = await konfirmasi("Hapus laporan opname ini?",
+    "Hasil hitungan fisik di dalamnya ikut hilang dari tampilan.", "Hapus");
+  if(!ya) return;
+  setSaveStatus("saving");
+  try{
+    const res = await API.post("opname/delete.php", { id:id });
+    setSaveStatus("ok");
+    toast(res.pesan || "Dihapus.");
+    refreshOpnameDaftar();
+  }catch(e){ tampilGalat(e); }
+}
+
+function bukaOpname(id){
+  opnameSesiId = id;
+  opnameFilter = { q:"", kategori:"Semua", hanya:"semua", page:1 };
+  renderOpnameDetail();
+}
+
+function tutupOpname(){
+  opnameSesiId = null;
+  renderOpnameDaftar();
+}
+
+/* --- Isi satu sesi -------------------------------------------------- */
+function renderOpnameDetail(){
+  $("content").innerHTML =
+    '<div id="opKepala"></div>'
+    + '<div class="toolbar">'
+    + '<button type="button" class="btn ghost" onclick="tutupOpname()">' + svgIcon("x") + 'Kembali</button>'
+    + '<div class="search-wrap">' + svgIcon("search")
+      + '<input type="text" id="oiCari" placeholder="Cari nama barang atau SKU&hellip;" oninput="onOpnameItemCari()"></div>'
+    + '<select id="oiKategori" onchange="onOpnameItemFilter()"><option value="Semua">Semua kategori</option></select>'
+    + '<select id="oiHanya" onchange="onOpnameItemFilter()">'
+      + '<option value="semua">Semua barang</option>'
+      + '<option value="belum">Belum dihitung</option>'
+      + '<option value="selisih">Ada selisih</option>'
+    + '</select>'
+    + '<a class="btn ghost" id="oiUnduh" href="#">' + svgIcon("download") + 'Unduh PDF</a>'
+    + '</div>'
+    + '<div class="stat-row" id="oiRingkas"></div>'
+    + '<div id="oiHasil"></div>';
+  $("oiCari").value = opnameFilter.q;
+  refreshOpnameDetail();
+}
+
+const onOpnameItemCari = debounce(function(){
+  opnameFilter.q = $("oiCari").value;
+  opnameFilter.page = 1;
+  refreshOpnameDetail();
+}, 300);
+
+function onOpnameItemFilter(){
+  opnameFilter.q        = $("oiCari").value;
+  opnameFilter.kategori = $("oiKategori").value;
+  opnameFilter.hanya    = $("oiHanya").value;
+  opnameFilter.page     = 1;
+  refreshOpnameDetail();
+}
+
+function opnameItemGoPage(p){ opnameFilter.page = p; refreshOpnameDetail(); }
+
+async function refreshOpnameDetail(){
+  const wadah = $("oiHasil");
+  if(!wadah) return;
+
+  let d;
+  try{
+    d = await API.get("opname/detail.php", {
+      id: opnameSesiId, q: opnameFilter.q, kategori: opnameFilter.kategori,
+      hanya: opnameFilter.hanya, page: opnameFilter.page
+    });
+  }catch(e){ tampilGalat(e); return; }
+
+  const s = d.sesi;
+  const terkunci = s.status === "selesai";
+
+  const kepala = $("opKepala");
+  if(kepala){
+    kepala.innerHTML =
+      '<div class="panel" style="padding:16px 18px; margin-bottom:14px;">'
+      + '<div style="display:flex; align-items:flex-start; gap:14px; flex-wrap:wrap;">'
+        + '<div style="flex:1; min-width:220px;">'
+          + '<div style="font-family:\'Barlow Condensed\',sans-serif; font-weight:800; font-size:20px; text-transform:uppercase; letter-spacing:.01em;">'
+            + esc(s.nama) + '</div>'
+          + '<div class="item-sub" style="font-family:Inter; margin-top:4px;">'
+            + 'Periode ' + esc(s.periode || fmtDate(s.tanggal))
+            + ' · dibuat ' + esc(s.oleh || "-")
+            + (s.kategori ? ' · kategori ' + esc(s.kategori) : ' · seluruh kategori')
+            + (s.catatan ? ' · ' + esc(s.catatan) : '')
+            + '</div>'
+        + '</div>'
+        + (sayaAdmin()
+            ? '<button type="button" class="btn ' + (terkunci ? 'ghost' : '') + '" onclick="toggleStatusOpname()">'
+              + (terkunci ? svgIcon("edit") + 'Buka kembali' : svgIcon("check") + 'Tandai selesai') + '</button>'
+            : '')
+      + '</div></div>';
+  }
+
+  const selKat = $("oiKategori");
+  if(selKat && d.kategori_options){
+    const isi = '<option value="Semua">Semua kategori</option>'
+      + d.kategori_options.map(k => '<option value="' + esc(k) + '">' + esc(k) + '</option>').join("");
+    if(selKat.innerHTML !== isi){
+      selKat.innerHTML = isi;
+      selKat.value = opnameFilter.kategori;
+    }
+  }
+  const selHanya = $("oiHanya");
+  if(selHanya) selHanya.value = opnameFilter.hanya;
+
+  const unduh = $("oiUnduh");
+  if(unduh){
+    unduh.href = "api/export/pdf.php?jenis=opname&id=" + encodeURIComponent(opnameSesiId)
+      + "&q=" + encodeURIComponent(opnameFilter.q)
+      + "&kategori=" + encodeURIComponent(opnameFilter.kategori);
+  }
+
+  const r = d.ringkas;
+  const ringkas = $("oiRingkas");
+  if(ringkas){
+    ringkas.innerHTML =
+        statCard({ label:"Barang", nilai:r.jml, ikon:"sku", nada:"biru", kaki:"dalam laporan ini" })
+      + statCard({ label:"Sudah dicek", nilai:r.dicek, ikon:"tag", nada:"safe", tone:"safe",
+                   kaki:fmtNum(r.belum) + " belum dihitung" })
+      + statCard({ label:"Berselisih", nilai:r.beda, ikon:"alert",
+                   nada:r.beda > 0 ? "danger" : "", tone:r.beda > 0 ? "danger" : "",
+                   kaki:"hitung ≠ accurate" })
+      + statCard({ label:"Jumlah selisih", nilai:Math.abs(r.total_selisih), ikon:"unit",
+                   nada:r.total_selisih === 0 ? "" : "amber",
+                   kaki:r.total_selisih === 0 ? "seimbang"
+                        : (r.total_selisih > 0 ? "lebih di hitungan fisik" : "kurang di hitungan fisik") });
+    ringkas.querySelectorAll(".stat-value[data-nilai]").forEach(n =>
+      Grafik.angkaNaik(n, Number(n.getAttribute("data-nilai"))));
+  }
+
+  const mati = terkunci ? " disabled" : "";
+  let baris = d.rows.map(it =>
+    '<tr>'
+    + '<td class="mono" style="font-size:11px; color:var(--slateLo)">' + esc(it.sku || "-") + '</td>'
+    + '<td><div class="item-name">' + esc(it.nama) + '</div>'
+      + '<div class="item-sub">' + esc(it.barcode || "-") + '</div></td>'
+    + '<td class="num">' + fmtNum(it.stok_sistem) + '</td>'
+    + '<td class="num"><input type="number" class="sel-angka" id="oh' + it.id + '" min="0"'
+      + ' value="' + (it.stok_hitung === null ? "" : it.stok_hitung) + '"'
+      + ' onchange="simpanItemOpname(' + it.id + ')"' + mati + '></td>'
+    + '<td class="num"><input type="number" class="sel-angka" id="oa' + it.id + '" min="0"'
+      + ' value="' + (it.stok_accurate === null ? "" : it.stok_accurate) + '"'
+      + ' onchange="simpanItemOpname(' + it.id + ')"' + mati + '></td>'
+    + '<td class="num"><input type="checkbox" class="sel-cek" id="oc' + it.id + '"'
+      + (it.dicek ? " checked" : "") + ' onchange="simpanItemOpname(' + it.id + ')"' + mati + '></td>'
+    + '<td>' + (it.kategori
+        ? '<span class="badge netral">' + esc(it.kategori) + '</span>'
+        : '<span style="color:var(--slateLo); font-size:11px">-</span>') + '</td>'
+    + '<td class="num"><span id="sel' + it.id + '" class="' + kelasSelisih(it.selisih) + '">'
+      + teksSelisih(it.selisih) + '</span></td>'
+    + '<td><input type="text" class="sel-catatan" id="ok' + it.id + '" maxlength="255"'
+      + ' value="' + esc(it.catatan || "") + '" placeholder="Ket."'
+      + ' onchange="simpanItemOpname(' + it.id + ')"' + mati + '></td>'
+    + '</tr>'
+  ).join("");
+
+  if(!d.rows.length){
+    baris = '<tr class="empty-row"><td colspan="9">Tidak ada barang pada penyaring ini.</td></tr>';
+  }
+
+  wadah.innerHTML =
+    (terkunci
+      ? '<div class="info-box">Laporan ini sudah ditandai <b>selesai</b>, jadi angkanya dikunci. '
+        + 'Buka kembali statusnya bila memang perlu diubah.</div>'
+      : '<div class="info-box">Isi <b>stok hitung</b> dari hasil hitungan fisik dan <b>stok accurate</b> '
+        + 'dari catatan Accurate. Angkanya tersimpan begitu kamu pindah dari kolomnya.</div>')
+    + '<div class="table-card"><table style="min-width:1040px"><thead><tr>'
+    + ["SKU","Nama barang","Stok akhir","Stok hitung","Stok accurate","Dicek","Kategori","Selisih barang","Ket."]
+        .map((h,i)=>'<th'+(i>=2&&i<=5||i===7?' class="num"':'')+'>'+esc(h)+'</th>').join("")
+    + '</tr></thead><tbody>' + baris + '</tbody></table>'
+    + paginationBar(d.total, d.page, d.total_pages, "opnameItemGoPage")
+    + '</div>';
+}
+
+function teksSelisih(v){
+  if(v === null || v === undefined) return "-";
+  return (v > 0 ? "+" : "") + fmtNum(v);
+}
+function kelasSelisih(v){
+  if(v === null || v === undefined || v === 0) return "sel-nol";
+  return v > 0 ? "sel-lebih" : "sel-kurang";
+}
+
+async function simpanItemOpname(id){
+  const h = $("oh" + id), a = $("oa" + id), c = $("oc" + id), k = $("ok" + id);
+  if(!h) return;
+
+  setSaveStatus("saving");
+  try{
+    const res = await API.post("opname/item.php", {
+      id: id,
+      stok_hitung:   h.value,
+      stok_accurate: a ? a.value : "",
+      dicek:         c ? c.checked : false,
+      catatan:       k ? k.value : ""
+    });
+    setSaveStatus("ok");
+
+    const sel = $("sel" + id);
+    if(sel){
+      sel.textContent = teksSelisih(res.selisih);
+      sel.className   = kelasSelisih(res.selisih);
+    }
+  }catch(e){ tampilGalat(e); }
+}
+
+async function toggleStatusOpname(){
+  let d;
+  try{ d = await API.get("opname/detail.php", { id: opnameSesiId, page: 1 }); }
+  catch(e){ tampilGalat(e); return; }
+
+  const s = d.sesi;
+  setSaveStatus("saving");
+  try{
+    await API.post("opname/save.php", {
+      id: s.id, nama: s.nama, periode: s.periode, tanggal: s.tanggal,
+      catatan: s.catatan, status: s.status === "selesai" ? "draft" : "selesai"
+    });
+    setSaveStatus("ok");
+    refreshOpnameDetail();
+  }catch(e){ tampilGalat(e); }
 }
 
 /* ================================================================== */
@@ -2437,6 +2942,7 @@ function renderContent(){
   else if(tab==="keluar") renderTransaksiTab("keluar");
   else if(tab==="riwayat") renderRiwayat();
   else if(tab==="pertukaran") renderPertukaran();
+  else if(tab==="retur") renderRetur();
   else if(tab==="opname") renderOpname();
   else if(tab==="aktivitas") renderAktivitas();
   else if(tab==="master") renderMaster();

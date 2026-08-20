@@ -269,7 +269,7 @@ class PdfTabel
 
     private function kakiHalaman(int $nomor, int $total): string
     {
-        $kiri = 'Papan Kendali Gudang — ' . $this->judul;
+        $kiri = APP_NAMA . ' — ' . $this->judul;
         $kanan = 'Halaman ' . $nomor . ' dari ' . $total;
         $s  = "BT\n/F1 7.5 Tf\n0.42 0.47 0.49 rg\n";
         $s .= sprintf("1 0 0 1 %.2f %.2f Tm (%s) Tj\n", $this->tepi, $this->tepi - 4, $this->sandi($kiri));

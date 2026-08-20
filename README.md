@@ -1478,6 +1478,93 @@ jadi permintaan yang ditolak tidak meninggalkan jejak unduhan palsu.
 Log tidak bisa diubah atau dihapus lewat aplikasi — tidak ada endpoint
 tulis untuk `activity_log`.
 
+### Riwayat (rekap per barang)
+
+| Metode | Endpoint | Parameter | Respons |
+|---|---|---|---|
+| GET | `api/riwayat/list.php` | `q`, `kategori`, `dari`, `sampai`, `page` | `{ok, rows[], total_awal, total_masuk, total_keluar, total_akhir, kategori_options, …}` |
+
+Satu baris = satu **barang**, bukan satu transaksi. Dasarnya `master_barang`
+dengan agregat mutasi di-JOIN, sehingga barang yang tidak bergerak sama
+sekali tetap tampil — saat menutup periode, "tidak bergerak" juga jawaban
+yang dicari.
+
+```
+stok awal   = stok_awal master + seluruh mutasi SEBELUM tanggal "dari"
+stok masuk  = jumlah masuk di dalam rentang
+stok keluar = jumlah keluar di dalam rentang
+stok akhir  = stok awal + masuk - keluar
+```
+
+Bila `dari` kosong tidak ada apa pun sebelum rentang, jadi stok awalnya
+adalah `stok_awal` master itu sendiri. Query-nya ada di
+`includes/riwayat.php` dan dipakai bersama oleh layar dan ekspor PDF supaya
+angkanya tidak mungkin berbeda. Barang nonaktif ikut tampil selama belum
+dihapus: stoknya masih nyata ada di rak.
+
+### Retur
+
+| Metode | Endpoint | Parameter | Respons |
+|---|---|---|---|
+| GET | `api/retur/list.php` | `q`, `dari`, `sampai`, `status`, `page` | `{ok, rows[], total_unit, unit_ke_stok, unit_tertahan, status_options, status_masuk, …}` |
+| POST | `api/retur/save.php` | `{id?, tanggal, no_pesanan, barcode, sku, nama, jumlah, status, keterangan}` | `{ok, id, peringatan[], pesan}` |
+| POST | `api/retur/delete.php` | `{id}` | `{ok, pesan}` |
+
+Retur berstatus **Lengkap** ikut membuat satu baris `barang_masuk`
+berketerangan `Retur Masuk`, dan id-nya disimpan di `retur.masuk_id`.
+Keduanya selalu ditulis dalam satu transaksi:
+
+| Yang terjadi pada retur | Yang terjadi pada barang masuk |
+|---|---|
+| status jadi Lengkap | baris dibuat |
+| jumlah / tanggal / barang berubah | baris itu diperbarui |
+| status kembali belum selesai | baris itu di-soft delete |
+| status jadi Lengkap lagi | baris yang sama dihidupkan kembali |
+| retur dihapus | baris itu ikut dihapus |
+
+`masuk_id` sengaja **tidak** dikosongkan saat barisnya dihapus. Kalau
+dikosongkan, setiap kali status bolak-balik akan lahir baris barang masuk
+baru dan yang lama menumpuk sebagai sampah terhapus. Karena itu yang
+menentukan "retur ini menambah stok" adalah statusnya, bukan ada tidaknya
+`masuk_id` — dan server mengirim `status_masuk` supaya layar tidak perlu
+menebaknya dari teks.
+
+Barang dicari lewat barcode dulu, lalu SKU. Lembar retur gudang ditulis per
+SKU dan SKU tidak dijamin unik di master, jadi kecocokan ganda dipakai yang
+pertama sambil memberi peringatan.
+
+### Stok opname
+
+| Metode | Endpoint | Parameter | Respons |
+|---|---|---|---|
+| GET | `api/opname/list.php` | `q`, `page` | `{ok, rows[], kategori_options, …}` |
+| POST | `api/opname/save.php` | `{id?, nama, periode, tanggal, kategori?, status?, catatan?}` | `{ok, id, jml_item, pesan}` |
+| POST | `api/opname/delete.php` | `{id}` | `{ok, pesan}` |
+| GET | `api/opname/detail.php` | `id`, `q`, `kategori`, `hanya`, `page` | `{ok, sesi, rows[], ringkas, kategori_options, …}` |
+| POST | `api/opname/item.php` | `{id, stok_hitung?, stok_accurate?, dicek?, catatan?}` | `{ok, …, selisih}` |
+
+Membuat dan menghapus sesi hanya untuk admin; mengisi hasil hitungan boleh
+siapa saja yang bisa masuk, karena itu pekerjaan petugas gudang.
+
+Saat sesi dibuat, seluruh barang aktif yang lolos penyaring kategori
+disalin ke `opname_item` beserta **stok menurut sistem pada tanggal
+opname**. Angka itu dibekukan dan tidak dihitung ulang saat laporan dibuka:
+kalau dihitung ulang, laporan bulan lalu akan berubah sendiri setiap ada
+transaksi baru dan tidak bisa lagi dipakai sebagai bukti hitungan. Identitas
+barang (SKU, nama, kategori) ikut dibekukan dengan alasan yang sama.
+
+```
+selisih barang = stok hitung - stok accurate
+```
+
+Selisih tidak pernah disimpan — selalu dihitung saat ditampilkan, sehingga
+tidak mungkin basi terhadap kedua angka itu. `stok_hitung`/`stok_accurate`
+bernilai `NULL` berarti belum diisi, dan itu berbeda dari `0` yang berarti
+barangnya memang habis; mengirim string kosong mengembalikannya ke `NULL`.
+
+Sesi berstatus `selesai` menolak perubahan baris sampai statusnya dibuka
+kembali.
+
 ---
 
 ## 12. Rencana Kerja Bertahap
@@ -1833,6 +1920,8 @@ phpMyAdmin dari hPanel → pilih database → tab **Import**:
 3. sql/003_kategori_pengguna.sql  tabel kategori + 11 kategori awal
 4. sql/004_pertukaran.sql         tabel riwayat pertukaran produk
 5. sql/005_indeks_aktivitas.sql   indeks waktu untuk halaman Log aktivitas
+6. sql/006_retur.sql              tabel retur barang
+7. sql/007_opname.sql             tabel sesi + baris stok opname
 ```
 
 **Sejak versi ini migrasi berjalan otomatis.** Berkas di `sql/` diterapkan

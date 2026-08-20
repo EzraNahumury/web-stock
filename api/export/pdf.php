@@ -3,7 +3,7 @@
  * GET api/export/pdf.php — ekspor laporan sebagai PDF.
  *
  * Parameter: jenis = dashboard | masuk | keluar | riwayat | pertukaran |
- *                    master | aktivitas
+ *                    master | aktivitas | retur | opname
  *            filter mengikuti layar asalnya, jadi yang tercetak sama dengan
  *            yang sedang dilihat:
  *              dashboard : q, kategori, status
@@ -18,6 +18,7 @@ require_once __DIR__ . '/../../includes/helpers.php';
 require_once __DIR__ . '/../../includes/response.php';
 require_once __DIR__ . '/../../includes/pdf.php';
 require_once __DIR__ . '/../../includes/aktivitas.php';
+require_once __DIR__ . '/../../includes/riwayat.php';
 
 wajibMetode('GET');
 
@@ -61,7 +62,8 @@ $oleh  = (userSaatIni()['nama_lengkap'] ?? '-');
 
 // Pencetakan laporan ikut masuk jejak aktivitas. Di gudang, siapa mengunduh
 // data apa dan kapan sama pentingnya dengan siapa mengubahnya.
-if (in_array($jenis, ['dashboard', 'masuk', 'keluar', 'riwayat', 'pertukaran', 'master', 'aktivitas'], true)) {
+if (in_array($jenis, ['dashboard', 'masuk', 'keluar', 'riwayat', 'pertukaran',
+                     'master', 'aktivitas', 'retur', 'opname'], true)) {
     catatAktivitas('ekspor', 'laporan', null, array_filter([
         'jenis'  => $jenis,
         'dari'   => $dari,
@@ -225,105 +227,47 @@ switch ($jenis) {
 
     /* ------------------------------------------------------------------ */
     case 'riwayat':
-        $arahMinta = ambilStr($_GET, 'arah', 10);
-        if (!in_array($arahMinta, ['masuk', 'keluar'], true)) {
-            $arahMinta = 'semua';
-        }
-
-        $bagian = [];
-        $params = [];
-        foreach (['masuk', 'keluar'] as $arah) {
-            if ($arahMinta !== 'semua' && $arahMinta !== $arah) {
-                continue;
-            }
-            $tabel = $arah === 'masuk' ? 'barang_masuk' : 'barang_keluar';
-            $isKel = $arah === 'keluar';
-
-            $where = ['t.deleted_at IS NULL'];
-            if ($q !== '') {
-                $pola = polaLike($q);
-                if ($isKel) {
-                    $where[] = '(t.nama LIKE ? OR t.barcode LIKE ? OR t.no_pesanan LIKE ?)';
-                    array_push($params, $pola, $pola, $pola);
-                } else {
-                    $where[] = '(t.nama LIKE ? OR t.barcode LIKE ?)';
-                    array_push($params, $pola, $pola);
-                }
-            }
-            if ($dari !== '' && ambilTanggal(['d' => $dari], 'd') !== null) {
-                $where[] = 't.tanggal >= ?';
-                $params[] = $dari;
-            }
-            if ($sampai !== '' && ambilTanggal(['d' => $sampai], 'd') !== null) {
-                $where[] = 't.tanggal <= ?';
-                $params[] = $sampai;
-            }
-            $noPesanan = $isKel ? 't.no_pesanan' : "''";
-            $bagian[] = "(SELECT '$arah' AS arah, t.id, t.tanggal, t.barcode, t.nama,
-                                 t.jumlah, t.keterangan, t.created_at, $noPesanan AS no_pesanan,
-                                 t.master_id, t.user_id
-                            FROM $tabel t WHERE " . implode(' AND ', $where) . ')';
-        }
-        $gabung = implode(' UNION ALL ', $bagian);
-
-        $data = dbAll("SELECT g.*, u.nama_lengkap AS oleh
-                         FROM ($gabung) g LEFT JOIN users u ON u.id = g.user_id
-                        ORDER BY g.tanggal DESC, g.created_at DESC, g.id DESC", $params);
-
-        // Saldo stok pada akhir tanggal tiap catatan.
-        $saldo = saldoHarian(array_column($data, 'master_id'));
+        $f    = filterRiwayat($_GET);
+        $data = barisRiwayat($f);
+        $tot  = totalRiwayat($f);
 
         $pdf = new PdfTabel('lanskap');
         $pdf->siapkan('Riwayat Keluar Masuk Barang', [
-            'Dicetak' => $waktu,
-            'Oleh'    => $oleh,
-            'Periode' => ($dari !== '' || $sampai !== '')
-                ? (($dari !== '' ? $dari : 'awal') . ' s/d ' . ($sampai !== '' ? $sampai : 'kini'))
-                : 'Semua',
-            'Arah'    => $arahMinta === 'semua' ? 'Masuk & keluar' : ucfirst($arahMinta),
-            'Baris'   => count($data),
+            'Dicetak'  => $waktu,
+            'Oleh'     => $oleh,
+            'Periode'  => ($f['dari'] !== '' || $f['sampai'] !== '')
+                ? (($f['dari'] !== '' ? $f['dari'] : 'awal') . ' s/d ' . ($f['sampai'] !== '' ? $f['sampai'] : 'kini'))
+                : 'Sejak awal',
+            'Kategori' => $f['kategori'] !== '' && $f['kategori'] !== 'Semua' ? $f['kategori'] : 'Semua',
+            'Barang'   => count($data),
         ], [
-            ['label' => 'Tanggal',      'lebar' => 8],
-            ['label' => 'Barcode',      'lebar' => 11],
-            ['label' => 'Nama barang',  'lebar' => 26],
-            ['label' => 'Masuk',        'lebar' => 6,  'rata' => 'kanan'],
-            ['label' => 'Keluar',       'lebar' => 6,  'rata' => 'kanan'],
-            ['label' => 'Stok akhir',   'lebar' => 7,  'rata' => 'kanan'],
-            ['label' => 'Keterangan',   'lebar' => 10],
-            ['label' => 'No. Pesanan',  'lebar' => 13],
-            ['label' => 'Dicatat oleh', 'lebar' => 11],
+            ['label' => 'SKU',         'lebar' => 9],
+            ['label' => 'Barcode',     'lebar' => 12],
+            ['label' => 'Nama barang', 'lebar' => 32],
+            ['label' => 'Kategori',    'lebar' => 9],
+            ['label' => 'Stok awal',   'lebar' => 8, 'rata' => 'kanan'],
+            ['label' => 'Stok masuk',  'lebar' => 8, 'rata' => 'kanan'],
+            ['label' => 'Stok keluar', 'lebar' => 8, 'rata' => 'kanan'],
+            ['label' => 'Stok akhir',  'lebar' => 8, 'rata' => 'kanan'],
         ]);
 
-        $tMasuk = 0;
-        $tKeluar = 0;
         foreach ($data as $r) {
-            $masuk = $r['arah'] === 'masuk';
-            if ($masuk) {
-                $tMasuk += (int)$r['jumlah'];
-            } else {
-                $tKeluar += (int)$r['jumlah'];
-            }
-            $mid = $r['master_id'] === null ? null : (int)$r['master_id'];
-            $akhir = ($mid !== null && isset($saldo[$mid][$r['tanggal']]))
-                ? number_format($saldo[$mid][$r['tanggal']], 0, ',', '.')
-                : '-';
-
             $pdf->baris([
-                date('d/m/Y', strtotime($r['tanggal'])),
+                $r['sku'],
                 $r['barcode'],
                 $r['nama'],
-                $masuk ? ['+' . number_format((int)$r['jumlah'], 0, ',', '.'), [14, 128, 96]] : '',
-                $masuk ? '' : ['-' . number_format((int)$r['jumlah'], 0, ',', '.'), [178, 58, 46]],
-                $akhir,
-                $r['keterangan'],
-                (string)($r['no_pesanan'] ?? ''),
-                (string)($r['oleh'] ?? '-'),
+                $r['kategori'],
+                number_format($r['stok_awal'], 0, ',', '.'),
+                $r['masuk']  > 0 ? ['+' . number_format($r['masuk'], 0, ',', '.'), [14, 128, 96]] : '-',
+                $r['keluar'] > 0 ? ['-' . number_format($r['keluar'], 0, ',', '.'), [178, 58, 46]] : '-',
+                number_format($r['stok_akhir'], 0, ',', '.'),
             ]);
         }
-        $pdf->ringkasan(count($data) . ' catatan  ·  masuk '
-            . number_format($tMasuk, 0, ',', '.') . ' pcs  ·  keluar '
-            . number_format($tKeluar, 0, ',', '.') . ' pcs  ·  selisih '
-            . number_format($tMasuk - $tKeluar, 0, ',', '.') . ' pcs');
+        $pdf->ringkasan(count($data) . ' barang  ·  awal '
+            . number_format($tot['awal'], 0, ',', '.') . '  ·  masuk '
+            . number_format($tot['masuk'], 0, ',', '.') . '  ·  keluar '
+            . number_format($tot['keluar'], 0, ',', '.') . '  ·  akhir '
+            . number_format($tot['akhir'], 0, ',', '.') . ' pcs');
         $pdf->kirim('riwayat-barang-' . date('Ymd-His') . '.pdf');
         break;
 
@@ -513,6 +457,168 @@ switch ($jenis) {
         }
         $pdf->ringkasan(count($data) . ' aktivitas tercatat');
         $pdf->kirim('log-aktivitas-' . date('Ymd-His') . '.pdf');
+        break;
+
+    /* ------------------------------------------------------------------ */
+    case 'retur':
+        $status = ambilStr($_GET, 'status', 30);
+
+        $where  = ['r.deleted_at IS NULL'];
+        $params = [];
+        if ($q !== '') {
+            $where[] = '(r.nama LIKE ? OR r.barcode LIKE ? OR r.sku LIKE ?
+                         OR r.no_pesanan LIKE ? OR r.keterangan LIKE ?)';
+            $pola = polaLike($q);
+            for ($i = 0; $i < 5; $i++) {
+                $params[] = $pola;
+            }
+        }
+        if ($dari !== '' && ambilTanggal(['d' => $dari], 'd') !== null) {
+            $where[] = 'r.tanggal >= ?';
+            $params[] = $dari;
+        }
+        if ($sampai !== '' && ambilTanggal(['d' => $sampai], 'd') !== null) {
+            $where[] = 'r.tanggal <= ?';
+            $params[] = $sampai;
+        }
+        if ($status !== '' && in_array($status, STATUS_RETUR, true)) {
+            $where[] = 'r.status = ?';
+            $params[] = $status;
+        }
+
+        $data = dbAll(
+            'SELECT r.*, u.nama_lengkap AS oleh
+               FROM retur r LEFT JOIN users u ON u.id = r.user_id
+              WHERE ' . implode(' AND ', $where) . '
+              ORDER BY r.tanggal DESC, r.id DESC',
+            $params
+        );
+
+        $pdf = new PdfTabel('lanskap');
+        $pdf->siapkan('Laporan Retur Barang', [
+            'Dicetak' => $waktu,
+            'Oleh'    => $oleh,
+            'Periode' => ($dari !== '' || $sampai !== '')
+                ? (($dari !== '' ? $dari : 'awal') . ' s/d ' . ($sampai !== '' ? $sampai : 'kini'))
+                : 'Semua',
+            'Status'  => $status !== '' ? $status : 'Semua',
+            'Baris'   => count($data),
+        ], [
+            ['label' => 'Tanggal',          'lebar' => 9],
+            ['label' => 'No. Pesanan',      'lebar' => 16],
+            ['label' => 'SKU',              'lebar' => 9],
+            ['label' => 'Nama produk',      'lebar' => 28],
+            ['label' => 'Qty',              'lebar' => 5, 'rata' => 'kanan'],
+            ['label' => 'Keterangan retur', 'lebar' => 14],
+            ['label' => 'Ket.',             'lebar' => 12],
+            ['label' => 'Dicatat oleh',     'lebar' => 11],
+        ]);
+
+        $totalQty = 0;
+        $qtyStok  = 0;
+        foreach ($data as $r) {
+            $totalQty += (int)$r['jumlah'];
+            $masukStok = $r['status'] === STATUS_RETUR_MASUK;
+            if ($masukStok) {
+                $qtyStok += (int)$r['jumlah'];
+            }
+            $pdf->baris([
+                date('d/m/Y', strtotime($r['tanggal'])),
+                $r['no_pesanan'],
+                $r['sku'],
+                $r['nama'],
+                number_format((int)$r['jumlah'], 0, ',', '.'),
+                [$r['status'], $masukStok ? [14, 128, 96] : [178, 58, 46]],
+                $r['keterangan'],
+                (string)($r['oleh'] ?? '-'),
+            ]);
+        }
+        $pdf->ringkasan(count($data) . ' retur  ·  total '
+            . number_format($totalQty, 0, ',', '.') . ' pcs  ·  masuk stok '
+            . number_format($qtyStok, 0, ',', '.') . ' pcs  ·  tertahan '
+            . number_format($totalQty - $qtyStok, 0, ',', '.') . ' pcs');
+        $pdf->kirim('laporan-retur-' . date('Ymd-His') . '.pdf');
+        break;
+
+    /* ------------------------------------------------------------------ */
+    case 'opname':
+        $sesiId = ambilInt($_GET, 'id', 0);
+        $sesi   = $sesiId > 0
+            ? dbOne('SELECT * FROM opname_sesi WHERE id = ? AND deleted_at IS NULL', [$sesiId])
+            : null;
+        if ($sesi === null) {
+            http_response_code(404);
+            exit('Sesi opname tidak ditemukan.');
+        }
+
+        $where  = ['i.sesi_id = ?'];
+        $params = [$sesiId];
+        if ($q !== '') {
+            $where[] = '(i.nama LIKE ? OR i.sku LIKE ? OR i.barcode LIKE ?)';
+            $pola = polaLike($q);
+            array_push($params, $pola, $pola, $pola);
+        }
+        if ($kategori !== '' && $kategori !== 'Semua') {
+            $where[] = 'i.kategori = ?';
+            $params[] = $kategori;
+        }
+
+        $data = dbAll(
+            'SELECT * FROM opname_item i WHERE ' . implode(' AND ', $where)
+            . ' ORDER BY i.kategori, i.nama, i.id',
+            $params
+        );
+
+        $pdf = new PdfTabel('lanskap');
+        $pdf->siapkan($sesi['nama'], [
+            'Dicetak'  => $waktu,
+            'Oleh'     => $oleh,
+            'Periode'  => $sesi['periode'] !== '' ? $sesi['periode'] : date('d/m/Y', strtotime($sesi['tanggal'])),
+            'Kategori' => $kategori !== '' && $kategori !== 'Semua'
+                ? $kategori
+                : ($sesi['kategori'] !== '' ? $sesi['kategori'] : 'Semua'),
+            'Baris'    => count($data),
+        ], [
+            ['label' => 'SKU',            'lebar' => 9],
+            ['label' => 'Nama barang',    'lebar' => 31],
+            ['label' => 'Stok akhir',     'lebar' => 8,  'rata' => 'kanan'],
+            ['label' => 'Stok hitung',    'lebar' => 8,  'rata' => 'kanan'],
+            ['label' => 'Stok accurate',  'lebar' => 9,  'rata' => 'kanan'],
+            ['label' => 'Dicek',          'lebar' => 6],
+            ['label' => 'Kategori',       'lebar' => 9],
+            ['label' => 'Selisih barang', 'lebar' => 9,  'rata' => 'kanan'],
+        ]);
+
+        $totalSelisih = 0;
+        $adaSelisih   = 0;
+        foreach ($data as $r) {
+            $h = $r['stok_hitung']   === null ? null : (int)$r['stok_hitung'];
+            $a = $r['stok_accurate'] === null ? null : (int)$r['stok_accurate'];
+            $selisih = ($h !== null && $a !== null) ? $h - $a : null;
+            if ($selisih !== null) {
+                $totalSelisih += $selisih;
+                if ($selisih !== 0) {
+                    $adaSelisih++;
+                }
+            }
+            $pdf->baris([
+                $r['sku'],
+                $r['nama'],
+                number_format((int)$r['stok_sistem'], 0, ',', '.'),
+                $h === null ? '-' : number_format($h, 0, ',', '.'),
+                $a === null ? '-' : number_format($a, 0, ',', '.'),
+                (int)$r['dicek'] === 1 ? ['Ya', [14, 128, 96]] : '',
+                $r['kategori'],
+                $selisih === null
+                    ? '-'
+                    : [($selisih > 0 ? '+' : '') . number_format($selisih, 0, ',', '.'),
+                       $selisih === 0 ? null : ($selisih > 0 ? [199, 127, 14] : [178, 58, 46])],
+            ]);
+        }
+        $pdf->ringkasan(count($data) . ' barang  ·  ' . $adaSelisih
+            . ' berselisih  ·  jumlah selisih '
+            . ($totalSelisih > 0 ? '+' : '') . number_format($totalSelisih, 0, ',', '.') . ' pcs');
+        $pdf->kirim('stok-opname-' . date('Ymd-His') . '.pdf');
         break;
 
     /* ------------------------------------------------------------------ */

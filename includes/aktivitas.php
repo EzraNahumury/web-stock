@@ -24,6 +24,8 @@ function modulAktivitas(string $entitas): string
         'pengguna'  => 'Pengguna',
         'transaksi' => 'Transaksi',
         'laporan'   => 'Laporan',
+        'retur'     => 'Retur',
+        'opname'    => 'Stok opname',
     ];
     return $peta[$entitas] ?? ucfirst($entitas);
 }
@@ -55,6 +57,8 @@ function judulLaporan(string $jenis): string
         'pertukaran' => 'Riwayat pertukaran barang',
         'master'     => 'Master barang',
         'aktivitas'  => 'Log aktivitas',
+        'retur'      => 'Laporan retur',
+        'opname'     => 'Laporan stok opname',
     ];
     return $peta[$jenis] ?? $jenis;
 }
@@ -98,6 +102,12 @@ function labelAktivitas(array $r): array
         'update/pengguna'    => 'Ubah pengguna',
         'delete/pengguna'    => 'Hapus pengguna',
         'update/transaksi'   => 'Rapikan nama transaksi',
+        'create/retur'       => 'Catat retur',
+        'update/retur'       => 'Ubah retur',
+        'delete/retur'       => 'Hapus retur',
+        'create/opname'      => 'Buat sesi stok opname',
+        'update/opname'      => 'Ubah sesi stok opname',
+        'delete/opname'      => 'Hapus sesi stok opname',
         'ekspor/laporan'     => 'Unduh laporan PDF',
     ];
     $teks = $judul[$kunci] ?? (ucfirst($aksi) . ' ' . modulAktivitas($entitas));
@@ -143,6 +153,18 @@ function labelAktivitas(array $r): array
     }
     if (isset($d['diubah'])) {
         $bagian[] = number_format((int)$d['diubah'], 0, ',', '.') . ' catatan disamakan';
+    }
+    if (isset($d['no_pesanan']) && $d['no_pesanan'] !== '') {
+        $bagian[] = 'pesanan ' . $d['no_pesanan'];
+    }
+    if (isset($d['status']) && $d['status'] !== '') {
+        $bagian[] = (string)$d['status'];
+    }
+    if (isset($d['periode']) && $d['periode'] !== '') {
+        $bagian[] = 'periode ' . $d['periode'];
+    }
+    if (isset($d['kategori']) && $d['kategori'] !== '') {
+        $bagian[] = 'kategori ' . $d['kategori'];
     }
     if (isset($d['tanggal']) && $d['tanggal'] !== '') {
         $bagian[] = 'tanggal ' . $d['tanggal'];

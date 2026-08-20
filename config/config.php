@@ -9,7 +9,7 @@ require_once __DIR__ . '/database.php';
 
 date_default_timezone_set('Asia/Jakarta');
 
-define('APP_NAMA', 'Stok Fingertape & Perlengkapan');
+define('APP_NAMA', 'Warehouse AVA');
 define('APP_VERSI', '1.0.0');
 
 // Jumlah baris per halaman (mengikuti PAGE_SIZE prototipe).
@@ -40,6 +40,15 @@ define('KATEGORI_OPTIONS', [
 ]);
 define('KET_MASUK',  ['Barang Baru', 'Restock', 'Retur Masuk', 'Lainnya']);
 define('KET_KELUAR', ['Pesanan MP', 'Retur', 'Rusak / Reject', 'Lainnya']);
+
+// Status retur. Hanya "Lengkap" yang mengembalikan barang ke stok; sisanya
+// belum bisa diproses, jadi stoknya belum boleh ikut bertambah.
+define('STATUS_RETUR', ['Lengkap', 'Sistem Belum Selesai']);
+define('STATUS_RETUR_MASUK', 'Lengkap');
+
+// Keterangan yang dipakai baris barang_masuk hasil retur. Harus salah satu
+// dari KET_MASUK supaya lolos validasi yang sama dengan input manual.
+define('KET_RETUR_MASUK', 'Retur Masuk');
 
 // Boleh mencatat barang keluar melebihi stok tersedia? (audit D3)
 // false = tolak; true = izinkan tapi tetap beri peringatan di respons.

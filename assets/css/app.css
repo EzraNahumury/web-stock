@@ -1,5 +1,5 @@
 /* ==========================================================================
- * app.css — Papan Kendali Gudang
+ * app.css — Warehouse AVA
  *
  * Bahasa visual "kertas industri": kertas abu, kartu putih, tinta gelap
  * kebiruan, aksen hijau. Motif penandanya barcode — dipakai di tanda merek
@@ -409,6 +409,31 @@ tbody tr:hover{ background:#FAFCFC; }
 .log-judul{ font-weight:600; font-size:13px; }
 .log-judul.bahaya{ color:var(--danger); }
 .log-judul.aman{ color:var(--safe); }
+
+/* --- Stok opname: sel yang bisa diisi langsung di tabel --- */
+/* Angka diketik di tempat, bukan lewat dialog per baris: satu sesi opname
+   bisa memuat ribuan barang, dan membuka dialog seribu kali tidak mungkin. */
+.sel-angka{
+  width:82px; text-align:right; padding:5px 7px; font-size:12.5px;
+  font-family:'IBM Plex Mono',monospace;
+  border:1px solid var(--line); border-radius:7px; background:var(--card);
+  transition:border-color .15s var(--ease), box-shadow .15s var(--ease);
+}
+.sel-catatan{
+  width:130px; padding:5px 7px; font-size:12px;
+  border:1px solid var(--line); border-radius:7px; background:var(--card);
+  transition:border-color .15s var(--ease), box-shadow .15s var(--ease);
+}
+.sel-angka:focus, .sel-catatan:focus{
+  outline:none; border-color:var(--biru); box-shadow:0 0 0 3px rgba(47,107,127,.16);
+}
+.sel-angka:disabled, .sel-catatan:disabled{ background:var(--paper); color:var(--slateLo); }
+.sel-cek{ width:16px; height:16px; accent-color:var(--safe); cursor:pointer; }
+.sel-cek:disabled{ cursor:default; }
+
+.sel-nol{ color:var(--slateLo); font-weight:400; }
+.sel-lebih{ color:var(--amber); font-weight:700; }
+.sel-kurang{ color:var(--danger); font-weight:700; }
 
 .gauge{ width:78px; height:5px; background:#EDF2F4; border-radius:4px; position:relative; overflow:hidden; margin-left:auto; margin-top:4px; }
 .gauge-fill{ height:100%; border-radius:4px; transition:width .5s var(--ease); }

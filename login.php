@@ -76,8 +76,8 @@ $csrf = csrfToken();
         </svg>
       </div>
       <div>
-        <div class="merk-nama">Stok Fingertape<br>&amp; Perlengkapan</div>
-        <div class="merk-sub">Papan kendali gudang</div>
+        <div class="merk-nama">Warehouse AVA</div>
+        <div class="merk-sub">Kendali stok gudang</div>
       </div>
     </div>
 

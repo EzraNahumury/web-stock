@@ -1,6 +1,6 @@
 <?php
 /**
- * index.php — halaman utama Papan Kendali Gudang.
+ * index.php — halaman utama Warehouse AVA.
  *
  * Hanya merender kerangka (sidebar, bilah atas, wadah isi) dan menyuntikkan
  * token CSRF. Seluruh isi panel dirender assets/js/app.js dari endpoint API.
@@ -39,7 +39,7 @@ if ($inisial === '') {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title><?= e(APP_NAMA) ?> — Papan Kendali Gudang</title>
+<title><?= e(APP_NAMA) ?></title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
@@ -62,8 +62,8 @@ if ($inisial === '') {
         </svg>
       </div>
       <div class="merk-teks">
-        <div class="merk-nama">Stok Fingertape</div>
-        <div class="merk-sub">Papan kendali gudang</div>
+        <div class="merk-nama">Warehouse AVA</div>
+        <div class="merk-sub">Kendali stok gudang</div>
       </div>
       <button type="button" class="sisi-tutup" id="sisiTutup" aria-label="Tutup menu">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -125,6 +125,7 @@ if ($inisial === '') {
 <script>
   window.CSRF_TOKEN = <?= json_encode($csrf) ?>;
   window.APP_USER   = <?= json_encode($user, JSON_UNESCAPED_UNICODE) ?>;
+  window.APP_NAMA   = <?= json_encode(APP_NAMA, JSON_UNESCAPED_UNICODE) ?>;
   // Kategori dibaca dari tabel `kategori` (dikelola lewat menu Master).
   // Keterangan masuk/keluar tetap dari config/config.php.
   window.KATEGORI_OPTIONS = <?= json_encode(daftarKategori(), JSON_UNESCAPED_UNICODE) ?>;
