@@ -2,7 +2,7 @@
 /**
  * POST api/opname/item.php — isi hasil hitungan satu baris opname.
  *
- * Body: { id, stok_hitung?, stok_accurate?, dicek?, catatan? }
+ * Body: { id, stok_hitung?, stok_accurate?, dicek?, penyesuaian?, petugas?, catatan? }
  *
  * Field yang tidak dikirim tidak diubah, dan mengirim string kosong berarti
  * "kosongkan lagi" (kembali NULL = belum dihitung). Keduanya perlu dibedakan
@@ -60,6 +60,12 @@ $hitung   = $angka($in, 'stok_hitung',   $item['stok_hitung']   === null ? null 
 $accurate = $angka($in, 'stok_accurate', $item['stok_accurate'] === null ? null : (int)$item['stok_accurate']);
 $dicek    = array_key_exists('dicek', $in) ? (!empty($in['dicek']) ? 1 : 0) : (int)$item['dicek'];
 $catatan  = array_key_exists('catatan', $in) ? ambilStr($in, 'catatan', 255) : (string)$item['catatan'];
+$petugas  = array_key_exists('petugas', $in) ? ambilStr($in, 'petugas', 100) : (string)$item['petugas'];
+
+// Penyesuaian hanya mencatat keputusan; stok tidak ikut berubah dari sini.
+$penyesuaian = array_key_exists('penyesuaian', $in)
+    ? pilihanValid(ambilStr($in, 'penyesuaian', 30), PENYESUAIAN_OPNAME)
+    : (string)$item['penyesuaian'];
 
 if ($hitung !== null && $hitung < 0) {
     jsonError('Stok hitung tidak boleh negatif.');
@@ -70,9 +76,10 @@ if ($accurate !== null && $accurate < 0) {
 
 dbExec(
     'UPDATE opname_item
-        SET stok_hitung = ?, stok_accurate = ?, dicek = ?, catatan = ?
+        SET stok_hitung = ?, stok_accurate = ?, dicek = ?,
+            penyesuaian = ?, petugas = ?, catatan = ?
       WHERE id = ?',
-    [$hitung, $accurate, $dicek, $catatan, $id]
+    [$hitung, $accurate, $dicek, $penyesuaian, $petugas, $catatan, $id]
 );
 
 $selisih = ($hitung !== null && $accurate !== null) ? $hitung - $accurate : null;
@@ -82,6 +89,9 @@ jsonOk([
     'stok_hitung'   => $hitung,
     'stok_accurate' => $accurate,
     'dicek'         => $dicek === 1,
+    'penyesuaian'   => $penyesuaian,
+    'disesuaikan'   => $penyesuaian === PENYESUAIAN_DISESUAIKAN,
+    'petugas'       => $petugas,
     'catatan'       => $catatan,
     'selisih'       => $selisih,
 ]);

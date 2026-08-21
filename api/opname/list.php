@@ -42,13 +42,17 @@ $rows = dbAll(
             (SELECT COUNT(*) FROM opname_item i WHERE i.sesi_id = s.id AND i.dicek = 1) AS jml_dicek,
             (SELECT COUNT(*) FROM opname_item i WHERE i.sesi_id = s.id
                               AND i.stok_hitung IS NOT NULL AND i.stok_accurate IS NOT NULL
-                              AND i.stok_hitung <> i.stok_accurate) AS jml_selisih
+                              AND i.stok_hitung <> i.stok_accurate) AS jml_selisih,
+            (SELECT COUNT(*) FROM opname_item i WHERE i.sesi_id = s.id
+                              AND i.penyesuaian = ?) AS jml_disesuaikan
        FROM opname_sesi s
        LEFT JOIN users u ON u.id = s.user_id
      $sqlWhere
      ORDER BY s.tanggal DESC, s.id DESC
      LIMIT " . PAGE_SIZE . " OFFSET $offset",
-    $params
+    // Parameter subquery mendahului parameter WHERE, mengikuti urutan
+    // kemunculannya di SQL.
+    array_merge([PENYESUAIAN_DISESUAIKAN], $params)
 );
 
 foreach ($rows as &$r) {
@@ -56,6 +60,7 @@ foreach ($rows as &$r) {
     $r['jml_item']    = (int)$r['jml_item'];
     $r['jml_dicek']   = (int)$r['jml_dicek'];
     $r['jml_selisih'] = (int)$r['jml_selisih'];
+    $r['jml_disesuaikan'] = (int)$r['jml_disesuaikan'];
 }
 unset($r);
 

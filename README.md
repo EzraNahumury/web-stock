@@ -1541,7 +1541,8 @@ pertama sambil memberi peringatan.
 | POST | `api/opname/save.php` | `{id?, nama, periode, tanggal, kategori?, status?, catatan?}` | `{ok, id, jml_item, pesan}` |
 | POST | `api/opname/delete.php` | `{id}` | `{ok, pesan}` |
 | GET | `api/opname/detail.php` | `id`, `q`, `kategori`, `hanya`, `page` | `{ok, sesi, rows[], ringkas, kategori_options, …}` |
-| POST | `api/opname/item.php` | `{id, stok_hitung?, stok_accurate?, dicek?, catatan?}` | `{ok, …, selisih}` |
+| POST | `api/opname/item.php` | `{id, stok_hitung?, stok_accurate?, dicek?, penyesuaian?, petugas?, catatan?}` | `{ok, …, selisih}` |
+| POST | `api/opname/massal.php` | `{id, q?, kategori?, hanya?, petugas?, penyesuaian?, pratinjau?}` | `{ok, jumlah, cocok, pesan}` |
 
 Membuat dan menghapus sesi hanya untuk admin; mengisi hasil hitungan boleh
 siapa saja yang bisa masuk, karena itu pekerjaan petugas gudang.
@@ -1564,6 +1565,40 @@ barangnya memang habis; mengirim string kosong mengembalikannya ke `NULL`.
 
 Sesi berstatus `selesai` menolak perubahan baris sampai statusnya dibuka
 kembali.
+
+**Penyesuaian** mencatat keputusan atas selisihnya — `Tidak Disesuaikan`
+atau `Stok Disesuaikan`. Ini catatan, bukan pemicu: memilih
+`Stok Disesuaikan` **tidak mengubah stok**. Pembetulan stok tetap lewat
+Barang masuk / Barang keluar, supaya setiap pergerakan stok punya satu
+jalur yang sama dan terbaca di Riwayat. Kalau opname boleh menggeser stok
+sendiri, akan ada dua sumber pergerakan yang tidak bisa direkonsiliasi.
+
+**Petugas** menyimpan nama orang yang menghitung baris itu. Karena satu
+sesi bisa memuat ribuan barang yang dihitung orang yang sama,
+`api/opname/massal.php` mengisikannya sekaligus untuk seluruh baris yang
+sedang tersaring — penyaringnya dibangun di `includes/opname.php` dan
+dipakai bersama layar, supaya tombolnya tidak mungkin mengenai baris yang
+tidak sedang terlihat. Antarmuka memanggilnya dengan `pratinjau` lebih dulu
+dan menyebut jumlah barisnya di dialog konfirmasi sebelum menimpa apa pun.
+Field yang tidak dikirim tidak disentuh, jadi mengisi petugas tidak
+diam-diam ikut menimpa keputusan penyesuaian.
+
+---
+
+### Pemeriksaan sebelum commit
+
+```
+php tools\uji_menu.php
+```
+
+Memastikan setiap menu di `TABS` punya cabang di `renderContent()` dan
+fungsi penggambarnya benar-benar ada di `app.js`. Ada karena satu
+penyuntingan pernah menghapus seluruh blok "Log aktivitas": menunya tetap
+tampil, dan yang terjadi saat diklik hanya `ReferenceError` di konsol —
+judul halaman berganti sementara isi halaman sebelumnya tetap terpampang.
+Tidak ada yang gagal dengan berisik, jadi lolos sampai dipakai. Pemeriksaan
+ini hanya membaca teks `app.js`: tanpa Node, tanpa browser, tanpa paket
+tambahan.
 
 ---
 
@@ -1922,6 +1957,7 @@ phpMyAdmin dari hPanel → pilih database → tab **Import**:
 5. sql/005_indeks_aktivitas.sql   indeks waktu untuk halaman Log aktivitas
 6. sql/006_retur.sql              tabel retur barang
 7. sql/007_opname.sql             tabel sesi + baris stok opname
+8. sql/008_opname_penyesuaian.sql kolom penyesuaian + petugas
 ```
 
 **Sejak versi ini migrasi berjalan otomatis.** Berkas di `sql/` diterapkan
@@ -1937,11 +1973,12 @@ syarat lewatnya sendiri:
 -- @lewati-jika-tabel: master_barang     lewati bila tabel itu sudah ada
 -- @lewati-jika-terisi: master_barang    lewati bila tabel itu sudah berisi
 -- @lewati-jika-indeks: activity_log.idx_waktu   lewati bila indeks sudah ada
+-- @lewati-jika-kolom: opname_item.penyesuaian   lewati bila kolom sudah ada
 ```
 
-Penjaga ketiga ada karena `ADD INDEX` tidak punya bentuk `IF NOT EXISTS`
-yang berlaku di MySQL maupun MariaDB sekaligus; keberadaan indeksnya
-diperiksa dari PHP lewat `information_schema.STATISTICS`.
+Dua penjaga terakhir ada karena `ADD INDEX` dan `ADD COLUMN` tidak punya
+bentuk `IF NOT EXISTS` yang berlaku di MySQL maupun MariaDB sekaligus;
+keberadaannya diperiksa dari PHP lewat `information_schema`.
 
 Database yang sudah berisi data otomatis ter-baseline: berkas lama dicatat
 sebagai dilewati tanpa dijalankan, dan hanya migrasi baru yang benar-benar

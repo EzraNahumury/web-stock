@@ -140,6 +140,52 @@ function konfirmasi(judul, pesan, labelYa){
 }
 
 /**
+ * Dialog satu isian teks. Mengembalikan isinya, atau null bila dibatalkan.
+ *
+ * Dipakai menggantikan prompt() bawaan browser: dialog bawaan membekukan
+ * seluruh halaman, tidak bisa ditata, dan tampil berbeda di tiap browser.
+ */
+function mintaTeks(judul, label, nilaiAwal, labelYa){
+  return new Promise(resolve => {
+    const bg = document.createElement("div");
+    bg.className = "modal-bg";
+    bg.innerHTML =
+      '<div class="modal" role="dialog" aria-modal="true">'
+      + '<h3>' + esc(judul) + '</h3>'
+      + '<label class="field-label" for="mintaTeksInput">' + esc(label) + '</label>'
+      + '<input type="text" id="mintaTeksInput" maxlength="100" value="' + esc(nilaiAwal || "") + '">'
+      + '<div class="modal-act">'
+      + '<button type="button" class="btn ghost" data-act="batal">Batal</button>'
+      + '<button type="button" class="btn" data-act="ya">' + esc(labelYa || "Lanjut") + '</button>'
+      + '</div></div>';
+
+    function tutup(hasil){
+      document.removeEventListener("keydown", onKey);
+      if(bg.parentNode) bg.parentNode.removeChild(bg);
+      resolve(hasil);
+    }
+    function nilai(){
+      const el = bg.querySelector("#mintaTeksInput");
+      return el ? el.value : "";
+    }
+    function onKey(ev){
+      if(ev.key === "Escape") tutup(null);
+      if(ev.key === "Enter" && bg.contains(document.activeElement)) tutup(nilai());
+    }
+
+    bg.addEventListener("click", ev => {
+      const act = ev.target.getAttribute && ev.target.getAttribute("data-act");
+      if(act === "ya") tutup(nilai());
+      else if(act === "batal" || ev.target === bg) tutup(null);
+    });
+    document.addEventListener("keydown", onKey);
+    document.body.appendChild(bg);
+    const el = bg.querySelector("#mintaTeksInput");
+    if(el){ el.focus(); el.select(); }
+  });
+}
+
+/**
  * Modal isi bebas (bukan konfirmasi). Mengembalikan objek dengan .tutup()
  * dan .isi(html) supaya isinya bisa diganti setelah data tiba.
  */
@@ -470,7 +516,7 @@ function renderDashboard(){
 
   html += '<div class="toolbar">'
     + '<div class="search-wrap">' + svgIcon("search") + '<input type="text" id="dashSearch" placeholder="Cari nama, SKU, atau barcode…" oninput="onDashSearchInput()"></div>'
-    + '<select id="dashKategori" onchange="onDashFilterChange()"><option>Semua</option></select>'
+    + '<select id="dashKategori" onchange="onDashFilterChange()"><option value="Semua">Semua kategori</option></select>'
     + '<select id="dashStatus" onchange="onDashFilterChange()">'
       + '<option value="semua">Semua status</option>'
       + '<option value="kritis">Perlu order</option>'
@@ -616,13 +662,21 @@ async function refreshDashboard(){
 
   const r = data.ringkasan;
 
-  // Dropdown kategori diisi sekali dari data server.
+  // Dropdown kategori diisi dari data server.
+  //
+  // Pembandingnya isi elemen itu sendiri, bukan salinan di kategoriOptions:
+  // pindah tab lalu kembali menggambar ulang toolbar dari nol, sehingga
+  // select-nya kosong lagi sementara salinannya masih penuh — dan penyaring
+  // kategorinya hilang sampai halaman dimuat ulang.
   const selKat = $("dashKategori");
-  if(selKat && kategoriOptions.join("|") !== data.kategori.join("|")){
+  if(selKat && Array.isArray(data.kategori)){
     kategoriOptions = data.kategori;
-    const nilaiLama = dashFilters.kategori;
-    selKat.innerHTML = ['Semua'].concat(kategoriOptions).map(k=>'<option value="'+esc(k)+'">'+esc(k)+'</option>').join("");
-    selKat.value = nilaiLama;
+    const isi = '<option value="Semua">Semua kategori</option>'
+      + kategoriOptions.map(k => '<option value="' + esc(k) + '">' + esc(k) + '</option>').join("");
+    if(selKat.innerHTML !== isi){
+      selKat.innerHTML = isi;
+      selKat.value = dashFilters.kategori || "Semua";
+    }
   }
 
   const stats = $("dashStats");
@@ -2196,6 +2250,9 @@ let opnameSesiId = null;                                   // null = daftar sesi
 let opnameFilter = { q:"", kategori:"Semua", hanya:"semua", page:1 };
 let opnameCariSesi = "";
 let opnameSesiPage = 1;
+// Pilihan penyesuaian datang dari server, sama seperti status retur.
+let opnamePenyesuaian = ["Tidak Disesuaikan", "Stok Disesuaikan"];
+let opnamePenyesuaianYa = "Stok Disesuaikan";
 
 function renderOpname(){
   if(opnameSesiId === null) renderOpnameDaftar();
@@ -2272,6 +2329,8 @@ async function refreshOpnameDaftar(){
         + lengkap + '%)</span></td>'
       + '<td class="num" style="font-weight:700; color:' + (r.jml_selisih > 0 ? 'var(--danger)' : 'var(--slateLo)') + '">'
         + fmtNum(r.jml_selisih) + '</td>'
+      + '<td class="num" style="color:' + (r.jml_disesuaikan > 0 ? 'var(--amber)' : 'var(--slateLo)') + '">'
+        + fmtNum(r.jml_disesuaikan) + '</td>'
       + '<td>' + (r.status === "selesai"
           ? '<span class="badge aman">' + svgIcon("check") + 'Selesai</span>'
           : '<span class="badge rendah">Draft</span>') + '</td>'
@@ -2287,7 +2346,7 @@ async function refreshOpnameDaftar(){
   }).join("");
 
   if(!d.rows.length){
-    baris = '<tr class="empty-row"><td colspan="7">'
+    baris = '<tr class="empty-row"><td colspan="8">'
       + 'Belum ada laporan opname. Buat satu untuk mulai menghitung.</td></tr>';
   }
 
@@ -2296,8 +2355,8 @@ async function refreshOpnameDaftar(){
     + 'posisi menurut sistem pada tanggal opname, dan tidak ikut berubah oleh transaksi '
     + 'sesudahnya. <b>Selisih barang</b> = stok hitung &minus; stok accurate.</div>'
     + '<div class="table-card"><table style="min-width:900px"><thead><tr>'
-    + ["Laporan","Barang","Dicek","Berselisih","Status","Dibuat oleh",""]
-        .map((h,i)=>'<th'+(i>=1&&i<=3?' class="num"':'')+'>'+esc(h)+'</th>').join("")
+    + ["Laporan","Barang","Dicek","Berselisih","Disesuaikan","Status","Dibuat oleh",""]
+        .map((h,i)=>'<th'+(i>=1&&i<=4?' class="num"':'')+'>'+esc(h)+'</th>').join("")
     + '</tr></thead><tbody>' + baris + '</tbody></table>'
     + paginationBar(d.total, d.page, d.total_pages, "opnameGoPage")
     + '</div>';
@@ -2371,7 +2430,11 @@ function renderOpnameDetail(){
       + '<option value="semua">Semua barang</option>'
       + '<option value="belum">Belum dihitung</option>'
       + '<option value="selisih">Ada selisih</option>'
+      + '<option value="disesuaikan">Sudah disesuaikan</option>'
     + '</select>'
+    + '<button type="button" class="btn ghost" id="oiMassal" onclick="isiMassalOpname()"'
+      + ' title="Isi petugas untuk seluruh baris yang sedang tersaring">'
+      + svgIcon("edit") + 'Isi petugas</button>'
     + '<a class="btn ghost" id="oiUnduh" href="#">' + svgIcon("download") + 'Unduh PDF</a>'
     + '</div>'
     + '<div class="stat-row" id="oiRingkas"></div>'
@@ -2410,6 +2473,10 @@ async function refreshOpnameDetail(){
 
   const s = d.sesi;
   const terkunci = s.status === "selesai";
+  if(Array.isArray(d.penyesuaian_options) && d.penyesuaian_options.length){
+    opnamePenyesuaian = d.penyesuaian_options;
+  }
+  if(d.penyesuaian_ya) opnamePenyesuaianYa = d.penyesuaian_ya;
 
   const kepala = $("opKepala");
   if(kepala){
@@ -2465,12 +2532,17 @@ async function refreshOpnameDetail(){
       + statCard({ label:"Jumlah selisih", nilai:Math.abs(r.total_selisih), ikon:"unit",
                    nada:r.total_selisih === 0 ? "" : "amber",
                    kaki:r.total_selisih === 0 ? "seimbang"
-                        : (r.total_selisih > 0 ? "lebih di hitungan fisik" : "kurang di hitungan fisik") });
+                        : (r.total_selisih > 0 ? "lebih di hitungan fisik" : "kurang di hitungan fisik") })
+      + statCard({ label:"Disesuaikan", nilai:r.disesuaikan, ikon:"tag",
+                   nada:r.disesuaikan > 0 ? "amber" : "",
+                   kaki:"stok sudah dibetulkan" });
     ringkas.querySelectorAll(".stat-value[data-nilai]").forEach(n =>
       Grafik.angkaNaik(n, Number(n.getAttribute("data-nilai"))));
   }
 
   const mati = terkunci ? " disabled" : "";
+  const tblMassal = $("oiMassal");
+  if(tblMassal) tblMassal.disabled = terkunci;
   let baris = d.rows.map(it =>
     '<tr>'
     + '<td class="mono" style="font-size:11px; color:var(--slateLo)">' + esc(it.sku || "-") + '</td>'
@@ -2485,11 +2557,19 @@ async function refreshOpnameDetail(){
       + ' onchange="simpanItemOpname(' + it.id + ')"' + mati + '></td>'
     + '<td class="num"><input type="checkbox" class="sel-cek" id="oc' + it.id + '"'
       + (it.dicek ? " checked" : "") + ' onchange="simpanItemOpname(' + it.id + ')"' + mati + '></td>'
+    + '<td><input type="text" class="sel-petugas" id="op' + it.id + '" maxlength="100"'
+      + ' value="' + esc(it.petugas || "") + '" placeholder="Nama"'
+      + ' onchange="simpanItemOpname(' + it.id + ')"' + mati + '></td>'
     + '<td>' + (it.kategori
         ? '<span class="badge netral">' + esc(it.kategori) + '</span>'
         : '<span style="color:var(--slateLo); font-size:11px">-</span>') + '</td>'
     + '<td class="num"><span id="sel' + it.id + '" class="' + kelasSelisih(it.selisih) + '">'
       + teksSelisih(it.selisih) + '</span></td>'
+    + '<td><select class="sel-penyesuaian' + (it.disesuaikan ? ' ya' : '') + '" id="oy' + it.id + '"'
+      + ' onchange="simpanItemOpname(' + it.id + ')"' + mati + '>'
+      + opnamePenyesuaian.map(v => '<option value="' + esc(v) + '"'
+          + (v === it.penyesuaian ? ' selected' : '') + '>' + esc(v) + '</option>').join("")
+      + '</select></td>'
     + '<td><input type="text" class="sel-catatan" id="ok' + it.id + '" maxlength="255"'
       + ' value="' + esc(it.catatan || "") + '" placeholder="Ket."'
       + ' onchange="simpanItemOpname(' + it.id + ')"' + mati + '></td>'
@@ -2497,7 +2577,7 @@ async function refreshOpnameDetail(){
   ).join("");
 
   if(!d.rows.length){
-    baris = '<tr class="empty-row"><td colspan="9">Tidak ada barang pada penyaring ini.</td></tr>';
+    baris = '<tr class="empty-row"><td colspan="11">Tidak ada barang pada penyaring ini.</td></tr>';
   }
 
   wadah.innerHTML =
@@ -2505,10 +2585,14 @@ async function refreshOpnameDetail(){
       ? '<div class="info-box">Laporan ini sudah ditandai <b>selesai</b>, jadi angkanya dikunci. '
         + 'Buka kembali statusnya bila memang perlu diubah.</div>'
       : '<div class="info-box">Isi <b>stok hitung</b> dari hasil hitungan fisik dan <b>stok accurate</b> '
-        + 'dari catatan Accurate. Angkanya tersimpan begitu kamu pindah dari kolomnya.</div>')
-    + '<div class="table-card"><table style="min-width:1040px"><thead><tr>'
-    + ["SKU","Nama barang","Stok akhir","Stok hitung","Stok accurate","Dicek","Kategori","Selisih barang","Ket."]
-        .map((h,i)=>'<th'+(i>=2&&i<=5||i===7?' class="num"':'')+'>'+esc(h)+'</th>').join("")
+        + 'dari catatan Accurate. Angkanya tersimpan begitu kamu pindah dari kolomnya. '
+        + '<b>Penyesuaian</b> hanya mencatat keputusan — memilih "Stok Disesuaikan" tidak '
+        + 'mengubah stok sendiri; pembetulannya tetap lewat Barang masuk atau Barang keluar '
+        + 'supaya terbaca di Riwayat.</div>')
+    + '<div class="table-card"><table style="min-width:1320px"><thead><tr>'
+    + ["SKU","Nama barang","Stok akhir","Stok hitung","Stok accurate","Dicek","Petugas",
+       "Kategori","Selisih barang","Penyesuaian","Ket."]
+        .map((h,i)=>'<th'+((i>=2&&i<=5)||i===8?' class="num"':'')+'>'+esc(h)+'</th>').join("")
     + '</tr></thead><tbody>' + baris + '</tbody></table>'
     + paginationBar(d.total, d.page, d.total_pages, "opnameItemGoPage")
     + '</div>';
@@ -2524,7 +2608,8 @@ function kelasSelisih(v){
 }
 
 async function simpanItemOpname(id){
-  const h = $("oh" + id), a = $("oa" + id), c = $("oc" + id), k = $("ok" + id);
+  const h = $("oh" + id), a = $("oa" + id), c = $("oc" + id),
+        k = $("ok" + id), pg = $("op" + id), y = $("oy" + id);
   if(!h) return;
 
   setSaveStatus("saving");
@@ -2534,6 +2619,8 @@ async function simpanItemOpname(id){
       stok_hitung:   h.value,
       stok_accurate: a ? a.value : "",
       dicek:         c ? c.checked : false,
+      petugas:       pg ? pg.value : "",
+      penyesuaian:   y ? y.value : "",
       catatan:       k ? k.value : ""
     });
     setSaveStatus("ok");
@@ -2543,6 +2630,56 @@ async function simpanItemOpname(id){
       sel.textContent = teksSelisih(res.selisih);
       sel.className   = kelasSelisih(res.selisih);
     }
+    if(y) y.classList.toggle("ya", !!res.disesuaikan);
+  }catch(e){ tampilGalat(e); }
+}
+
+/**
+ * Isi petugas untuk seluruh baris yang sedang tersaring.
+ *
+ * Jumlah barisnya ditanyakan ke server lebih dulu dan disebut di dialog:
+ * satu sesi bisa memuat ribuan baris, dan menimpanya tanpa menyebut
+ * angkanya membuat orang menekan "ya" tanpa tahu apa yang terjadi.
+ */
+async function isiMassalOpname(){
+  const nama = await mintaTeks(
+    "Isi petugas",
+    "Nama petugas yang menghitung baris-baris ini",
+    "", "Lanjut");
+  if(nama === null) return;
+
+  let pra;
+  try{
+    pra = await API.post("opname/massal.php", {
+      id: opnameSesiId, pratinjau: true,
+      q: opnameFilter.q, kategori: opnameFilter.kategori, hanya: opnameFilter.hanya
+    });
+  }catch(e){ tampilGalat(e); return; }
+
+  if(!pra.jumlah){
+    toast("Tidak ada baris yang cocok dengan penyaring ini.", "err");
+    return;
+  }
+
+  const ya = await konfirmasi(
+    "Isi petugas untuk " + fmtNum(pra.jumlah) + " baris?",
+    (nama.trim() === ""
+      ? "Kolom petugas pada baris-baris itu akan dikosongkan."
+      : 'Kolom petugas pada baris-baris itu akan diisi "' + nama.trim() + '".')
+    + " Yang sudah terisi ikut tertimpa.",
+    "Isi sekarang"
+  );
+  if(!ya) return;
+
+  setSaveStatus("saving");
+  try{
+    const res = await API.post("opname/massal.php", {
+      id: opnameSesiId, petugas: nama.trim(),
+      q: opnameFilter.q, kategori: opnameFilter.kategori, hanya: opnameFilter.hanya
+    });
+    setSaveStatus("ok");
+    toast(res.pesan || "Tersimpan.");
+    refreshOpnameDetail();
   }catch(e){ tampilGalat(e); }
 }
 
@@ -2561,6 +2698,160 @@ async function toggleStatusOpname(){
     setSaveStatus("ok");
     refreshOpnameDetail();
   }catch(e){ tampilGalat(e); }
+}
+
+/* ================================================================== */
+/* Log aktivitas                                                      */
+/* ================================================================== */
+let logFilter = { q:"", dari:"", sampai:"", aksi:"", entitas:"", user:"", page:1 };
+// Pilihan dropdown datang dari server dan hanya memuat nilai yang benar-benar
+// ada di log; disimpan agar tidak hilang saat tabel digambar ulang.
+let logOpsi = { aksi:[], entitas:[], user:[] };
+
+/** Pecah "YYYY-MM-DD HH:MM:SS" jadi tanggal dan jam siap tampil. */
+function pecahWaktu(s){
+  if(!s) return { tgl:"-", jam:"" };
+  const d = new Date(String(s).replace(" ", "T"));
+  if(isNaN(d)) return { tgl:String(s), jam:"" };
+  return {
+    tgl: d.toLocaleDateString("id-ID", {day:"2-digit", month:"short", year:"numeric"}),
+    jam: d.toLocaleTimeString("id-ID", {hour:"2-digit", minute:"2-digit", second:"2-digit"})
+  };
+}
+
+function opsiSelect(daftar, terpilih, kosong){
+  let h = '<option value="">' + esc(kosong) + '</option>';
+  daftar.forEach(o => {
+    h += '<option value="' + esc(o.nilai) + '"'
+       + (String(o.nilai) === String(terpilih) ? ' selected' : '') + '>'
+       + esc(o.label) + '</option>';
+  });
+  return h;
+}
+
+function renderAktivitas(){
+  $("content").innerHTML =
+    '<div class="toolbar">'
+    + '<div class="search-wrap">' + svgIcon("search")
+      + '<input type="text" id="lgCari" placeholder="Cari nama barang, pengguna, atau no. picking&hellip;" oninput="onLogCari()"></div>'
+    + '<select id="lgAksi" onchange="onLogFilter()"><option value="">Semua aksi</option></select>'
+    + '<select id="lgModul" onchange="onLogFilter()"><option value="">Semua modul</option></select>'
+    + '<select id="lgUser" onchange="onLogFilter()"><option value="">Semua pengguna</option></select>'
+    + '<div class="daterange">Dari <input type="date" id="lgDari" onchange="onLogFilter()">'
+      + ' s/d <input type="date" id="lgSampai" onchange="onLogFilter()"></div>'
+    + '<button type="button" class="btn ghost" onclick="resetLog()">' + svgIcon("x") + 'Reset</button>'
+    + '<a class="btn ghost" id="lgUnduh" href="api/export/pdf.php?jenis=aktivitas">' + svgIcon("download") + 'Unduh PDF</a>'
+    + '</div>'
+    + '<div class="stat-row" id="lgRingkas"></div>'
+    + '<div id="lgHasil"></div>';
+  $("lgCari").value   = logFilter.q;
+  $("lgDari").value   = logFilter.dari;
+  $("lgSampai").value = logFilter.sampai;
+  refreshLog();
+}
+
+const onLogCari = debounce(function(){
+  logFilter.q = $("lgCari").value;
+  logFilter.page = 1;
+  refreshLog();
+}, 300);
+
+function onLogFilter(){
+  logFilter.q       = $("lgCari").value;
+  logFilter.aksi    = $("lgAksi").value;
+  logFilter.entitas = $("lgModul").value;
+  logFilter.user    = $("lgUser").value;
+  logFilter.dari    = $("lgDari").value;
+  logFilter.sampai  = $("lgSampai").value;
+  logFilter.page    = 1;
+  refreshLog();
+}
+
+function resetLog(){
+  logFilter = { q:"", dari:"", sampai:"", aksi:"", entitas:"", user:"", page:1 };
+  $("lgCari").value = ""; $("lgDari").value = ""; $("lgSampai").value = "";
+  $("lgAksi").value = ""; $("lgModul").value = ""; $("lgUser").value = "";
+  refreshLog();
+}
+
+function logGoPage(p){ logFilter.page = p; refreshLog(); }
+
+async function refreshLog(){
+  const wadah = $("lgHasil");
+  if(!wadah) return;
+
+  let d;
+  try{
+    d = await API.get("aktivitas/list.php", {
+      q: logFilter.q, dari: logFilter.dari, sampai: logFilter.sampai,
+      aksi: logFilter.aksi, entitas: logFilter.entitas,
+      user: logFilter.user, page: logFilter.page
+    });
+  }catch(e){ tampilGalat(e); return; }
+
+  logOpsi = d.opsi || logOpsi;
+  const selAksi = $("lgAksi"), selModul = $("lgModul"), selUser = $("lgUser");
+  if(selAksi)  selAksi.innerHTML  = opsiSelect(logOpsi.aksi, logFilter.aksi, "Semua aksi");
+  if(selModul) selModul.innerHTML = opsiSelect(logOpsi.entitas, logFilter.entitas, "Semua modul");
+  if(selUser){
+    selUser.innerHTML = opsiSelect(
+      logOpsi.user.map(u => ({ nilai:u.id, label:u.nama_lengkap || u.username })),
+      logFilter.user, "Semua pengguna");
+  }
+
+  const unduh = $("lgUnduh");
+  if(unduh){
+    unduh.href = "api/export/pdf.php?jenis=aktivitas"
+      + "&q=" + encodeURIComponent(logFilter.q)
+      + "&aksi=" + encodeURIComponent(logFilter.aksi)
+      + "&entitas=" + encodeURIComponent(logFilter.entitas)
+      + "&user=" + encodeURIComponent(logFilter.user)
+      + "&dari=" + encodeURIComponent(logFilter.dari)
+      + "&sampai=" + encodeURIComponent(logFilter.sampai);
+  }
+
+  const ringkas = $("lgRingkas");
+  if(ringkas){
+    ringkas.innerHTML =
+        statCard({ label:"Aktivitas tercatat", nilai:d.total, ikon:"unit", nada:"biru",
+                   kaki:"sesuai penyaring" })
+      + statCard({ label:"Hari ini", nilai:d.hari_ini, ikon:"tag", nada:"safe",
+                   kaki:"kejadian sejak tengah malam" })
+      + statCard({ label:"Pengguna aktif", nilai:d.orang_hari, ikon:"sku", nada:"amber",
+                   kaki:"akun bergerak hari ini" });
+    ringkas.querySelectorAll(".stat-value[data-nilai]").forEach(n =>
+      Grafik.angkaNaik(n, Number(n.getAttribute("data-nilai"))));
+  }
+
+  let baris = d.rows.map(r => {
+    const w = pecahWaktu(r.created_at);
+    const nada = r.nada === "bahaya" ? " bahaya" : (r.nada === "aman" ? " aman" : "");
+    return '<tr>'
+      + '<td style="white-space:nowrap"><div class="log-tgl">' + esc(w.tgl) + '</div>'
+        + '<div class="log-jam">' + esc(w.jam) + '</div></td>'
+      + '<td><div class="log-judul' + nada + '">' + esc(r.judul) + '</div>'
+        + (r.rincian ? '<div class="item-sub">' + esc(r.rincian) + '</div>' : '') + '</td>'
+      + '<td><span class="badge netral">' + esc(r.modul) + '</span></td>'
+      + '<td style="font-size:11.5px; color:var(--slateLo)">' + esc(r.oleh || r.username || "-") + '</td>'
+      + '<td class="mono" style="font-size:11px; color:var(--slateLo)">' + esc(r.ip || "-") + '</td>'
+      + '</tr>';
+  }).join("");
+
+  if(!d.rows.length){
+    baris = '<tr class="empty-row"><td colspan="5">'
+      + 'Belum ada aktivitas pada penyaring ini.</td></tr>';
+  }
+
+  wadah.innerHTML =
+    '<div class="info-box">Setiap penyimpanan, perubahan, penghapusan, impor PDF, unduhan '
+    + 'laporan, dan percobaan masuk tercatat di sini lengkap dengan jamnya. Catatan log '
+    + 'tidak bisa diubah atau dihapus dari aplikasi.</div>'
+    + '<div class="table-card"><table style="min-width:860px"><thead><tr>'
+    + ["Waktu","Aktivitas","Modul","Oleh","IP"]
+        .map(h => '<th>' + esc(h) + '</th>').join("")
+    + '</tr></thead><tbody>' + baris + '</tbody></table>'
+    + paginationBar(d.total, d.page, d.total_pages, "logGoPage")
+    + '</div>';
 }
 
 /* ================================================================== */

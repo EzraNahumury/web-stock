@@ -50,6 +50,13 @@ define('STATUS_RETUR_MASUK', 'Lengkap');
 // dari KET_MASUK supaya lolos validasi yang sama dengan input manual.
 define('KET_RETUR_MASUK', 'Retur Masuk');
 
+// Keputusan atas selisih pada satu baris stok opname. Ini catatan keputusan,
+// bukan pemicu: menandai "Stok Disesuaikan" tidak mengubah stok sendiri.
+// Pergerakan stok tetap lewat barang masuk / barang keluar supaya semuanya
+// punya satu jalur yang sama dan terbaca di Riwayat.
+define('PENYESUAIAN_OPNAME', ['Tidak Disesuaikan', 'Stok Disesuaikan']);
+define('PENYESUAIAN_DISESUAIKAN', 'Stok Disesuaikan');
+
 // Boleh mencatat barang keluar melebihi stok tersedia? (audit D3)
 // false = tolak; true = izinkan tapi tetap beri peringatan di respons.
 define('IZINKAN_STOK_MINUS', false);

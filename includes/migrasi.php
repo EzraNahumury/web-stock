@@ -18,6 +18,7 @@
  *   -- @lewati-jika-tabel: master_barang     lewati bila tabel itu sudah ada
  *   -- @lewati-jika-terisi: master_barang    lewati bila tabel itu sudah berisi
  *   -- @lewati-jika-indeks: tabel.nama_indeks  lewati bila indeks itu sudah ada
+ *   -- @lewati-jika-kolom: tabel.nama_kolom    lewati bila kolom itu sudah ada
  *
  * Berkas yang dilewati tetap tercatat sebagai sudah diterapkan, jadi
  * database lama otomatis ter-"baseline" pada pemeriksaan pertama dan hanya
@@ -149,14 +150,30 @@ function migrasiPerluDilewati(string $isi): bool
             }
         }
     }
-    // ADD INDEX tidak punya bentuk "IF NOT EXISTS" yang berlaku di MySQL
-    // maupun MariaDB sekaligus, jadi keberadaannya diperiksa dari sini.
+    // ADD INDEX dan ADD COLUMN tidak punya bentuk "IF NOT EXISTS" yang
+    // berlaku di MySQL maupun MariaDB sekaligus, jadi keberadaannya
+    // diperiksa dari sini.
     if (preg_match('/--\s*@lewati-jika-indeks:\s*([A-Za-z0-9_]+)\.([A-Za-z0-9_]+)/', $isi, $m)) {
         if (indeksAda($m[1], $m[2])) {
             return true;
         }
     }
+    if (preg_match('/--\s*@lewati-jika-kolom:\s*([A-Za-z0-9_]+)\.([A-Za-z0-9_]+)/', $isi, $m)) {
+        if (kolomAda($m[1], $m[2])) {
+            return true;
+        }
+    }
     return false;
+}
+
+/** Apakah kolom bernama ini sudah ada pada tabel tersebut? */
+function kolomAda(string $tabel, string $kolom): bool
+{
+    return (int)dbValue(
+        'SELECT COUNT(*) FROM information_schema.COLUMNS
+          WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?',
+        [$tabel, $kolom]
+    ) > 0;
 }
 
 /** Apakah indeks bernama ini sudah terpasang pada tabel tersebut? */

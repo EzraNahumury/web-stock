@@ -13,6 +13,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/helpers.php';
 require_once __DIR__ . '/../../includes/response.php';
+require_once __DIR__ . '/../../includes/opname.php';
 
 pasangPenangananGalatApi();
 wajibMetode('GET');
@@ -35,29 +36,13 @@ if ($sesi === null) {
 $sesi['id'] = (int)$sesi['id'];
 unset($sesi['user_id'], $sesi['deleted_at']);
 
-$q        = ambilStr($_GET, 'q', 100);
-$kategori = ambilStr($_GET, 'kategori', 30);
-$hanya    = pilihanValid(ambilStr($_GET, 'hanya', 20), ['semua', 'selisih', 'belum']);
-$page     = ambilHalaman();
+$page = ambilHalaman();
 
-$where  = ['i.sesi_id = ?'];
-$params = [$id];
-
-if ($q !== '') {
-    $where[] = '(i.nama LIKE ? OR i.sku LIKE ? OR i.barcode LIKE ?)';
-    $pola = polaLike($q);
-    array_push($params, $pola, $pola, $pola);
-}
-if ($kategori !== '' && $kategori !== 'Semua') {
-    $where[] = 'i.kategori = ?';
-    $params[] = $kategori;
-}
-if ($hanya === 'selisih') {
-    $where[] = 'i.stok_hitung IS NOT NULL AND i.stok_accurate IS NOT NULL AND i.stok_hitung <> i.stok_accurate';
-} elseif ($hanya === 'belum') {
-    $where[] = 'i.stok_hitung IS NULL';
-}
-$sqlWhere = 'WHERE ' . implode(' AND ', $where);
+// Penyaringnya dibangun di includes/opname.php supaya layar, pengisian
+// massal, dan ekspor PDF tidak mungkin menyaring baris yang berbeda.
+$f        = filterOpnameItem($_GET, $id);
+$sqlWhere = $f['where'];
+$params   = $f['params'];
 
 $total  = (int)dbValue("SELECT COUNT(*) FROM opname_item i $sqlWhere", $params);
 $meta   = metaPaginasi($total, $page);
@@ -65,7 +50,8 @@ $offset = ($meta['page'] - 1) * PAGE_SIZE;
 
 $rows = dbAll(
     "SELECT i.id, i.master_id, i.sku, i.barcode, i.nama, i.kategori,
-            i.stok_sistem, i.stok_hitung, i.stok_accurate, i.dicek, i.catatan
+            i.stok_sistem, i.stok_hitung, i.stok_accurate, i.dicek,
+            i.penyesuaian, i.petugas, i.catatan
        FROM opname_item i
      $sqlWhere
      ORDER BY i.kategori, i.nama, i.id
@@ -80,6 +66,7 @@ foreach ($rows as &$r) {
     $r['stok_hitung']   = $r['stok_hitung']   === null ? null : (int)$r['stok_hitung'];
     $r['stok_accurate'] = $r['stok_accurate'] === null ? null : (int)$r['stok_accurate'];
     $r['dicek']         = (int)$r['dicek'] === 1;
+    $r['disesuaikan']   = $r['penyesuaian'] === PENYESUAIAN_DISESUAIKAN;
     $r['selisih']       = ($r['stok_hitung'] !== null && $r['stok_accurate'] !== null)
         ? $r['stok_hitung'] - $r['stok_accurate']
         : null;
@@ -93,10 +80,11 @@ $ring = dbOne(
             SUM(CASE WHEN i.stok_hitung IS NULL THEN 1 ELSE 0 END) AS belum,
             SUM(CASE WHEN i.stok_hitung IS NOT NULL AND i.stok_accurate IS NOT NULL
                           AND i.stok_hitung <> i.stok_accurate THEN 1 ELSE 0 END) AS beda,
+            SUM(CASE WHEN i.penyesuaian = ? THEN 1 ELSE 0 END) AS disesuaikan,
             COALESCE(SUM(CASE WHEN i.stok_hitung IS NOT NULL AND i.stok_accurate IS NOT NULL
                           THEN i.stok_hitung - i.stok_accurate ELSE 0 END), 0) AS total_selisih
        FROM opname_item i WHERE i.sesi_id = ?",
-    [$id]
+    [PENYESUAIAN_DISESUAIKAN, $id]
 );
 
 // Kategori yang benar-benar ada di sesi ini — lembar kerja aslinya memakai
@@ -116,7 +104,10 @@ jsonOk([
         'dicek'         => (int)($ring['dicek'] ?? 0),
         'belum'         => (int)($ring['belum'] ?? 0),
         'beda'          => (int)($ring['beda'] ?? 0),
+        'disesuaikan'   => (int)($ring['disesuaikan'] ?? 0),
         'total_selisih' => (int)($ring['total_selisih'] ?? 0),
     ],
-    'kategori_options' => $kategoriSesi,
+    'kategori_options'    => $kategoriSesi,
+    'penyesuaian_options' => PENYESUAIAN_OPNAME,
+    'penyesuaian_ya'      => PENYESUAIAN_DISESUAIKAN,
 ] + $meta);

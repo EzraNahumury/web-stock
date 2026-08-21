@@ -579,18 +579,21 @@ switch ($jenis) {
                 : ($sesi['kategori'] !== '' ? $sesi['kategori'] : 'Semua'),
             'Baris'    => count($data),
         ], [
-            ['label' => 'SKU',            'lebar' => 9],
-            ['label' => 'Nama barang',    'lebar' => 31],
-            ['label' => 'Stok akhir',     'lebar' => 8,  'rata' => 'kanan'],
-            ['label' => 'Stok hitung',    'lebar' => 8,  'rata' => 'kanan'],
-            ['label' => 'Stok accurate',  'lebar' => 9,  'rata' => 'kanan'],
-            ['label' => 'Dicek',          'lebar' => 6],
-            ['label' => 'Kategori',       'lebar' => 9],
-            ['label' => 'Selisih barang', 'lebar' => 9,  'rata' => 'kanan'],
+            ['label' => 'SKU',            'lebar' => 8],
+            ['label' => 'Nama barang',    'lebar' => 23],
+            ['label' => 'Stok akhir',     'lebar' => 7,  'rata' => 'kanan'],
+            ['label' => 'Stok hitung',    'lebar' => 7,  'rata' => 'kanan'],
+            ['label' => 'Stok accurate',  'lebar' => 8,  'rata' => 'kanan'],
+            ['label' => 'Dicek',          'lebar' => 5],
+            ['label' => 'Petugas',        'lebar' => 10],
+            ['label' => 'Kategori',       'lebar' => 8],
+            ['label' => 'Selisih barang', 'lebar' => 8,  'rata' => 'kanan'],
+            ['label' => 'Penyesuaian',    'lebar' => 12],
         ]);
 
-        $totalSelisih = 0;
-        $adaSelisih   = 0;
+        $totalSelisih   = 0;
+        $adaSelisih     = 0;
+        $adaPenyesuaian = 0;
         foreach ($data as $r) {
             $h = $r['stok_hitung']   === null ? null : (int)$r['stok_hitung'];
             $a = $r['stok_accurate'] === null ? null : (int)$r['stok_accurate'];
@@ -601,6 +604,10 @@ switch ($jenis) {
                     $adaSelisih++;
                 }
             }
+            $disesuaikan = $r['penyesuaian'] === PENYESUAIAN_DISESUAIKAN;
+            if ($disesuaikan) {
+                $adaPenyesuaian++;
+            }
             $pdf->baris([
                 $r['sku'],
                 $r['nama'],
@@ -608,15 +615,17 @@ switch ($jenis) {
                 $h === null ? '-' : number_format($h, 0, ',', '.'),
                 $a === null ? '-' : number_format($a, 0, ',', '.'),
                 (int)$r['dicek'] === 1 ? ['Ya', [14, 128, 96]] : '',
+                $r['petugas'],
                 $r['kategori'],
                 $selisih === null
                     ? '-'
                     : [($selisih > 0 ? '+' : '') . number_format($selisih, 0, ',', '.'),
                        $selisih === 0 ? null : ($selisih > 0 ? [199, 127, 14] : [178, 58, 46])],
+                [$r['penyesuaian'], $disesuaikan ? [199, 127, 14] : [139, 155, 163]],
             ]);
         }
         $pdf->ringkasan(count($data) . ' barang  ·  ' . $adaSelisih
-            . ' berselisih  ·  jumlah selisih '
+            . ' berselisih  ·  ' . $adaPenyesuaian . ' disesuaikan  ·  jumlah selisih '
             . ($totalSelisih > 0 ? '+' : '') . number_format($totalSelisih, 0, ',', '.') . ' pcs');
         $pdf->kirim('stok-opname-' . date('Ymd-His') . '.pdf');
         break;
