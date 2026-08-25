@@ -169,6 +169,45 @@ function daftarKategori(): array
     return $cache;
 }
 
+/**
+ * Daftar pilihan keterangan untuk satu arah transaksi.
+ *
+ * Dibaca dari tabel keterangan supaya bisa dikelola dari menu Master.
+ * Bila tabelnya belum ada — misal saat migrasi belum sempat jalan — daftar
+ * lama di config.php dipakai sebagai cadangan, sehingga form transaksi
+ * tidak pernah kehilangan pilihannya.
+ *
+ * @param string $jenis 'masuk' atau 'keluar'
+ * @return string[]
+ */
+function daftarKeterangan(string $jenis): array
+{
+    static $cache = [];
+    if (isset($cache[$jenis])) {
+        return $cache[$jenis];
+    }
+
+    $bawaan = $jenis === 'masuk' ? KET_MASUK : KET_KELUAR;
+
+    try {
+        $rows = dbAll(
+            'SELECT nama FROM keterangan
+              WHERE jenis = ? AND deleted_at IS NULL AND aktif = 1
+              ORDER BY urutan, nama',
+            [$jenis]
+        );
+        $daftar = array_column($rows, 'nama');
+        // Daftar kosong berarti admin menonaktifkan semuanya. Form tanpa
+        // pilihan sama sekali tidak bisa dipakai, jadi daftar bawaan
+        // dipakai kembali.
+        $cache[$jenis] = $daftar ?: $bawaan;
+    } catch (Throwable $e) {
+        error_log('Tabel keterangan belum ada, memakai daftar bawaan: ' . $e->getMessage());
+        $cache[$jenis] = $bawaan;
+    }
+    return $cache[$jenis];
+}
+
 /** Cari master berdasarkan barcode. */
 function cariMasterByBarcode(string $barcode): ?array
 {

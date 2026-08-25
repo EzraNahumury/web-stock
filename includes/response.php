@@ -38,15 +38,26 @@ function jsonError(string $pesan, int $status = 400, array $extra = []): void
  */
 function jsonInput(): array
 {
+    // Di-cache karena kini dibaca lebih dari sekali dalam satu permintaan:
+    // lapisan izin perlu melihat body untuk tahu menu mana yang dituju,
+    // lalu endpoint-nya membacanya lagi. php://input memang bisa dibaca
+    // ulang, tapi mengurainya dua kali tidak ada gunanya.
+    static $cache = null;
+    if ($cache !== null) {
+        return $cache;
+    }
+
     $raw = file_get_contents('php://input');
     if ($raw === false || $raw === '') {
-        return [];
+        $cache = [];
+        return $cache;
     }
     $data = json_decode($raw, true);
     if (!is_array($data)) {
         jsonError('Format permintaan tidak valid.', 400);
     }
-    return $data;
+    $cache = $data;
+    return $cache;
 }
 
 /**

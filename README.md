@@ -1458,6 +1458,88 @@ pemeriksaan klien saja tidak pernah cukup).
 | GET | `api/dashboard/stats.php` | `q`, `kategori`, `status`, `page` | `{ok, rows[], ringkasan:{total_sku,total_stok,perlu_order,kategori}, …}` |
 | GET | `api/export/pdf.php` | `jenis=dashboard\|masuk\|keluar\|riwayat\|pertukaran\|master\|aktivitas` + filter layar asalnya | berkas PDF |
 
+### Hak akses
+
+Diatur per akun lewat menu **Pengguna**, dan ditegakkan di
+`includes/izin.php`. Dua hal yang diatur:
+
+| | |
+|---|---|
+| **Menu** | daftar menu yang boleh dibuka akun ini |
+| **Peran** | `admin` penuh · `operator` boleh menulis · `viewer` hanya melihat |
+
+Peran `viewer` ditolak di **setiap** endpoint yang menulis, di menu mana pun
+— bukan sekadar tombolnya disembunyikan.
+
+```php
+// includes/izin.php — jalur endpoint -> [menu yang dibutuhkan, apakah menulis]
+'keluar/create.php'      => ['keluar', true],
+'master/list.php'        => [null,     false],   // dipakai form di banyak menu
+'master/save.php'        => ['master', true],
+'export/pdf.php'         => ['@ekspor', false],  // menu ditentukan dari `jenis`
+```
+
+Petanya ditulis lengkap dan eksplisit, bukan ditebak dari nama folder atau
+metode HTTP: sebagian endpoint POST sebenarnya hanya membaca
+(`master/cek_barcode.php`), dan sebagian endpoint di folder `master` dipakai
+oleh form di menu lain. Menebaknya akan salah persis di tempat-tempat itu.
+Endpoint yang tidak terdaftar **ditolak**, supaya endpoint baru yang lupa
+didaftarkan berakhir dengan galat yang kelihatan, bukan celah yang diam.
+
+Pemeriksaannya dipasang di `wajibLoginApi()` — fungsi yang sudah dipanggil
+setiap endpoint API — jadi endpoint baru ikut terjaga tanpa perlu diingat
+satu per satu. Ekspor PDF diperiksa terpisah di `api/export/pdf.php`, karena
+unduhan itu navigasi biasa dan penolakannya harus berupa halaman, bukan JSON.
+
+**Dibaca dari database tiap permintaan, bukan dari sesi.** Peran dan daftar
+akses diambil ulang dari tabel `users` setiap kali. Kalau dibaca dari isi
+sesi, akun yang aksesnya baru dicabut — atau yang baru dinonaktifkan — tetap
+bisa bekerja sampai ia logout sendiri. Karena alasan yang sama,
+`wajibLoginHalaman()` ikut memeriksa `aktif`.
+
+Dua batas yang tetap keras:
+
+- Menu **Pengguna** tidak bisa diberikan ke akun non-admin. Akun non-admin
+  yang bisa mengelola pengguna dapat mengangkat dirinya sendiri jadi admin.
+- Admin selalu punya seluruh menu; kolom `akses`-nya tidak disimpan, supaya
+  tidak menyesatkan saat perannya kelak diturunkan.
+
+Akun yang kolom `akses`-nya kosong mendapat **menu bawaan**: seluruh menu
+kecuali Log aktivitas — sama persis dengan jangkauan operator sebelum fitur
+ini ada. Akun lama tidak kehilangan akses karena pembaruan, dan juga tidak
+mendadak mendapat akses yang dulu tidak dimilikinya.
+
+### Master keterangan transaksi
+
+| Metode | Endpoint | Parameter | Respons |
+|---|---|---|---|
+| GET | `api/keterangan/list.php` | `jenis=masuk\|keluar` | `{ok, rows[], tanpa_keterangan, total}` |
+| POST | `api/keterangan/save.php` | `{id?, jenis, nama, catatan?, urutan?, aktif?}` | `{ok, id, ikut, pesan}` |
+| POST | `api/keterangan/delete.php` | `{id, pindah_ke?}` | `{ok, pesan, dipindah}` |
+
+Isi dropdown **Keterangan** di Barang masuk dan Barang keluar. Sebelumnya
+dipaku di `config/config.php` sebagai `KET_MASUK`/`KET_KELUAR`, jadi menambah
+satu pilihan berarti menyunting berkas dan deploy ulang.
+
+Keterangan disimpan sebagai **teks** di tabel transaksi, bukan sebagai
+relasi — sama seperti kategori pada master barang. Konsekuensinya ditangani
+langsung:
+
+- **Ganti nama** ikut memperbarui seluruh transaksi yang memakainya, dalam
+  satu transaksi SQL. Tanpa itu, catatan lama akan memuat nilai yang tidak
+  ada lagi di daftar dan hilang dari penyaringan tanpa pesan.
+- **Hapus** ditolak bila masih dipakai, kecuali disertai `pindah_ke`;
+  catatannya dipindahkan dulu, baru pilihannya dihapus.
+
+Baris ber-`terkunci = 1` tidak bisa dihapus, diganti nama, atau
+dinonaktifkan. Saat ini hanya `Retur Masuk`: nilainya ditulis sistem ketika
+retur ditandai Lengkap, jadi mengubahnya akan memutus sambungan itu tanpa
+ada yang memberi tahu.
+
+`daftarKeterangan()` jatuh kembali ke daftar bawaan di `config.php` bila
+tabelnya belum ada atau seluruh isinya dinonaktifkan — form transaksi tidak
+boleh pernah kehilangan pilihannya.
+
 ### Log aktivitas
 
 | Metode | Endpoint | Parameter | Respons |
@@ -1591,14 +1673,21 @@ diam-diam ikut menimpa keputusan penyesuaian.
 php tools\uji_menu.php
 ```
 
-Memastikan setiap menu di `TABS` punya cabang di `renderContent()` dan
-fungsi penggambarnya benar-benar ada di `app.js`. Ada karena satu
-penyuntingan pernah menghapus seluruh blok "Log aktivitas": menunya tetap
-tampil, dan yang terjadi saat diklik hanya `ReferenceError` di konsol —
-judul halaman berganti sementara isi halaman sebelumnya tetap terpampang.
-Tidak ada yang gagal dengan berisik, jadi lolos sampai dipakai. Pemeriksaan
-ini hanya membaca teks `app.js`: tanpa Node, tanpa browser, tanpa paket
-tambahan.
+Dua pemeriksaan sekaligus:
+
+1. **Menu vs fungsi penggambar.** Setiap id di `TABS` punya cabang di
+   `renderContent()`, dan fungsi yang dipanggilnya benar-benar ada. Ada
+   karena satu penyuntingan pernah menghapus seluruh blok "Log aktivitas":
+   menunya tetap tampil, dan yang terjadi saat diklik hanya `ReferenceError`
+   di konsol — judul halaman berganti sementara isi halaman sebelumnya tetap
+   terpampang. Tidak ada yang gagal dengan berisik, jadi lolos sampai
+   dipakai.
+2. **Endpoint vs peta izin.** Setiap berkas di `api/` terdaftar di
+   `petaEndpoint()` dan sebaliknya, dan menu yang disebutnya benar-benar
+   ada. Endpoint yang lupa didaftarkan akan ditolak 500 saat dipakai.
+
+Keduanya hanya membaca teks: tanpa Node, tanpa browser, tanpa paket
+tambahan, tanpa menyentuh database.
 
 ---
 
@@ -1958,6 +2047,8 @@ phpMyAdmin dari hPanel → pilih database → tab **Import**:
 6. sql/006_retur.sql              tabel retur barang
 7. sql/007_opname.sql             tabel sesi + baris stok opname
 8. sql/008_opname_penyesuaian.sql kolom penyesuaian + petugas
+9. sql/009_akses_pengguna.sql     peran viewer + kolom akses menu
+10. sql/010_keterangan.sql        daftar pilihan keterangan transaksi
 ```
 
 **Sejak versi ini migrasi berjalan otomatis.** Berkas di `sql/` diterapkan

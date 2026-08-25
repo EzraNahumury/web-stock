@@ -451,6 +451,31 @@ tbody tr:hover{ background:#FAFCFC; }
 .sel-penyesuaian:focus{ outline:none; box-shadow:0 0 0 3px rgba(47,107,127,.16); }
 .sel-penyesuaian:disabled{ cursor:default; opacity:.75; }
 
+/* --- Pemilihan menu di form Pengguna --- */
+.akses-kotak{
+  border:1px solid var(--line); border-radius:10px; padding:12px 14px;
+  background:var(--paper); margin-bottom:14px;
+  transition:opacity .16s var(--ease);
+}
+.akses-kotak.mati{ opacity:.5; }
+.akses-kepala{
+  display:flex; align-items:center; justify-content:space-between;
+  gap:10px; flex-wrap:wrap; margin-bottom:10px;
+}
+.akses-aksi{ display:flex; gap:6px; }
+.btn.kecil{ padding:3px 9px; font-size:11px; }
+.akses-daftar{
+  display:grid; grid-template-columns:repeat(auto-fill, minmax(190px, 1fr));
+  gap:6px 14px;
+}
+.akses-item{
+  display:flex; align-items:center; gap:7px;
+  font-size:12.5px; color:var(--ink3); cursor:pointer;
+}
+.akses-item input{ width:15px; height:15px; accent-color:var(--biru); cursor:pointer; }
+.akses-item input:disabled{ cursor:default; }
+.akses-kaki{ font-size:11px; color:var(--slateLo); margin-top:10px; }
+
 .sel-nol{ color:var(--slateLo); font-weight:400; }
 .sel-lebih{ color:var(--amber); font-weight:700; }
 .sel-kurang{ color:var(--danger); font-weight:700; }

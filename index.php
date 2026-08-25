@@ -129,8 +129,10 @@ if ($inisial === '') {
   // Kategori dibaca dari tabel `kategori` (dikelola lewat menu Master).
   // Keterangan masuk/keluar tetap dari config/config.php.
   window.KATEGORI_OPTIONS = <?= json_encode(daftarKategori(), JSON_UNESCAPED_UNICODE) ?>;
-  window.KET_MASUK        = <?= json_encode(KET_MASUK, JSON_UNESCAPED_UNICODE) ?>;
-  window.KET_KELUAR       = <?= json_encode(KET_KELUAR, JSON_UNESCAPED_UNICODE) ?>;
+  // Dibaca dari tabel keterangan, bukan dari konstanta: daftarnya dikelola
+  // lewat menu Master dan bisa berubah tanpa deploy ulang.
+  window.KET_MASUK        = <?= json_encode(daftarKeterangan('masuk'), JSON_UNESCAPED_UNICODE) ?>;
+  window.KET_KELUAR       = <?= json_encode(daftarKeterangan('keluar'), JSON_UNESCAPED_UNICODE) ?>;
 </script>
 <script src="assets/vendor/pdf.min.js"></script>
 <script src="<?= e(aset('assets/js/pdf-parser.js')) ?>"></script>

@@ -13,7 +13,7 @@
 /* ---------------------------------------------------------------- */
 /* State                                                             */
 /* ---------------------------------------------------------------- */
-let tab = "dashboard";
+let tab = "dashboard";   // diselaraskan dengan hak akses saat init()
 
 let dashFilters   = { q:"", kategori:"Semua", status:"semua", page:1 };
 let masterFilters = { q:"", page:1 };
@@ -353,6 +353,10 @@ const TABS = [
     ikon:'<path d="M20.6 13.4L12 22l-9-9V4a1 1 0 0 1 1-1h9l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.2"/>' },
   { id:"kategori", label:"Kategori", sub:"Kelola daftar kategori barang", grup:"Master",
     ikon:'<path d="M3 6h18M3 12h18M3 18h18"/><circle cx="7" cy="6" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="17" cy="18" r="1.6" fill="currentColor" stroke="none"/>' },
+  { id:"ket_masuk", label:"Keterangan barang masuk", sub:"Isi dropdown Keterangan di menu Barang masuk", grup:"Master",
+    ikon:'<path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><path d="M3 17v2a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-2"/>' },
+  { id:"ket_keluar", label:"Keterangan barang keluar", sub:"Isi dropdown Keterangan di menu Barang keluar", grup:"Master",
+    ikon:'<path d="M12 21V9"/><polyline points="7 14 12 9 17 14"/><path d="M3 7V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2"/>' },
   { id:"pengguna", label:"Pengguna", sub:"Kelola akun yang bisa masuk ke aplikasi", grup:"Master",
     adminSaja:true,
     ikon:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13A4 4 0 0 1 16 11"/>' },
@@ -362,15 +366,31 @@ const TABS = [
     ikon:'<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>' },
 ];
 
-/** Peran pengguna yang sedang masuk. */
+/* --- Hak akses -----------------------------------------------------
+ * Semua ini hanya merapikan tampilan. Pembatasan yang sebenarnya ada di
+ * includes/izin.php: menyembunyikan menu dan tombol tidak menghentikan
+ * siapa pun yang mengirim permintaan langsung ke endpoint-nya.
+ * ------------------------------------------------------------------ */
 function peranSaya(){
   return (window.APP_USER && window.APP_USER.role) || "operator";
 }
 function sayaAdmin(){ return peranSaya() === "admin"; }
 
+/** Daftar menu yang boleh dibuka akun ini, dikirim server saat halaman dimuat. */
+function aksesSaya(){
+  const a = window.APP_USER && window.APP_USER.akses;
+  return Array.isArray(a) ? a : [];
+}
+function bolehMenu(id){ return aksesSaya().indexOf(id) !== -1; }
+
+/** Akun "Hanya baca" tidak boleh mengubah apa pun, di menu mana pun. */
+function bolehTulis(){
+  return !(window.APP_USER && window.APP_USER.boleh_tulis === false);
+}
+
 /** Menu yang boleh dilihat pengguna ini. */
 function tabTerlihat(){
-  return TABS.filter(t => !t.adminSaja || sayaAdmin());
+  return TABS.filter(t => bolehMenu(t.id));
 }
 
 /** Jumlah kecil di sisi menu — diisi setelah dashboard dimuat. */
@@ -417,6 +437,7 @@ function judulHalaman(){
 
 function switchTab(id){
   if(tab === id) return;
+  if(!bolehMenu(id)) return;
   tab = id;
   renderNav();
   judulHalaman();
@@ -767,8 +788,14 @@ function renderTransaksiTab(kind){
   const accent = kind==="masuk" ? "safe" : "danger-btn";
   const label = kind==="masuk" ? "Catat barang masuk" : "Catat barang keluar";
 
+  const bisaTulis = bolehTulis();
+
   let html = "";
-  if(kind === "keluar"){
+  if(!bisaTulis){
+    html += '<div class="info-box">Akun ini hanya bisa melihat. Pencatatan dan '
+      + 'penghapusan dimatikan.</div>';
+  }
+  if(kind === "keluar" && bisaTulis){
     html += '<div class="pdf-import-card" id="pdfImportCard">'
       + '<div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap;">'
       + '<div><div style="font-weight:700; font-size:15px;">Impor dari PDF Picking List</div>'
@@ -782,6 +809,7 @@ function renderTransaksiTab(kind){
       + '<div style="font-size:11.5px; font-weight:600; letter-spacing:.04em; text-transform:uppercase; color:var(--slate); margin:4px 0 10px;">Atau input manual</div>';
   }
 
+  if(bisaTulis){
   html += '<form class="form-card" onsubmit="submitTransaksi(event,\''+kind+'\')">';
   html += '<div class="form-grid">';
   html += '<div><label class="field-label">Tanggal</label><input type="date" id="'+kind+'Tanggal" value="'+todayISO()+'"></div>';
@@ -798,12 +826,13 @@ function renderTransaksiTab(kind){
   html += '</div>';
   html += '<button type="submit" class="btn ' + accent + '" id="'+kind+'Submit">' + svgIcon("plus") + label + '</button>';
   html += '</form>';
+  }
 
   html += '<div class="toolbar">'
     + '<div class="search-wrap">' + svgIcon("search") + '<input type="text" id="'+kind+'Cari" placeholder="Cari nama, barcode' + (kind==="keluar"?", no. pesanan":"") + '…" oninput="onTrxSearchInput(\''+kind+'\')"></div>'
     + '<div class="daterange">Dari <input type="date" id="'+kind+'Dari" onchange="onTrxFilterChange(\''+kind+'\')">'
     + ' s/d <input type="date" id="'+kind+'Sampai" onchange="onTrxFilterChange(\''+kind+'\')"></div>'
-    + (sayaAdmin()
+    + (sayaAdmin() && bisaTulis
         ? '<button type="button" class="btn ghost" onclick="rapikanNama()" title="Ganti nama panjang dari PDF dengan nama pendek di master barang">'
           + svgIcon("tukar") + 'Rapikan nama</button>'
         : '')
@@ -818,7 +847,7 @@ function renderTransaksiTab(kind){
   $(kind+"Sampai").value = f.sampai;
 
   renderTransaksiTable(kind);
-  if(kind === "keluar"){
+  if(kind === "keluar" && bisaTulis){
     renderPdfImportStatus();
     renderPdfReview();
   }
@@ -943,15 +972,17 @@ async function renderTransaksiTable(kind){
     + '<td style="color:var(--slate)">'+esc(r.keterangan)+'</td>'
     + (showPesanan ? '<td class="mono" style="font-size:11.5px; color:var(--slate)">'+esc(r.no_pesanan || "-")+'</td>' : '')
     + '<td style="color:var(--slate); font-size:11.5px">'+esc(r.oleh || "-")+'</td>'
-    + '<td class="num"><button class="icon-btn" onclick="deleteTransaksi(\''+kind+'\','+r.id+')" aria-label="Hapus">'+svgIcon("trash")+'</button></td>'
+    + (bolehTulis()
+        ? '<td class="num"><button class="icon-btn" onclick="deleteTransaksi(\''+kind+'\','+r.id+')" aria-label="Hapus">'+svgIcon("trash")+'</button></td>'
+        : '')
     + '</tr>'
   ).join("");
 
-  const kolomJml = showPesanan ? 8 : 7;
+  const kolomJml = (showPesanan ? 8 : 7) - (bolehTulis() ? 0 : 1);
   if(data.rows.length===0) body = '<tr class="empty-row"><td colspan="'+kolomJml+'">Belum ada catatan.</td></tr>';
 
   const headers = ["Tanggal","Barang","Barcode",jumlahLabel,"Keterangan"]
-    .concat(showPesanan?["No. Pesanan"]:[]).concat(["Oleh",""]);
+    .concat(showPesanan?["No. Pesanan"]:[]).concat(["Oleh"]).concat(bolehTulis()?[""]:[]);
 
   wadah.innerHTML = '<div class="table-card"><table style="min-width:720px"><thead><tr>'
     + headers.map(h=>'<th>'+h+'</th>').join("")
@@ -1479,7 +1510,14 @@ function renderMaster(){
   const opsiKategori = '<option value="">— Tanpa kategori —</option>'
     + daftarKategori.map(k=>'<option value="'+esc(k)+'">'+esc(k)+'</option>').join("");
 
-  let html = '<form class="form-card" id="masterForm" onsubmit="submitMaster(event)">';
+  const bisaTulis = bolehTulis();
+
+  let html = "";
+  if(!bisaTulis){
+    html += '<div class="info-box">Akun ini hanya bisa melihat katalog barang.</div>';
+  }
+  if(bisaTulis){
+  html += '<form class="form-card" id="masterForm" onsubmit="submitMaster(event)">';
   html += '<div class="form-grid">';
   html += '<div><label class="field-label">SKU</label><input type="text" id="mSku" class="mono"></div>';
   html += '<div><label class="field-label">Kode barcode</label><input type="text" id="mBarcode" class="mono"></div>';
@@ -1491,6 +1529,7 @@ function renderMaster(){
   html += '<div style="display:flex; gap:8px;"><button type="submit" class="btn" id="mSubmitBtn">'+svgIcon("plus")+'Tambah barang</button>'
     + '<button type="button" class="btn ghost" id="mCancelBtn" style="display:none" onclick="cancelEditMaster()">'+svgIcon("x")+'Batal</button></div>';
   html += '</form>';
+  }
   html += '<div class="toolbar"><div class="search-wrap">'+svgIcon("search")+'<input type="text" id="masterSearch" placeholder="Cari SKU, barcode, atau nama…" oninput="onMasterSearchInput()"></div>'
     + '<a class="btn ghost" id="masterExport" href="api/export/pdf.php?jenis=master">'+svgIcon("download")+'Unduh PDF</a></div>';
   html += '<div id="masterResults"></div>';
@@ -1525,17 +1564,20 @@ async function refreshMasterTable(){
     + '<td>'+fmtNum(m.stok_awal)+'</td>'
     + '<td>'+fmtNum(m.stok_minimal)+'</td>'
     + '<td style="color:var(--slate)">'+esc(m.kategori||'-')+'</td>'
-    + '<td class="num" style="white-space:nowrap"><button class="icon-btn" onclick="editMaster('+m.id+')" aria-label="Ubah">'+svgIcon("edit")+'</button>'
-      + '<button class="icon-btn" onclick="deleteMaster('+m.id+')" aria-label="Hapus">'+svgIcon("trash")+'</button></td>'
+    + (bolehTulis()
+        ? '<td class="num" style="white-space:nowrap"><button class="icon-btn" onclick="editMaster('+m.id+')" aria-label="Ubah">'+svgIcon("edit")+'</button>'
+          + '<button class="icon-btn" onclick="deleteMaster('+m.id+')" aria-label="Hapus">'+svgIcon("trash")+'</button></td>'
+        : '')
     + '</tr>'
   ).join("");
-  if(data.rows.length===0) rows = '<tr class="empty-row"><td colspan="7">Tidak ada barang yang cocok.</td></tr>';
+  if(data.rows.length===0) rows = '<tr class="empty-row"><td colspan="' + (bolehTulis()?7:6) + '">Tidak ada barang yang cocok.</td></tr>';
 
   const unduhM = $("masterExport");
   if(unduhM) unduhM.href = "api/export/pdf.php?jenis=master&q=" + encodeURIComponent(masterFilters.q);
 
   wadah.innerHTML = '<div class="table-card"><table style="min-width:720px"><thead><tr>'
-    + ["SKU","Barcode","Nama barang","Stok awal","Stok minimal","Kategori",""].map(h=>'<th>'+h+'</th>').join("")
+    + ["SKU","Barcode","Nama barang","Stok awal","Stok minimal","Kategori"]
+        .concat(bolehTulis()?[""]:[]).map(h=>'<th>'+h+'</th>').join("")
     + '</tr></thead><tbody>'+rows+'</tbody></table>'
     + paginationBar(data.total, data.page, data.total_pages, "masterGoPage")
     + '</div>';
@@ -1955,7 +1997,14 @@ let returStatusOptions = [];
 let returStatusMasuk = "Lengkap";   // ditimpa oleh jawaban server
 
 function renderRetur(){
-  let html = '<form class="form-card" id="rtForm" onsubmit="submitRetur(event)">'
+  const bisaTulis = bolehTulis();
+
+  let html = "";
+  if(!bisaTulis){
+    html += '<div class="info-box">Akun ini hanya bisa melihat daftar retur.</div>';
+  }
+  if(bisaTulis){
+  html += '<form class="form-card" id="rtForm" onsubmit="submitRetur(event)">'
     + '<div class="form-grid">'
     + '<div><label class="field-label" for="rtTanggal">Tanggal</label>'
       + '<input type="date" id="rtTanggal" value="' + todayISO() + '"></div>'
@@ -1982,9 +2031,10 @@ function renderRetur(){
       + '<button type="submit" class="btn" id="rtSubmit">' + svgIcon("plus") + 'Catat retur</button>'
       + '<button type="button" class="btn ghost" id="rtBatal" style="display:none" onclick="batalEditRetur()">'
         + svgIcon("x") + 'Batal</button>'
-    + '</div></form>'
+    + '</div></form>';
+  }
 
-    + '<div class="toolbar">'
+  html += '<div class="toolbar">'
     + '<div class="search-wrap">' + svgIcon("search")
       + '<input type="text" id="rtCari" placeholder="Cari no. pesanan, SKU, atau nama produk&hellip;" oninput="onReturCari()"></div>'
     + '<select id="rtFStatus" onchange="onReturFilter()"><option value="">Semua keterangan</option></select>'
@@ -2125,15 +2175,17 @@ async function refreshRetur(){
       + '<td><span class="badge ' + (masukStok ? 'aman' : 'kritis') + '">' + esc(r.status) + '</span>'
         + (masukStok ? '<div class="item-sub" style="font-family:Inter">stok bertambah</div>' : '') + '</td>'
       + '<td style="font-size:11.5px; color:var(--slate)">' + esc(r.keterangan || "-") + '</td>'
-      + '<td class="num" style="white-space:nowrap">'
-        + '<button class="icon-btn" onclick="editRetur(' + r.id + ')" aria-label="Ubah retur">' + svgIcon("edit") + '</button>'
-        + '<button class="icon-btn bahaya" onclick="hapusRetur(' + r.id + ')" aria-label="Hapus retur">' + svgIcon("trash") + '</button>'
-        + '</td>'
+      + (bolehTulis()
+          ? '<td class="num" style="white-space:nowrap">'
+            + '<button class="icon-btn" onclick="editRetur(' + r.id + ')" aria-label="Ubah retur">' + svgIcon("edit") + '</button>'
+            + '<button class="icon-btn bahaya" onclick="hapusRetur(' + r.id + ')" aria-label="Hapus retur">' + svgIcon("trash") + '</button>'
+            + '</td>'
+          : '')
       + '</tr>';
   }).join("");
 
   if(!d.rows.length){
-    baris = '<tr class="empty-row"><td colspan="8">Belum ada retur pada penyaring ini.</td></tr>';
+    baris = '<tr class="empty-row"><td colspan="' + (bolehTulis()?8:7) + '">Belum ada retur pada penyaring ini.</td></tr>';
   }
 
   returRows = d.rows;
@@ -2143,7 +2195,8 @@ async function refreshRetur(){
     + 'barang masuk "Retur Masuk". Yang belum selesai dicatat saja dan belum menyentuh stok, '
     + 'sampai keterangannya diubah.</div>'
     + '<div class="table-card"><table style="min-width:980px"><thead><tr>'
-    + ["Tanggal","No. pesanan","SKU","Nama produk","Qty","Keterangan retur","Ket.",""]
+    + ["Tanggal","No. pesanan","SKU","Nama produk","Qty","Keterangan retur","Ket."]
+        .concat(bolehTulis()?[""]:[])
         .map((h,i)=>'<th'+(i===4?' class="num"':'')+'>'+esc(h)+'</th>').join("")
     + '</tr></thead><tbody>' + baris + '</tbody></table>'
     + paginationBar(d.total, d.page, d.total_pages, "returGoPage")
@@ -2261,7 +2314,7 @@ function renderOpname(){
 
 /* --- Daftar sesi --------------------------------------------------- */
 function renderOpnameDaftar(){
-  const bolehUbah = sayaAdmin();
+  const bolehUbah = sayaAdmin() && bolehTulis();
   let html = "";
 
   if(bolehUbah){
@@ -2337,7 +2390,7 @@ async function refreshOpnameDaftar(){
       + '<td style="font-size:11.5px; color:var(--slateLo)">' + esc(r.oleh || "-") + '</td>'
       + '<td class="num" style="white-space:nowrap">'
         + '<button class="btn ghost" onclick="bukaOpname(' + r.id + ')">Buka</button>'
-        + (sayaAdmin()
+        + (sayaAdmin() && bolehTulis()
             ? '<button class="icon-btn bahaya" onclick="hapusOpname(' + r.id + ')" aria-label="Hapus laporan">'
               + svgIcon("trash") + '</button>'
             : '')
@@ -2472,7 +2525,9 @@ async function refreshOpnameDetail(){
   }catch(e){ tampilGalat(e); return; }
 
   const s = d.sesi;
-  const terkunci = s.status === "selesai";
+  // Akun hanya-baca diperlakukan sama seperti sesi yang sudah ditutup:
+  // isinya tetap terbaca lengkap, tapi tidak ada yang bisa diubah.
+  const terkunci = s.status === "selesai" || !bolehTulis();
   if(Array.isArray(d.penyesuaian_options) && d.penyesuaian_options.length){
     opnamePenyesuaian = d.penyesuaian_options;
   }
@@ -2493,7 +2548,7 @@ async function refreshOpnameDetail(){
             + (s.catatan ? ' · ' + esc(s.catatan) : '')
             + '</div>'
         + '</div>'
-        + (sayaAdmin()
+        + (sayaAdmin() && bolehTulis()
             ? '<button type="button" class="btn ' + (terkunci ? 'ghost' : '') + '" onclick="toggleStatusOpname()">'
               + (terkunci ? svgIcon("edit") + 'Buka kembali' : svgIcon("check") + 'Tandai selesai') + '</button>'
             : '')
@@ -2581,7 +2636,9 @@ async function refreshOpnameDetail(){
   }
 
   wadah.innerHTML =
-    (terkunci
+    (!bolehTulis()
+      ? '<div class="info-box">Akun ini hanya bisa melihat, jadi angkanya tidak bisa diisi.</div>'
+      : terkunci
       ? '<div class="info-box">Laporan ini sudah ditandai <b>selesai</b>, jadi angkanya dikunci. '
         + 'Buka kembali statusnya bila memang perlu diubah.</div>'
       : '<div class="info-box">Isi <b>stok hitung</b> dari hasil hitungan fisik dan <b>stok accurate</b> '
@@ -2861,7 +2918,7 @@ let editKategoriId = null;
 let kategoriRows = [];
 
 function renderKategori(){
-  const bolehUbah = sayaAdmin();
+  const bolehUbah = sayaAdmin() && bolehTulis();
 
   let html = "";
   if(!bolehUbah){
@@ -2900,7 +2957,7 @@ async function refreshKategori(){
   catch(e){ tampilGalat(e); return; }
 
   kategoriRows = d.rows;
-  const bolehUbah = sayaAdmin();
+  const bolehUbah = sayaAdmin() && bolehTulis();
 
   let baris = d.rows.map(k =>
     '<tr>'
@@ -3059,10 +3116,252 @@ async function segarkanDaftarKategori(){
 }
 
 /* ================================================================== */
+/* Master: Keterangan barang masuk / keluar                           */
+/* ================================================================== */
+/* Satu halaman melayani dua menu; yang membedakan hanya arahnya.      */
+let ketJenis = "masuk";
+let editKetId = null;
+let ketRows = [];
+
+function renderKeterangan(jenis){
+  ketJenis = jenis === "keluar" ? "keluar" : "masuk";
+  editKetId = null;
+
+  const bolehUbah = sayaAdmin() && bolehTulis();
+  const arah = ketJenis === "masuk" ? "barang masuk" : "barang keluar";
+
+  let html = "";
+  if(!bolehUbah){
+    html += '<div class="info-box">Hanya admin yang bisa mengubah daftar ini. '
+      + 'Isinya tetap bisa dilihat.</div>';
+  }
+
+  if(bolehUbah){
+    html += '<form class="form-card" id="ketForm" onsubmit="submitKeterangan(event)">'
+      + '<div class="form-grid">'
+      + '<div><label class="field-label" for="ketNama">Nama keterangan</label>'
+        + '<input type="text" id="ketNama" maxlength="50" placeholder="'
+        + (ketJenis === "masuk" ? "Contoh: Retur Supplier" : "Contoh: Kirim Cabang")
+        + '" required></div>'
+      + '<div class="span2"><label class="field-label" for="ketCatatan">Catatan</label>'
+        + '<input type="text" id="ketCatatan" maxlength="120" placeholder="Kapan pilihan ini dipakai"></div>'
+      + '<div><label class="field-label" for="ketUrutan">Urutan</label>'
+        + '<input type="number" id="ketUrutan" min="0" step="10" value="0"></div>'
+      + '<div><label class="field-label" for="ketAktif">Status</label>'
+        + '<select id="ketAktif"><option value="1">Aktif</option><option value="0">Nonaktif</option></select></div>'
+      + '</div>'
+      + '<div style="display:flex; gap:8px;">'
+        + '<button type="submit" class="btn" id="ketSubmit">' + svgIcon("plus") + 'Tambah keterangan</button>'
+        + '<button type="button" class="btn ghost" id="ketBatal" style="display:none" onclick="batalEditKeterangan()">'
+          + svgIcon("x") + 'Batal</button>'
+      + '</div></form>';
+  }
+
+  html += '<div id="ketHasil"></div>';
+  $("content").innerHTML = html;
+  refreshKeterangan();
+}
+
+async function refreshKeterangan(){
+  const wadah = $("ketHasil");
+  if(!wadah) return;
+
+  let d;
+  try{ d = await API.get("keterangan/list.php", { jenis: ketJenis }); }
+  catch(e){ tampilGalat(e); return; }
+
+  ketRows = d.rows;
+  const bolehUbah = sayaAdmin() && bolehTulis();
+  const arah = ketJenis === "masuk" ? "Barang masuk" : "Barang keluar";
+
+  let baris = d.rows.map(k => {
+    // Baris terkunci dipakai sistem; tombolnya dimatikan sekalian, bukan
+    // hanya ditolak server, supaya alasannya terbaca.
+    const kunci = k.terkunci === 1;
+    return '<tr>'
+      + '<td><div class="item-name">' + esc(k.nama)
+        + (kunci ? '<span class="flag-gen">DIPAKAI SISTEM</span>' : '') + '</div>'
+        + (k.catatan ? '<div class="item-sub" style="font-family:Inter">' + esc(k.catatan) + '</div>' : '')
+        + '</td>'
+      + '<td class="num">' + fmtNum(k.dipakai) + '</td>'
+      + '<td class="num mono" style="color:var(--slateLo)">' + k.urutan + '</td>'
+      + '<td>' + (k.aktif
+          ? '<span class="badge aman">' + svgIcon("check") + 'Aktif</span>'
+          : '<span class="badge belum_diatur">Nonaktif</span>') + '</td>'
+      + (bolehUbah
+          ? '<td class="num" style="white-space:nowrap">'
+            + '<button class="icon-btn" onclick="editKeterangan(' + k.id + ')" aria-label="Ubah ' + esc(k.nama) + '">'
+              + svgIcon("edit") + '</button>'
+            + '<button class="icon-btn bahaya" onclick="hapusKeterangan(' + k.id + ')"'
+              + (kunci ? ' disabled title="Dipakai sistem, tidak bisa dihapus"' : '')
+              + ' aria-label="Hapus ' + esc(k.nama) + '">' + svgIcon("trash") + '</button>'
+            + '</td>'
+          : '')
+      + '</tr>';
+  }).join("");
+
+  if(!d.rows.length){
+    baris = '<tr class="empty-row"><td colspan="' + (bolehUbah?5:4) + '">Belum ada pilihan keterangan.</td></tr>';
+  }
+
+  const kolom = ["Keterangan","Dipakai","Urutan","Status"].concat(bolehUbah?[""]:[]);
+
+  wadah.innerHTML =
+    '<div class="info-box">Daftar ini mengisi dropdown <b>Keterangan</b> di menu <b>' + esc(arah) + '</b>. '
+    + 'Mengganti nama pilihan ikut memperbarui catatan transaksi yang sudah memakainya, '
+    + 'jadi riwayat lama tidak kehilangan artinya.</div>'
+    + (d.tanpa_keterangan > 0
+        ? '<div class="warn-box">' + fmtNum(d.tanpa_keterangan) + ' catatan ' + esc(arah.toLowerCase())
+          + ' keterangannya masih kosong.</div>'
+        : '')
+    + '<div class="table-card"><table style="min-width:640px"><thead><tr>'
+    + kolom.map((h,i)=>'<th'+(i>=1&&i<=2?' class="num"':'')+'>'+esc(h)+'</th>').join("")
+    + '</tr></thead><tbody>' + baris + '</tbody></table>'
+    + '<div class="pagination"><span>' + fmtNum(d.total) + ' pilihan</span></div>'
+    + '</div>';
+}
+
+function editKeterangan(id){
+  const k = ketRows.find(x => x.id === id);
+  if(!k) return;
+  editKetId = id;
+  $("ketNama").value    = k.nama;
+  $("ketCatatan").value = k.catatan || "";
+  $("ketUrutan").value  = k.urutan;
+  $("ketAktif").value   = String(k.aktif);
+  $("ketSubmit").innerHTML = svgIcon("check") + "Simpan perubahan";
+  $("ketBatal").style.display = "inline-flex";
+  $("ketForm").scrollIntoView({ behavior:"smooth", block:"start" });
+}
+
+function batalEditKeterangan(){
+  editKetId = null;
+  if($("ketForm")) $("ketForm").reset();
+  if($("ketUrutan")) $("ketUrutan").value = 0;
+  if($("ketAktif")) $("ketAktif").value = "1";
+  if($("ketSubmit")) $("ketSubmit").innerHTML = svgIcon("plus") + "Tambah keterangan";
+  if($("ketBatal")) $("ketBatal").style.display = "none";
+}
+
+async function submitKeterangan(e){
+  e.preventDefault();
+  const body = {
+    id:      editKetId || 0,
+    jenis:   ketJenis,
+    nama:    $("ketNama").value.trim(),
+    catatan: $("ketCatatan").value.trim(),
+    urutan:  Number($("ketUrutan").value) || 0,
+    aktif:   $("ketAktif").value === "1"
+  };
+  if(!body.nama){ toast("Nama keterangan wajib diisi.", "err"); return; }
+
+  const tbl = $("ketSubmit");
+  if(tbl) tbl.disabled = true;
+  setSaveStatus("saving");
+  try{
+    const res = await API.post("keterangan/save.php", body);
+    setSaveStatus("ok");
+    toast(res.pesan || "Tersimpan.");
+    batalEditKeterangan();
+    refreshKeterangan();
+    segarkanDaftarKeterangan();
+  }catch(err){ tampilGalat(err); }
+  finally{ if(tbl) tbl.disabled = false; }
+}
+
+async function hapusKeterangan(id){
+  const k = ketRows.find(x => x.id === id);
+  if(!k) return;
+
+  if(k.dipakai > 0){
+    const tujuan = await pilihTujuanKeterangan(k);
+    if(tujuan === null) return;
+    await kirimHapusKeterangan(id, tujuan);
+    return;
+  }
+  const ok = await konfirmasi(
+    'Hapus keterangan "' + k.nama + '"?',
+    "Pilihan ini akan hilang dari dropdown. Catatan lama tidak terpengaruh karena belum ada yang memakainya.",
+    "Hapus"
+  );
+  if(!ok) return;
+  await kirimHapusKeterangan(id, "");
+}
+
+/** Dialog pemilihan tujuan sebelum menghapus pilihan yang masih dipakai. */
+function pilihTujuanKeterangan(k){
+  return new Promise(resolve => {
+    const lain = ketRows.filter(x => x.id !== k.id && x.aktif);
+    if(!lain.length){
+      toast("Tidak ada keterangan lain sebagai tujuan pemindahan.", "err");
+      resolve(null);
+      return;
+    }
+    const m = modalKonten(false);
+    m.isi(
+      '<h3>Pindahkan catatannya dulu</h3>'
+      + '<p>Keterangan <b>' + esc(k.nama) + '</b> masih dipakai <b>' + fmtNum(k.dipakai)
+      + '</b> catatan. Pilih tujuan sebelum menghapusnya.</p>'
+      + '<label class="field-label" for="ketTujuan">Pindahkan ke</label>'
+      + '<select id="ketTujuan" style="width:100%; margin-bottom:18px;">'
+        + lain.map(x => '<option value="' + esc(x.nama) + '">' + esc(x.nama) + '</option>').join("")
+      + '</select>'
+      + '<div class="modal-act">'
+        + '<button type="button" class="btn ghost" data-act="tutup">Batal</button>'
+        + '<button type="button" class="btn danger-btn" data-act="lanjut">Pindahkan &amp; hapus</button>'
+      + '</div>'
+    );
+    m.el.addEventListener("click", ev => {
+      if(ev.target.closest('[data-act="lanjut"]')){
+        const v = m.el.querySelector("#ketTujuan").value;
+        m.tutup();
+        resolve(v);
+      } else if(ev.target.closest('[data-act="tutup"]')){
+        resolve(null);
+      }
+    });
+  });
+}
+
+async function kirimHapusKeterangan(id, pindahKe){
+  setSaveStatus("saving");
+  try{
+    const res = await API.post("keterangan/delete.php", { id:id, jenis:ketJenis, pindah_ke:pindahKe });
+    setSaveStatus("ok");
+    toast(res.pesan || "Dihapus.");
+    refreshKeterangan();
+    segarkanDaftarKeterangan();
+  }catch(e){ tampilGalat(e); }
+}
+
+/**
+ * Segarkan daftar pilihan yang dipegang halaman lain.
+ *
+ * Form Barang masuk/keluar membangun dropdown-nya dari window.KET_*, yang
+ * diisi saat halaman dimuat. Tanpa ini, pilihan yang baru ditambah tidak
+ * muncul sampai halaman dimuat ulang.
+ */
+async function segarkanDaftarKeterangan(){
+  try{
+    const [m, k] = await Promise.all([
+      API.get("keterangan/list.php", { jenis:"masuk" }),
+      API.get("keterangan/list.php", { jenis:"keluar" })
+    ]);
+    window.KET_MASUK  = m.rows.filter(r => r.aktif).map(r => r.nama);
+    window.KET_KELUAR = k.rows.filter(r => r.aktif).map(r => r.nama);
+  }catch(e){ /* bukan galat fatal */ }
+}
+
+/* ================================================================== */
 /* Master: Pengguna                                                   */
 /* ================================================================== */
 let editPenggunaId = null;
 let penggunaRows = [];
+// Daftar menu dan peran datang dari server, supaya layar tidak pernah
+// menawarkan sesuatu yang tidak dikenal includes/izin.php.
+let menuOptions = {};
+let menuBawaan  = [];
+let peranOptions = { operator:"Operator", admin:"Admin" };
 
 function renderPengguna(){
   if(!sayaAdmin()){
@@ -3077,13 +3376,24 @@ function renderPengguna(){
     + '<div class="span2"><label class="field-label" for="pNama">Nama lengkap</label>'
       + '<input type="text" id="pNama" maxlength="100" placeholder="Nama yang tampil di riwayat" required></div>'
     + '<div><label class="field-label" for="pRole">Peran</label>'
-      + '<select id="pRole"><option value="operator">Operator</option><option value="admin">Admin</option></select></div>'
+      + '<select id="pRole" onchange="onPeranBerubah()"></select></div>'
     + '<div><label class="field-label" for="pAktif">Status</label>'
       + '<select id="pAktif"><option value="1">Aktif</option><option value="0">Nonaktif</option></select></div>'
     + '<div class="span2"><label class="field-label" for="pSandi">Password</label>'
       + '<input type="password" id="pSandi" autocomplete="new-password" placeholder="Minimal 8 karakter">'
       + '<div id="pSandiCatatan" style="font-size:11px; color:var(--slateLo); margin-top:5px; display:none;">'
         + 'Kosongkan bila tidak ingin mengganti password.</div></div>'
+    + '</div>'
+    + '<div id="pAksesKotak" class="akses-kotak">'
+      + '<div class="akses-kepala">'
+        + '<span class="field-label" style="margin:0">Menu yang boleh dibuka</span>'
+        + '<span class="akses-aksi">'
+          + '<button type="button" class="btn ghost kecil" onclick="pilihSemuaAkses(true)">Pilih semua</button>'
+          + '<button type="button" class="btn ghost kecil" onclick="pilihSemuaAkses(false)">Kosongkan</button>'
+        + '</span>'
+      + '</div>'
+      + '<div class="akses-daftar" id="pAksesDaftar"></div>'
+      + '<div class="akses-kaki" id="pAksesKaki"></div>'
     + '</div>'
     + '<div style="display:flex; gap:8px;">'
       + '<button type="submit" class="btn" id="pSubmit">' + svgIcon("plus") + 'Tambah akun</button>'
@@ -3105,6 +3415,10 @@ async function refreshPengguna(){
   catch(e){ tampilGalat(e); return; }
 
   penggunaRows = d.rows;
+  if(d.menu_options)  menuOptions  = d.menu_options;
+  if(d.menu_bawaan)   menuBawaan   = d.menu_bawaan;
+  if(d.peran_options) peranOptions = d.peran_options;
+  isiPilihanPengguna();
 
   const baris = d.rows.map(u => {
     // Admin aktif terakhir tidak boleh dihapus — tombolnya dimatikan
@@ -3116,9 +3430,8 @@ async function refreshPengguna(){
       + '<td><div class="item-name">' + esc(u.nama_lengkap)
         + (u.ini_saya ? '<span class="flag-gen">AKUN ANDA</span>' : '') + '</div>'
         + '<div class="item-sub">' + esc(u.username) + '</div></td>'
-      + '<td>' + (u.role === "admin"
-          ? '<span class="badge kritis" style="background:#E4EDF1;color:var(--biru);border-color:#C6DAE2">Admin</span>'
-          : '<span class="badge belum_diatur">Operator</span>') + '</td>'
+      + '<td>' + lencanaPeran(u.role) + '</td>'
+      + '<td>' + ringkasAkses(u) + '</td>'
       + '<td>' + (u.aktif
           ? '<span class="badge aman">' + svgIcon("check") + 'Aktif</span>'
           : '<span class="badge belum_diatur">Nonaktif</span>') + '</td>'
@@ -3138,11 +3451,114 @@ async function refreshPengguna(){
       ? '<div class="warn-box">Hanya ada 1 admin aktif. Kalau akun itu hilang aksesnya, '
         + 'tidak ada lagi yang bisa mengelola aplikasi. Sebaiknya angkat satu admin cadangan.</div>'
       : '')
-    + '<div class="table-card"><table style="min-width:660px"><thead><tr>'
-    + ["Pengguna","Peran","Status","Terakhir masuk",""].map(h=>'<th>'+esc(h)+'</th>').join("")
+    + '<div class="table-card"><table style="min-width:860px"><thead><tr>'
+    + ["Pengguna","Peran","Akses menu","Status","Terakhir masuk",""].map(h=>'<th>'+esc(h)+'</th>').join("")
     + '</tr></thead><tbody>' + baris + '</tbody></table>'
     + '<div class="pagination"><span>' + fmtNum(d.total) + ' akun · ' + fmtNum(d.admin_aktif) + ' admin aktif</span></div>'
     + '</div>';
+}
+
+/** Isi dropdown peran dan daftar centang menu dari data server. */
+function isiPilihanPengguna(){
+  const selRole = $("pRole");
+  if(selRole && !selRole.options.length){
+    selRole.innerHTML = Object.keys(peranOptions)
+      .map(k => '<option value="' + esc(k) + '">' + esc(peranOptions[k]) + '</option>').join("");
+    selRole.value = "operator";
+  }
+
+  const daftar = $("pAksesDaftar");
+  if(daftar && !daftar.children.length){
+    daftar.innerHTML = Object.keys(menuOptions).map(id =>
+      '<label class="akses-item"><input type="checkbox" value="' + esc(id) + '"'
+      + ' onchange="onAksesBerubah()"> ' + esc(menuOptions[id]) + '</label>'
+    ).join("");
+  }
+  onPeranBerubah();
+}
+
+function lencanaPeran(role){
+  if(role === "admin"){
+    return '<span class="badge kritis" style="background:#E4EDF1;color:var(--biru);border-color:#C6DAE2">Admin</span>';
+  }
+  if(role === "viewer"){
+    return '<span class="badge rendah">Hanya baca</span>';
+  }
+  return '<span class="badge belum_diatur">Operator</span>';
+}
+
+/** Ringkasan menu yang benar-benar terbuka untuk satu akun. */
+function ringkasAkses(u){
+  if(u.role === "admin"){
+    return '<span style="font-size:11.5px; color:var(--slateLo)">Semua menu</span>';
+  }
+  const efektif = u.akses_efektif || [];
+  if(!efektif.length){
+    return '<span class="badge kritis">Tidak ada menu</span>';
+  }
+  const diatur = (u.akses || []).length > 0;
+  const nama = efektif.map(id => menuOptions[id] || id);
+  const tampil = nama.slice(0, 3).join(", ") + (nama.length > 3 ? " +" + (nama.length - 3) + " lagi" : "");
+  return '<div style="font-size:11.5px">' + esc(tampil) + '</div>'
+    + '<div class="item-sub" style="font-family:Inter">'
+      + (diatur ? fmtNum(efektif.length) + ' menu dipilih' : 'bawaan · ' + fmtNum(efektif.length) + ' menu')
+      + (u.boleh_tulis ? '' : ' · hanya baca') + '</div>';
+}
+
+/**
+ * Admin selalu punya seluruh menu, jadi daftar centangnya dimatikan supaya
+ * tidak terlihat seolah pilihannya berpengaruh.
+ */
+function onPeranBerubah(){
+  const role   = $("pRole") ? $("pRole").value : "operator";
+  const kotak  = $("pAksesKotak");
+  const daftar = $("pAksesDaftar");
+  if(!kotak || !daftar) return;
+
+  const adminPenuh = role === "admin";
+  kotak.classList.toggle("mati", adminPenuh);
+  daftar.querySelectorAll("input").forEach(i => { i.disabled = adminPenuh; });
+  kotak.querySelectorAll(".akses-aksi button").forEach(b => { b.disabled = adminPenuh; });
+  onAksesBerubah();
+}
+
+function onAksesBerubah(){
+  const kaki = $("pAksesKaki");
+  if(!kaki) return;
+  const role = $("pRole") ? $("pRole").value : "operator";
+
+  if(role === "admin"){
+    kaki.textContent = "Admin selalu bisa membuka semua menu, termasuk Pengguna.";
+    return;
+  }
+  const dipilih = aksesTerpilih();
+  const catatan = role === "viewer"
+    ? " Akun ini hanya bisa melihat — semua tombol simpan dan hapus ditolak server."
+    : "";
+  kaki.textContent = dipilih.length
+    ? dipilih.length + " menu dipilih." + catatan
+    : "Tidak ada yang dicentang — akun ini mendapat menu bawaan ("
+      + menuBawaan.length + " menu, tanpa Log aktivitas)." + catatan;
+}
+
+function aksesTerpilih(){
+  const daftar = $("pAksesDaftar");
+  if(!daftar) return [];
+  return Array.from(daftar.querySelectorAll("input:checked")).map(i => i.value);
+}
+
+function pilihSemuaAkses(semua){
+  const daftar = $("pAksesDaftar");
+  if(!daftar) return;
+  daftar.querySelectorAll("input").forEach(i => { i.checked = !!semua; });
+  onAksesBerubah();
+}
+
+function setAksesTerpilih(daftarId){
+  const daftar = $("pAksesDaftar");
+  if(!daftar) return;
+  const set = daftarId || [];
+  daftar.querySelectorAll("input").forEach(i => { i.checked = set.indexOf(i.value) !== -1; });
 }
 
 function editPengguna(id){
@@ -3153,6 +3569,8 @@ function editPengguna(id){
   $("pNama").value  = u.nama_lengkap;
   $("pRole").value  = u.role;
   $("pAktif").value = String(u.aktif);
+  setAksesTerpilih(u.akses || []);
+  onPeranBerubah();
   $("pSandi").value = "";
   $("pSandi").placeholder = "Biarkan kosong untuk mempertahankan password";
   $("pSandiCatatan").style.display = "block";
@@ -3168,6 +3586,8 @@ function resetFormPengguna(){
   ["pUser","pNama","pSandi"].forEach(id => { if($(id)) $(id).value = ""; });
   if($("pRole"))  $("pRole").value = "operator";
   if($("pAktif")) $("pAktif").value = "1";
+  setAksesTerpilih([]);
+  onPeranBerubah();
   if($("pSandi")) $("pSandi").placeholder = "Minimal 8 karakter";
   if($("pSandiCatatan")) $("pSandiCatatan").style.display = "none";
   if($("pSubmit")) $("pSubmit").innerHTML = svgIcon("plus") + "Tambah akun";
@@ -3182,7 +3602,8 @@ async function submitPengguna(e){
     nama_lengkap: $("pNama").value.trim(),
     role:         $("pRole").value,
     aktif:        $("pAktif").value === "1",
-    password:     $("pSandi").value
+    password:     $("pSandi").value,
+    akses:        aksesTerpilih()
   };
   if(!body.username || !body.nama_lengkap){
     toast("Username dan nama lengkap wajib diisi.", "err"); return;
@@ -3238,13 +3659,22 @@ function renderContent(){
   else if(tab==="aktivitas") renderAktivitas();
   else if(tab==="master") renderMaster();
   else if(tab==="kategori") renderKategori();
+  else if(tab==="ket_masuk") renderKeterangan("masuk");
+  else if(tab==="ket_keluar") renderKeterangan("keluar");
   else if(tab==="pengguna") renderPengguna();
 }
 
 function init(){
+  // Akun yang tidak punya akses ke Dashboard dibuka di menu pertama yang
+  // memang boleh dibukanya, bukan di halaman kosong.
+  const boleh = tabTerlihat();
+  if(boleh.length && !bolehMenu(tab)) tab = boleh[0].id;
+
   renderNav();
   judulHalaman();
-  renderContent();
+  if(boleh.length) renderContent();
+  else $("content").innerHTML = '<div class="info-box">Akun ini belum diberi akses '
+    + 'ke menu mana pun. Hubungi admin.</div>';
   setSaveStatus("ok");
 
   const buka  = $("sisiBuka");

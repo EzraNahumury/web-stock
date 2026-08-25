@@ -6,7 +6,8 @@
  * belum pernah bisa dilihat dari aplikasi. Halaman ini membukanya: siapa
  * melakukan apa, jam berapa, dari alamat IP mana.
  *
- * Hanya admin. Log memuat gerak seluruh akun, termasuk penghapusan data
+ * Aksesnya diberikan per akun lewat menu Pengguna, dan tidak diberikan
+ * secara bawaan: log memuat gerak seluruh akun, termasuk penghapusan data
  * dan percobaan masuk yang gagal — bukan bacaan untuk semua orang.
  *
  * Parameter: q, dari, sampai, aksi, entitas, user, page
@@ -21,7 +22,10 @@ require_once __DIR__ . '/../../includes/aktivitas.php';
 
 pasangPenangananGalatApi();
 wajibMetode('GET');
-wajibAdminApi();
+// Bukan wajibAdminApi(): aksesnya kini ditentukan lapisan izin lewat menu
+// "aktivitas", supaya admin bisa memberikannya ke akun peninjau tanpa
+// mengangkatnya jadi admin.
+wajibLoginApi();
 
 $q       = ambilStr($_GET, 'q', 100);
 $dari    = trim((string)($_GET['dari'] ?? ''));

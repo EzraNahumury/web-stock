@@ -82,7 +82,7 @@ foreach ($rows as $i => $r) {
     $barcode = ambilStr($r, 'barcode', 50);
     $nama    = ambilStr($r, 'nama', 255);
     $qty     = ambilInt($r, 'qty', 0);
-    $ket     = pilihanValid(ambilStr($r, 'keterangan', 50), KET_KELUAR);
+    $ket     = pilihanValid(ambilStr($r, 'keterangan', 50), daftarKeterangan('keluar'));
     $sku     = ambilStr($r, 'sku', 50);
     $noPes   = ambilStr($r, 'noPesanan', 100);
 

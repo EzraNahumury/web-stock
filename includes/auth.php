@@ -50,11 +50,20 @@ function userSaatIni(): ?array
     if (!sudahLogin()) {
         return null;
     }
+    require_once __DIR__ . '/izin.php';
+    $db = userDb();
+
+    // Peran dan hak akses diambil dari database, bukan dari isi sesi:
+    // penurunan peran atau pencabutan akses harus berlaku pada permintaan
+    // berikutnya, bukan menunggu orangnya logout. Nama dipakai dari sesi
+    // sebagai cadangan bila barisnya sudah tidak ada.
     return [
         'id'           => (int)$_SESSION['user_id'],
-        'username'     => (string)($_SESSION['username'] ?? ''),
-        'nama_lengkap' => (string)($_SESSION['nama_lengkap'] ?? ''),
-        'role'         => (string)($_SESSION['role'] ?? 'operator'),
+        'username'     => (string)($db['username'] ?? ($_SESSION['username'] ?? '')),
+        'nama_lengkap' => (string)($db['nama_lengkap'] ?? ($_SESSION['nama_lengkap'] ?? '')),
+        'role'         => (string)($db['role'] ?? ($_SESSION['role'] ?? 'operator')),
+        'akses'        => aksesSaya(),
+        'boleh_tulis'  => bolehTulis(),
     ];
 }
 
@@ -79,6 +88,11 @@ function wajibLoginApi(): void
         require_once __DIR__ . '/response.php';
         jsonError('Sesi berakhir. Silakan login ulang.', 401);
     }
+    // Pemeriksaan hak akses ditaruh di sini, bukan di tiap endpoint: setiap
+    // endpoint API sudah memanggil fungsi ini, jadi endpoint baru ikut
+    // terjaga tanpa perlu diingat satu per satu.
+    require_once __DIR__ . '/izin.php';
+    periksaIzinApi();
 }
 
 /**
@@ -87,6 +101,16 @@ function wajibLoginApi(): void
 function wajibLoginHalaman(): void
 {
     if (!sudahLogin()) {
+        header('Location: login.php');
+        exit;
+    }
+    // Akun yang dinonaktifkan atau dihapus saat sesinya masih hidup tidak
+    // boleh tetap membuka halaman. Tanpa ini, aksesnya baru benar-benar
+    // tertutup setelah orangnya logout sendiri.
+    require_once __DIR__ . '/izin.php';
+    $u = userDb();
+    if ($u === null || (int)$u['aktif'] !== 1) {
+        logout();
         header('Location: login.php');
         exit;
     }

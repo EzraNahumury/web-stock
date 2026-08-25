@@ -17,10 +17,10 @@ require_once __DIR__ . '/response.php';
 function konfigTransaksi(string $jenis): array
 {
     if ($jenis === 'masuk') {
-        return ['tabel' => 'barang_masuk', 'ket' => KET_MASUK, 'keluar' => false];
+        return ['tabel' => 'barang_masuk', 'ket' => daftarKeterangan('masuk'), 'keluar' => false];
     }
     if ($jenis === 'keluar') {
-        return ['tabel' => 'barang_keluar', 'ket' => KET_KELUAR, 'keluar' => true];
+        return ['tabel' => 'barang_keluar', 'ket' => daftarKeterangan('keluar'), 'keluar' => true];
     }
     jsonError('Jenis transaksi tidak dikenal.', 400);
 }

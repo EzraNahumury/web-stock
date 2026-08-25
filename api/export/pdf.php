@@ -19,6 +19,7 @@ require_once __DIR__ . '/../../includes/response.php';
 require_once __DIR__ . '/../../includes/pdf.php';
 require_once __DIR__ . '/../../includes/aktivitas.php';
 require_once __DIR__ . '/../../includes/riwayat.php';
+require_once __DIR__ . '/../../includes/izin.php';
 
 wajibMetode('GET');
 
@@ -49,12 +50,16 @@ $warnaStatus = [
     'belum_diatur' => [139, 155, 163],
 ];
 
-// Log aktivitas memuat gerak seluruh akun; hanya admin boleh mencetaknya.
-// Diperiksa sebelum apa pun dicatat, supaya permintaan yang ditolak tidak
+// Laporan hanya boleh diunduh dari menu yang memang bisa dibuka akun ini.
+// Diperiksa di sini, bukan lewat wajibLoginApi(): unduhan ini adalah
+// navigasi biasa, jadi penolakannya harus berupa halaman, bukan JSON.
+//
+// Berlaku sebelum apa pun dicatat, supaya permintaan yang ditolak tidak
 // meninggalkan jejak unduhan yang tidak pernah terjadi.
-if ($jenis === 'aktivitas' && !adalahAdmin()) {
+$menuLaporan = menuLaporan($jenis);
+if ($menuLaporan !== null && !bolehMenu($menuLaporan)) {
     http_response_code(403);
-    exit('Hanya admin yang boleh mengunduh log aktivitas.');
+    exit('Akun ini tidak punya akses ke laporan tersebut.');
 }
 
 $waktu = date('d/m/Y H:i');

@@ -25,6 +25,7 @@ function modulAktivitas(string $entitas): string
         'transaksi' => 'Transaksi',
         'laporan'   => 'Laporan',
         'retur'     => 'Retur',
+        'keterangan' => 'Keterangan transaksi',
         'opname'    => 'Stok opname',
     ];
     return $peta[$entitas] ?? ucfirst($entitas);
@@ -95,6 +96,9 @@ function labelAktivitas(array $r): array
         'create/master'      => 'Tambah barang',
         'update/master'      => 'Ubah barang',
         'delete/master'      => 'Hapus barang',
+        'create/keterangan'  => 'Tambah keterangan transaksi',
+        'update/keterangan'  => 'Ubah keterangan transaksi',
+        'delete/keterangan'  => 'Hapus keterangan transaksi',
         'create/kategori'    => 'Tambah kategori',
         'update/kategori'    => 'Ubah kategori',
         'delete/kategori'    => 'Hapus kategori',
