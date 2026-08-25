@@ -1691,15 +1691,29 @@ daripada membiarkan kolomnya kosong.
 Pemotongan barisnya **tidak** memakai posisi judul kolom. Versi pertama
 melakukan itu dan gagal pada berkas Accurate yang sebenarnya: judulnya
 bertingkat dua dan keterangan cabangnya sebaris dengan isi lain, sehingga
-batas kolomnya meleset dan hampir semua baris terbuang. Bentuk barisnya
-sendiri sudah cukup menentukan — nama di kiri sebagai teks, lalu
-angka-angka — dan angka pertama itulah kuantitas kelompok kolom paling
-kiri, yaitu gudang yang dipilih.
+batas kolomnya meleset dan hampir semua baris terbuang.
+
+Ada dua cara membaca satu baris, dicoba berurutan:
+
+1. **Lewat sel.** Nama di kiri sebagai teks, lalu angka-angka; yang pertama
+   adalah kuantitas kelompok kolom paling kiri, yaitu gudang yang dipilih.
+2. **Lewat teks barisnya sendiri**, bila sel-selnya tidak memuat angka sama
+   sekali. Tergantung cara PDF-nya dibuat, pdf.js bisa mengirim seluruh
+   baris sebagai satu potongan teks — dan cara pertama tidak akan menemukan
+   apa pun di sana.
+
+Pada cara kedua, angkanya dihitung dari **belakang** sebanyak jumlah kolom
+angka, bukan dari depan. Nama barang boleh berakhir dengan angka —
+`ADIDAS BOLA IMPOR EURO 2024 SIZE 5` — dan menghitung dari depan akan
+memakan `5` sebagai kuantitas. Jumlah kolomnya dibaca dari judul
+(`Kuantitas` + `Total Biaya`), baku empat.
 
 `tools/buat_pdf_accurate.php` membuat PDF contoh bergaya laporan itu dari
 nama barang di master dengan angka karangan, untuk menguji pembacanya
 tanpa perlu menyimpan berkas Accurate asli di repositori. Argumen keempat
-`dua` menghasilkan judul kolom bertingkat dua seperti berkas aslinya.
+memilih bentuknya: kosong (judul satu tingkat), `dua` (judul bertingkat
+dua seperti aslinya), atau `satu` (tiap baris sebagai satu potongan teks).
+Ketiganya harus terbaca sama.
 
 Bila hasilnya masih meleset, `diagnosa-accurate.php` menunjukkan apa yang
 sebenarnya terbaca beserta koordinat potongan teksnya, sehingga pembacanya

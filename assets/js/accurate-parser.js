@@ -91,6 +91,60 @@ function bukanBarisDataAccurate(teks){
 }
 
 /**
+ * Berapa kolom angka yang dipunyai laporan ini, dibaca dari judul kolomnya.
+ *
+ * Laporan aslinya punya empat: Kuantitas + Total Biaya untuk gudang yang
+ * dipilih, lalu sepasang lagi untuk "Total Nama Gudang". Angkanya dipakai
+ * sebagai batas saat sebuah baris harus dipotong dari teksnya sendiri —
+ * lihat ambilDariTeks().
+ */
+function jumlahKolomAngka(baris){
+  for(let i = 0; i < baris.length; i++){
+    const teks = baris[i].map(c => c.text).join(" ");
+    if(!/kuantitas/i.test(teks)) continue;
+    const k = (teks.match(/kuantitas/gi) || []).length;
+    const b = (teks.match(/total\s*biaya/gi) || []).length;
+    if(k + b >= 2) return k + b;
+  }
+  return 4;   // bentuk baku laporan ini
+}
+
+/**
+ * Potong satu baris dari teksnya, bukan dari sel-selnya.
+ *
+ * Dipakai bila pdf.js mengirim seluruh baris sebagai SATU potongan teks —
+ * hal yang bergantung pada cara PDF-nya dibuat, dan yang membuat pemotongan
+ * per sel tidak menemukan angka sama sekali.
+ *
+ * Angkanya diambil dari BELAKANG sebanyak jumlah kolom angka, bukan dari
+ * depan. Nama barang boleh berakhir dengan angka — "ADIDAS BOLA IMPOR EURO
+ * 2024 SIZE 5" — dan menghitung dari depan akan memakan "5" sebagai
+ * kuantitas. Dari belakang, empat angka terakhirlah kolomnya, dan sisanya
+ * utuh sebagai nama.
+ *
+ * @returns {?{nama:string, qty:number}}
+ */
+function ambilDariTeks(teks, jumlahKolom){
+  const kata = teks.trim().split(/\s+/);
+  const angkaBelakang = [];
+
+  for(let i = kata.length - 1; i >= 0 && angkaBelakang.length < jumlahKolom; i--){
+    const n = angkaAccurate(kata[i]);
+    if(n === null) break;
+    angkaBelakang.unshift({ n: n, idx: i });
+  }
+
+  // Satu angka saja terlalu lemah: nama yang kebetulan berakhir angka akan
+  // terbaca sebagai baris data palsu.
+  if(angkaBelakang.length < 2) return null;
+
+  const nama = kata.slice(0, angkaBelakang[0].idx).join(" ").trim();
+  if(nama === "") return null;
+
+  return { nama: nama, qty: Math.round(angkaBelakang[0].n) };
+}
+
+/**
  * Susun baris data dari kumpulan potongan teks.
  *
  * TIDAK memakai posisi judul kolom untuk memotong baris. Versi pertama
@@ -98,10 +152,11 @@ function bukanBarisDataAccurate(teks){
  * kolomnya bertingkat dua dan keterangan cabangnya sebaris dengan isi lain,
  * sehingga batas kolomnya salah dan hampir semua baris terbuang.
  *
- * Bentuk barisnya sendiri sudah cukup menentukan: nama barang selalu di
- * kiri sebagai teks, disusul angka-angka. Yang pertama dari angka-angka itu
- * adalah Kuantitas kelompok kolom paling kiri — yaitu gudang yang dipilih,
- * bukan kolom "Total Nama Gudang" yang ada di kanannya.
+ * Ada dua cara membaca satu baris, dicoba berurutan:
+ *   1. lewat sel — nama di kiri sebagai teks, lalu angka-angka; yang
+ *      pertama adalah Kuantitas kelompok kolom paling kiri;
+ *   2. lewat teksnya sendiri, bila sel-selnya tidak memuat angka sama
+ *      sekali karena seluruh baris datang sebagai satu potongan teks.
  */
 function ambilBarisAccurate(baris){
   /* --- Nama gudang, hanya untuk ditunjukkan ke pemakai ------------------ */
@@ -116,6 +171,8 @@ function ambilBarisAccurate(baris){
     }
   }
 
+  const jumlahKolom = jumlahKolomAngka(baris);
+
   /* --- Baris data -------------------------------------------------------- */
   const rows = [];
   let sisaNama = "";
@@ -126,15 +183,18 @@ function ambilBarisAccurate(baris){
     const sel = baris[i];
     const teksPenuh = sel.map(c => c.text).join(" ").replace(/\s+/g, " ").trim();
 
-    if(bukanBarisDataAccurate(teksPenuh)){
-      // Nama yang menggantung dibuang: judul halaman berikutnya berarti
-      // baris sebelumnya memang sudah selesai.
+    // Judul kelompok kolom kadang berdiri sendiri satu baris. Kalau
+    // dibiarkan, namanya akan menempel di depan barang berikutnya —
+    // persis yang membuat satu-satunya baris terbaca bernama "GUDANG UTAMA".
+    const judulKelompok = gudang !== "" && teksPenuh.toUpperCase() === gudang.toUpperCase();
+
+    if(judulKelompok || bukanBarisDataAccurate(teksPenuh)){
       sisaNama = "";
       if(/kuantitas/i.test(teksPenuh)) adaJudul = true;
       continue;
     }
 
-    // Pisahkan bagian nama (teks di kiri) dari angka-angka di kanannya.
+    /* --- Cara 1: lewat sel --- */
     let bagianNama = [];
     const angka = [];
     let sudahAngka = false;
@@ -148,26 +208,32 @@ function ambilBarisAccurate(baris){
         sudahAngka = true;
         angka.push(n);
       }
-      // Teks bukan angka SESUDAH angka pertama diabaikan: di laporan ini
-      // tidak ada kolom teks di kanan, jadi itu pasti sisa hiasan tabel.
     }
 
-    const nama = bagianNama.join(" ").replace(/\s+/g, " ").trim();
-
-    if(!angka.length){
-      // Baris tanpa angka: nama yang turun ke baris berikutnya.
-      if(nama !== "") sisaNama = (sisaNama ? sisaNama + " " : "") + nama;
+    if(angka.length){
+      const nama = bagianNama.join(" ").replace(/\s+/g, " ").trim();
+      const namaPenuh = ((sisaNama ? sisaNama + " " : "") + nama).replace(/\s+/g, " ").trim();
+      sisaNama = "";
+      if(namaPenuh === ""){
+        dilewati++;
+        continue;
+      }
+      rows.push({ nama: namaPenuh, qty: Math.round(angka[0]) });
       continue;
     }
 
-    const namaPenuh = ((sisaNama ? sisaNama + " " : "") + nama).replace(/\s+/g, " ").trim();
-    sisaNama = "";
-
-    if(namaPenuh === ""){
-      dilewati++;      // ada angkanya tapi tanpa nama — tidak bisa dicocokkan
+    /* --- Cara 2: seluruh baris ternyata satu potongan teks --- */
+    const dariTeks = ambilDariTeks(teksPenuh, jumlahKolom);
+    if(dariTeks !== null){
+      const namaPenuh = ((sisaNama ? sisaNama + " " : "") + dariTeks.nama)
+        .replace(/\s+/g, " ").trim();
+      sisaNama = "";
+      rows.push({ nama: namaPenuh, qty: dariTeks.qty });
       continue;
     }
-    rows.push({ nama: namaPenuh, qty: Math.round(angka[0]) });
+
+    // Tidak ada angka sama sekali: nama yang turun ke baris berikutnya.
+    if(teksPenuh !== "") sisaNama = (sisaNama ? sisaNama + " " : "") + teksPenuh;
   }
 
   if(!rows.length && !adaJudul){

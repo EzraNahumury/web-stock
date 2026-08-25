@@ -73,8 +73,11 @@ wajibLoginHalaman();
 
   <div class="kotak">
     <h2>2. Potongan teks mentah beserta koordinatnya</h2>
-    <div class="sub" style="margin:0 0 8px;">30 baris pertama. Ini yang dibutuhkan
-      untuk memperbaiki pembacanya bila hasil di atas salah.</div>
+    <div class="sub" style="margin:0 0 8px;">60 baris pertama, ditambah beberapa
+      baris pertama yang memuat angka. <code>n=</code> adalah berapa potongan teks
+      yang membentuk baris itu — <code>n=1</code> berarti seluruh barisnya datang
+      sebagai satu potongan. Ini yang dibutuhkan untuk memperbaiki pembacanya
+      bila hasil di atas salah.</div>
     <pre id="mentah">Belum ada berkas.</pre>
     <button class="salin" onclick="salin('mentah')">Salin</button>
   </div>
@@ -102,10 +105,11 @@ document.getElementById("berkas").addEventListener("change", async function(ev){
   /* --- Potongan mentah, sebelum ditafsirkan sama sekali --- */
   try{
     const pdf = await pdfjsLib.getDocument({ data: buf.slice(0) }).promise;
-    let keluar = "Halaman: " + pdf.numPages + "\n\n";
+    let keluar = "Halaman: " + pdf.numPages + "\n";
     let hitung = 0;
+    let semua = [];
 
-    for(let p = 1; p <= pdf.numPages && hitung < 30; p++){
+    for(let p = 1; p <= pdf.numPages; p++){
       const page = await pdf.getPage(p);
       const isi = await page.getTextContent();
       const items = isi.items
@@ -122,12 +126,31 @@ document.getElementById("berkas").addEventListener("change", async function(ev){
       });
       if(kini.length) baris.push(kini.sort((a,b)=>a.x-b.x));
 
-      for(let i = 0; i < baris.length && hitung < 30; i++, hitung++){
-        keluar += "hal " + p + " baris " + String(i).padStart(3) + " : "
-          + baris[i].map(c => "[x=" + c.x.toFixed(1) + " y=" + c.y.toFixed(1)
-              + " \"" + c.text + "\"]").join(" ") + "\n";
+      for(let i = 0; i < baris.length; i++){
+        semua.push({ hal:p, no:i, sel:baris[i] });
       }
+      // Cukup beberapa halaman pertama untuk mengenali bentuknya.
+      if(semua.length > 400) break;
     }
+
+    const tulis = (b) => "hal " + b.hal + " baris " + String(b.no).padStart(3)
+      + " n=" + b.sel.length + " : "
+      + b.sel.map(c => "[x=" + c.x.toFixed(1) + " y=" + c.y.toFixed(1)
+          + " \"" + c.text + "\"]").join(" ");
+
+    const punyaAngka = (b) =>
+      b.sel.some(c => /^-?[\d.,]+$/.test(c.text.trim()) && /\d/.test(c.text))
+      || /\s-?[\d.,]*\d[\d.,]*\s*$/.test(b.sel.map(c => c.text).join(" "));
+
+    keluar += "Baris terbaca: " + semua.length + "\n\n--- 60 baris pertama ---\n";
+    for(let i = 0; i < semua.length && i < 60; i++, hitung++){
+      keluar += tulis(semua[i]) + "\n";
+    }
+
+    const berangka = semua.filter(punyaAngka);
+    keluar += "\n--- baris yang memuat angka: " + berangka.length + " (10 pertama) ---\n";
+    berangka.slice(0, 10).forEach(b => { keluar += tulis(b) + "\n"; });
+
     document.getElementById("mentah").textContent = keluar;
   }catch(e){
     document.getElementById("mentah").textContent = "Gagal membaca PDF: " + e.message;

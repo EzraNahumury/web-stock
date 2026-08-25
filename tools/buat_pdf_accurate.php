@@ -9,9 +9,12 @@
  *
  * Jalankan: php tools\buat_pdf_accurate.php [jumlah] [berkas] [kategori] [dua]
  *
- * Argumen keempat "dua" membuat judul kolomnya bertingkat dua, seperti
- * berkas Accurate yang sebenarnya: baris pertama nama kelompok gudang,
- * baris kedua sub-judul Kuantitas / Total Biaya.
+ * Argumen keempat memilih bentuk berkasnya:
+ *   (kosong) judul kolom satu tingkat
+ *   dua      judul kolom bertingkat dua, seperti berkas Accurate aslinya
+ *   satu     tiap baris ditulis sebagai SATU potongan teks, meniru PDF yang
+ *            tidak memisahkan sel — bentuk yang membuat pemotongan per sel
+ *            tidak menemukan angka sama sekali
  *
  * Kategori boleh dikosongkan; diisi bila ingin isinya cocok dengan sesi
  * opname yang dibatasi satu kategori.
@@ -27,7 +30,9 @@ $keluar   = (isset($argv[2]) && $argv[2] !== '')
     ? $argv[2]
     : (sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'accurate-contoh.pdf');
 $kategori = $argv[3] ?? '';
-$duaTingkat = isset($argv[4]) && $argv[4] !== '';
+$bentuk     = $argv[4] ?? '';
+$duaTingkat = ($bentuk === 'dua');
+$satuPotong = ($bentuk === 'satu');
 
 $where  = ['deleted_at IS NULL', 'aktif = 1'];
 $params = [];
@@ -46,7 +51,13 @@ if (!$barang) {
     exit(1);
 }
 
-$kolom = $duaTingkat
+$kolom = $satuPotong
+    ? [
+        // Satu kolom selebar halaman: seluruh baris jadi satu potongan teks.
+        ['label' => 'Nama Barang        Kuantitas   Total Biaya   Kuantitas   Total Biaya',
+         'lebar' => 100],
+      ]
+    : ($duaTingkat
     ? [
         ['label' => 'Nama Barang',       'lebar' => 40],
         ['label' => 'GUDANG UTAMA',      'lebar' => 28, 'rata' => 'kanan'],
@@ -60,7 +71,7 @@ $kolom = $duaTingkat
         ['label' => 'Total Biaya', 'lebar' => 16, 'rata' => 'kanan'],
         ['label' => 'Kuantitas',   'lebar' => 12, 'rata' => 'kanan'],
         ['label' => 'Total Biaya', 'lebar' => 16, 'rata' => 'kanan'],
-      ];
+      ]);
 
 $pdf = new PdfTabel('lanskap');
 $pdf->siapkan('Kuantitas Barang per Gudang', [
@@ -81,6 +92,15 @@ foreach ($barang as $i => $b) {
     $qty   = ($i * 7) % 40;
     $biaya = number_format($qty * 2331.06, 2, ',', '.');
     $daftar[] = ['nama' => $b['nama'], 'qty' => $qty];
+
+    if ($satuPotong) {
+        $pdf->baris([
+            $b['nama'] . '   ' . number_format($qty, 0, ',', '.') . '   ' . $biaya
+            . '   ' . number_format($qty, 0, ',', '.') . '   ' . $biaya,
+        ]);
+        continue;
+    }
+
     $pdf->baris([
         $b['nama'],
         number_format($qty, 0, ',', '.'),
