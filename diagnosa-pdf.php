@@ -1,3 +1,22 @@
+<?php
+/**
+ * diagnosa-pdf.php — alat bantu membaca PDF picking list.
+ *
+ * Dipakai bila impor picking list salah membaca baris: halaman ini
+ * menunjukkan apa yang sebenarnya terbaca dari berkasnya, beserta
+ * koordinat potongan teksnya, supaya pembacanya bisa diperbaiki dari
+ * data nyata alih-alih ditebak.
+ *
+ * Berkasnya dibaca sepenuhnya di browser dan tidak pernah diunggah.
+ * Halamannya sendiri tetap butuh sesi: tidak ada alasan alat internal
+ * bisa dibuka siapa pun yang tahu alamatnya.
+ */
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/includes/auth.php';
+wajibLoginHalaman();
+?>
 <!DOCTYPE html>
 <html lang="id">
 <head>

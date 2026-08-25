@@ -4,18 +4,21 @@
  * Dipakai kolom Stok accurate di Laporan stok opname. Yang diambil hanya dua
  * hal per baris: nama barang, dan kuantitas pada kolom gudang PERTAMA.
  *
- * MENGAPA KOLOM PERTAMA
+ * MENGAPA ANGKA PERTAMA
  * Laporannya punya dua kelompok kolom berjudul sama: satu untuk gudang yang
  * dipilih (mis. "GUDANG UTAMA") dan satu lagi "Total Nama Gudang". Keduanya
- * memakai sub-judul "Kuantitas" dan "Total Biaya", jadi mencocokkan lewat
- * teks sub-judul saja akan ambigu. Kelompok gudangnya selalu di kiri, jadi
- * kemunculan "Kuantitas" paling kiri yang dipakai — dan nama gudangnya ikut
- * dikembalikan supaya bisa ditunjukkan ke pemakai sebelum data dipakai.
+ * memakai sub-judul "Kuantitas" dan "Total Biaya". Kelompok gudangnya selalu
+ * di kiri, jadi angka PERTAMA pada tiap baris data adalah kuantitas yang
+ * dicari. Nama gudangnya ikut dikembalikan supaya bisa ditunjukkan ke
+ * pemakai sebelum datanya dipakai.
  *
- * Rekonstruksi barisnya memakai cara yang sama dengan pdf-parser.js:
- * kelompokkan item teks menurut koordinat y, lalu petakan ke kolom memakai
- * batas titik-tengah antar posisi judul kolom. PDF tidak menyimpan tabel,
- * hanya potongan teks beserta letaknya.
+ * Baris disusun ulang dari koordinat y, sama seperti pdf-parser.js — PDF
+ * tidak menyimpan tabel, hanya potongan teks beserta letaknya. Tapi
+ * pemotongan kolomnya TIDAK memakai posisi judul: judul kolom laporan ini
+ * bertingkat dua dan keterangan cabangnya bisa sebaris dengan isi lain,
+ * yang membuat batas kolom berbasis judul meleset. Bentuk barisnya sendiri
+ * sudah cukup: nama di kiri sebagai teks, lalu angka-angka; yang pertama
+ * adalah Kuantitas kelompok kolom paling kiri.
  * ========================================================================== */
 
 /**
@@ -60,104 +63,99 @@ async function parsePdfAccurate(arrayBuffer){
 function angkaAccurate(teks){
   const t = String(teks || "").trim();
   if(t === "") return null;
-  // Hanya digit, titik, koma, dan tanda minus yang dianggap angka.
+  // Hanya digit, titik, koma, dan tanda minus yang dianggap angka. Nama
+  // seperti "CONE KERUCUT 22CM" tidak lolos karena memuat huruf.
   if(!/^-?[\d.,]+$/.test(t)) return null;
+  if(!/\d/.test(t)) return null;
   const bersih = t.replace(/\./g, "").replace(",", ".");
   const n = parseFloat(bersih);
   return isNaN(n) ? null : n;
 }
 
-/** Baris yang jelas bukan data: judul, keterangan cetak, nomor halaman. */
-function bukanBarisData(teks){
+/**
+ * Baris yang jelas bukan data barang: judul laporan, judul kolom,
+ * keterangan cetak, nomor halaman, dan baris total di kaki tabel.
+ *
+ * Diperiksa terhadap SELURUH teks barisnya, bukan bagian namanya saja.
+ * Judul kolom dua tingkat ("Nama Barang / GUDANG UTAMA / Total Nama Gudang"
+ * lalu "Kuantitas / Total Biaya / …") harus tersaring di sini, kalau tidak
+ * potongannya akan menempel di depan nama barang pertama.
+ */
+function bukanBarisDataAccurate(teks){
   const t = teks.trim();
   if(t === "") return true;
-  return /^(per tgl|cabang\s*:|halaman|page|total\s*$|kuantitas barang per gudang)/i.test(t);
+  return /(^|\s)(nama\s*barang|kuantitas|total\s*biaya|total\s*nama\s*gudang)(\s|$)/i.test(t)
+      || /^(per\s*tgl|cabang\s*:|gudang\s*:|halaman|page)/i.test(t)
+      || /kuantitas\s+barang\s+per\s+gudang/i.test(t)
+      || /^total(\s|:|$)/i.test(t);
 }
 
+/**
+ * Susun baris data dari kumpulan potongan teks.
+ *
+ * TIDAK memakai posisi judul kolom untuk memotong baris. Versi pertama
+ * melakukan itu dan gagal pada berkas Accurate yang sebenarnya: judul
+ * kolomnya bertingkat dua dan keterangan cabangnya sebaris dengan isi lain,
+ * sehingga batas kolomnya salah dan hampir semua baris terbuang.
+ *
+ * Bentuk barisnya sendiri sudah cukup menentukan: nama barang selalu di
+ * kiri sebagai teks, disusul angka-angka. Yang pertama dari angka-angka itu
+ * adalah Kuantitas kelompok kolom paling kiri — yaitu gudang yang dipilih,
+ * bukan kolom "Total Nama Gudang" yang ada di kanannya.
+ */
 function ambilBarisAccurate(baris){
-  /* --- 1. Cari baris judul kolom ---------------------------------------- */
-  let idxJudul = -1, selKuantitas = [];
-  for(let i = 0; i < baris.length; i++){
-    const kuant = baris[i].filter(c => /^kuantitas$/i.test(c.text.trim()));
-    if(kuant.length){
-      idxJudul = i;
-      selKuantitas = kuant;
-      break;
+  /* --- Nama gudang, hanya untuk ditunjukkan ke pemakai ------------------ */
+  let gudang = "";
+  for(let i = 0; i < baris.length && i < 40; i++){
+    const teks = baris[i].map(c => c.text).join(" ");
+    const m = teks.match(/Gudang\s*:\s*(.+)$/i);
+    if(m){
+      // Buang potongan angka yang kebetulan sebaris dengan keterangan itu.
+      gudang = m[1].split(/\s+/).filter(k => angkaAccurate(k) === null).join(" ").trim();
+      if(gudang !== "") break;
     }
   }
-  if(idxJudul === -1){
-    throw new Error("JUDUL_KOLOM_TIDAK_DITEMUKAN");
-  }
 
-  /* --- 2. Cari posisi kolom nama ---------------------------------------- */
-  // "Nama Barang" bisa berada di baris judul yang sama, atau satu baris di
-  // atasnya bila judulnya bertingkat dua.
-  let xNama = null;
-  for(let i = idxJudul; i >= Math.max(0, idxJudul - 3) && xNama === null; i--){
-    const sel = baris[i].find(c => /nama\s*barang/i.test(c.text));
-    if(sel) xNama = sel.x;
-  }
-  if(xNama === null){
-    // Cadangan: kolom nama selalu paling kiri di laporan ini.
-    xNama = Math.min.apply(null, baris[idxJudul].map(c => c.x)) - 1;
-  }
-
-  /* --- 3. Nama gudang, untuk ditunjukkan ke pemakai ---------------------- */
-  let gudang = "";
-  for(let i = 0; i < Math.min(baris.length, idxJudul + 1); i++){
-    const teks = baris[i].map(c => c.text).join(" ");
-    const m = teks.match(/Gudang\s*:\s*([^,]+?)\s*$/i);
-    if(m){ gudang = m[1].trim(); }
-  }
-  if(gudang === ""){
-    // Judul kelompok kolom kiri, bila keterangan cabangnya tidak ada.
-    const atas = baris[Math.max(0, idxJudul - 1)] || [];
-    const kiri = atas.filter(c => c.x > xNama + 10);
-    if(kiri.length) gudang = kiri[0].text.trim();
-  }
-
-  /* --- 4. Batas kolom --------------------------------------------------- */
-  // Kolom kuantitas yang dipakai adalah yang paling kiri; batas kanannya
-  // adalah titik tengah menuju judul kolom berikutnya.
-  const xKuantitas = selKuantitas[0].x;
-  const semuaJudul = baris[idxJudul].map(c => c.x).sort((a, b) => a - b);
-  const berikut = semuaJudul.find(x => x > xKuantitas + 1);
-
-  // Angka ditulis rata kanan, jadi x-nya tidak sama dengan x judulnya.
-  // Batas kiri diambil dari titik tengah antara kolom nama dan kolom
-  // kuantitas; batas kanan dari titik tengah menuju kolom sesudahnya.
-  const batasKiri  = (xNama + xKuantitas) / 2;
-  const batasKanan = berikut !== undefined ? (xKuantitas + berikut) / 2 : Infinity;
-
-  /* --- 5. Baca baris data ----------------------------------------------- */
+  /* --- Baris data -------------------------------------------------------- */
   const rows = [];
   let sisaNama = "";
   let dilewati = 0;
+  let adaJudul = false;
 
-  for(let i = idxJudul + 1; i < baris.length; i++){
+  for(let i = 0; i < baris.length; i++){
     const sel = baris[i];
-    const bagianNama = sel.filter(c => c.x < batasKiri).map(c => c.text.trim()).filter(Boolean);
-    const nama = bagianNama.join(" ").replace(/\s+/g, " ").trim();
+    const teksPenuh = sel.map(c => c.text).join(" ").replace(/\s+/g, " ").trim();
 
-    if(bukanBarisData(nama) && bagianNama.length){
-      // Judul halaman berikutnya atau keterangan cetak — buang sisa nama
-      // yang menggantung supaya tidak menempel ke baris data setelahnya.
+    if(bukanBarisDataAccurate(teksPenuh)){
+      // Nama yang menggantung dibuang: judul halaman berikutnya berarti
+      // baris sebelumnya memang sudah selesai.
       sisaNama = "";
+      if(/kuantitas/i.test(teksPenuh)) adaJudul = true;
       continue;
     }
 
-    // Kuantitas: sel yang jatuh di rentang kolom paling kiri.
-    let qty = null;
+    // Pisahkan bagian nama (teks di kiri) dari angka-angka di kanannya.
+    let bagianNama = [];
+    const angka = [];
+    let sudahAngka = false;
+
     for(let j = 0; j < sel.length; j++){
-      const c = sel[j];
-      if(c.x >= batasKiri && c.x < batasKanan){
-        const n = angkaAccurate(c.text);
-        if(n !== null){ qty = n; break; }
+      const n = angkaAccurate(sel[j].text);
+      if(!sudahAngka && n === null){
+        const t = sel[j].text.trim();
+        if(t !== "") bagianNama.push(t);
+      } else if(n !== null){
+        sudahAngka = true;
+        angka.push(n);
       }
+      // Teks bukan angka SESUDAH angka pertama diabaikan: di laporan ini
+      // tidak ada kolom teks di kanan, jadi itu pasti sisa hiasan tabel.
     }
 
-    if(qty === null){
-      // Baris tanpa angka: kemungkinan nama yang turun ke baris berikutnya.
+    const nama = bagianNama.join(" ").replace(/\s+/g, " ").trim();
+
+    if(!angka.length){
+      // Baris tanpa angka: nama yang turun ke baris berikutnya.
       if(nama !== "") sisaNama = (sisaNama ? sisaNama + " " : "") + nama;
       continue;
     }
@@ -166,10 +164,14 @@ function ambilBarisAccurate(baris){
     sisaNama = "";
 
     if(namaPenuh === ""){
-      dilewati++;      // ada angkanya tapi tidak ada namanya — tidak bisa dicocokkan
+      dilewati++;      // ada angkanya tapi tanpa nama — tidak bisa dicocokkan
       continue;
     }
-    rows.push({ nama: namaPenuh, qty: Math.round(qty) });
+    rows.push({ nama: namaPenuh, qty: Math.round(angka[0]) });
+  }
+
+  if(!rows.length && !adaJudul){
+    throw new Error("JUDUL_KOLOM_TIDAK_DITEMUKAN");
   }
 
   return { gudang: gudang, rows: rows, dilewati: dilewati };

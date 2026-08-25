@@ -1688,9 +1688,25 @@ tidak ketemu, atau yang cocok ke lebih dari satu baris, dilaporkan balik
 dan **tidak** diisikan — menebak barang mana yang dimaksud lebih berbahaya
 daripada membiarkan kolomnya kosong.
 
+Pemotongan barisnya **tidak** memakai posisi judul kolom. Versi pertama
+melakukan itu dan gagal pada berkas Accurate yang sebenarnya: judulnya
+bertingkat dua dan keterangan cabangnya sebaris dengan isi lain, sehingga
+batas kolomnya meleset dan hampir semua baris terbuang. Bentuk barisnya
+sendiri sudah cukup menentukan — nama di kiri sebagai teks, lalu
+angka-angka — dan angka pertama itulah kuantitas kelompok kolom paling
+kiri, yaitu gudang yang dipilih.
+
 `tools/buat_pdf_accurate.php` membuat PDF contoh bergaya laporan itu dari
 nama barang di master dengan angka karangan, untuk menguji pembacanya
-tanpa perlu menyimpan berkas Accurate asli di repositori.
+tanpa perlu menyimpan berkas Accurate asli di repositori. Argumen keempat
+`dua` menghasilkan judul kolom bertingkat dua seperti berkas aslinya.
+
+Bila hasilnya masih meleset, `diagnosa-accurate.php` menunjukkan apa yang
+sebenarnya terbaca beserta koordinat potongan teksnya, sehingga pembacanya
+bisa diperbaiki dari data nyata alih-alih ditebak dari tangkapan layar.
+Halaman itu — dan `diagnosa-pdf.php` untuk picking list — membaca berkasnya
+sepenuhnya di browser, tapi tetap memerlukan sesi: tidak ada alasan alat
+internal bisa dibuka siapa pun yang tahu alamatnya.
 
 **Penyesuaian** menggeser stok sungguhan. Memilih `Stok Disesuaikan`
 membuat stok akhir barang itu — di Dashboard, Riwayat, dan semua tempat

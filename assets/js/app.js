@@ -2951,7 +2951,12 @@ async function unggahPdfAccurate(ev){
           : '')
     + '</div>'
     + '<p style="margin-top:10px; color:var(--slate); font-size:12px;">'
-    + 'Kolom Stok accurate yang sudah terisi akan tertimpa. Kolom lain tidak disentuh.</p>';
+    + (pra.cocok
+        ? 'Kolom Stok accurate yang sudah terisi akan tertimpa. Kolom lain tidak disentuh.'
+        : 'Nama di atas adalah yang terbaca dari PDF. Kalau isinya tidak seperti nama '
+          + 'barang, pembacanya yang meleset — buka <a href="diagnosa-accurate.php" '
+          + 'target="_blank">diagnosa-accurate.php</a> lalu kirimkan hasilnya.')
+    + '</p>';
 
   if(!pra.cocok){
     await konfirmasiIsi("Tidak ada yang cocok", isiDialog, "Tutup");

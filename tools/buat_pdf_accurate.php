@@ -7,7 +7,11 @@
  * disimpan di repositori. Contoh ini memakai nama barang nyata dari master
  * dengan angka karangan, supaya pengujian pencocokan namanya tetap berarti.
  *
- * Jalankan: php tools\buat_pdf_accurate.php [jumlah] [berkas] [kategori]
+ * Jalankan: php tools\buat_pdf_accurate.php [jumlah] [berkas] [kategori] [dua]
+ *
+ * Argumen keempat "dua" membuat judul kolomnya bertingkat dua, seperti
+ * berkas Accurate yang sebenarnya: baris pertama nama kelompok gudang,
+ * baris kedua sub-judul Kuantitas / Total Biaya.
  *
  * Kategori boleh dikosongkan; diisi bila ingin isinya cocok dengan sesi
  * opname yang dibatasi satu kategori.
@@ -23,6 +27,7 @@ $keluar   = (isset($argv[2]) && $argv[2] !== '')
     ? $argv[2]
     : (sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'accurate-contoh.pdf');
 $kategori = $argv[3] ?? '';
+$duaTingkat = isset($argv[4]) && $argv[4] !== '';
 
 $where  = ['deleted_at IS NULL', 'aktif = 1'];
 $params = [];
@@ -41,17 +46,33 @@ if (!$barang) {
     exit(1);
 }
 
+$kolom = $duaTingkat
+    ? [
+        ['label' => 'Nama Barang',       'lebar' => 40],
+        ['label' => 'GUDANG UTAMA',      'lebar' => 28, 'rata' => 'kanan'],
+        ['label' => '',                  'lebar' => 0],
+        ['label' => 'Total Nama Gudang', 'lebar' => 28, 'rata' => 'kanan'],
+        ['label' => '',                  'lebar' => 0],
+      ]
+    : [
+        ['label' => 'Nama Barang', 'lebar' => 40],
+        ['label' => 'Kuantitas',   'lebar' => 12, 'rata' => 'kanan'],
+        ['label' => 'Total Biaya', 'lebar' => 16, 'rata' => 'kanan'],
+        ['label' => 'Kuantitas',   'lebar' => 12, 'rata' => 'kanan'],
+        ['label' => 'Total Biaya', 'lebar' => 16, 'rata' => 'kanan'],
+      ];
+
 $pdf = new PdfTabel('lanskap');
 $pdf->siapkan('Kuantitas Barang per Gudang', [
     'Per Tgl.' => date('d M Y'),
     'Cabang'   => 'Kantor Pusat, Gudang : GUDANG UTAMA',
-], [
-    ['label' => 'Nama Barang', 'lebar' => 40],
-    ['label' => 'Kuantitas',   'lebar' => 12, 'rata' => 'kanan'],
-    ['label' => 'Total Biaya', 'lebar' => 16, 'rata' => 'kanan'],
-    ['label' => 'Kuantitas',   'lebar' => 12, 'rata' => 'kanan'],
-    ['label' => 'Total Biaya', 'lebar' => 16, 'rata' => 'kanan'],
-]);
+], $kolom);
+
+if ($duaTingkat) {
+    // Sub-judul ditulis sebagai baris biasa supaya tata letaknya sama dengan
+    // judul kolom bertingkat dua di berkas aslinya.
+    $pdf->baris(['', 'Kuantitas', 'Total Biaya', 'Kuantitas', 'Total Biaya']);
+}
 
 $daftar = [];
 foreach ($barang as $i => $b) {
