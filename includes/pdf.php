@@ -280,7 +280,14 @@ class PdfTabel
     }
 
     /** Kirim PDF sebagai unduhan. */
-    public function kirim(string $namaBerkas): void
+    /**
+     * Susun berkas PDF-nya dan kembalikan sebagai string.
+     *
+     * Dipisah dari kirim() supaya isinya bisa disimpan ke berkas — dipakai
+     * tools/buat_pdf_accurate.php untuk membuat PDF contoh pengujian tanpa
+     * melewati HTTP.
+     */
+    public function keluarkan(): string
     {
         if ($this->isi !== '') {
             $this->halaman[] = $this->isi;
@@ -333,6 +340,14 @@ class PdfTabel
         }
         $pdf .= 'trailer' . "\n<< /Size " . ($maks + 1) . " /Root 1 0 R >>\n";
         $pdf .= "startxref\n$startxref\n%%EOF";
+
+        return $pdf;
+    }
+
+    /** Kirim PDF-nya sebagai unduhan lalu hentikan permintaan. */
+    public function kirim(string $namaBerkas): void
+    {
+        $pdf = $this->keluarkan();
 
         header('Content-Type: application/pdf');
         header('Content-Disposition: attachment; filename="' . $namaBerkas . '"');

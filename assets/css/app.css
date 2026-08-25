@@ -451,6 +451,27 @@ tbody tr:hover{ background:#FAFCFC; }
 .sel-penyesuaian:focus{ outline:none; box-shadow:0 0 0 3px rgba(47,107,127,.16); }
 .sel-penyesuaian:disabled{ cursor:default; opacity:.75; }
 
+/* Tombol berbentuk label untuk memilih berkas (unggah PDF Accurate). */
+.btn.ghost.mati{ opacity:.5; pointer-events:none; }
+
+/* --- Deretan tab di dalam menu Master --- */
+/* Lima baris di sidebar diringkas jadi satu baris; sub-halamannya pindah
+   ke sini supaya menu operasional tetap terbaca sekilas. */
+.sub-tabs{
+  display:flex; gap:4px; flex-wrap:wrap;
+  background:var(--card); border:1px solid var(--line); border-radius:12px;
+  padding:5px; margin-bottom:16px; box-shadow:var(--bayang);
+}
+.sub-tab{
+  border:0; background:transparent; cursor:pointer;
+  padding:8px 14px; border-radius:8px;
+  font-family:inherit; font-size:12.5px; font-weight:600; color:var(--slate);
+  transition:background .16s var(--ease), color .16s var(--ease);
+}
+.sub-tab:hover{ background:var(--paper); color:var(--ink); }
+.sub-tab.aktif{ background:var(--ink); color:#fff; }
+.sub-tab:focus-visible{ outline:2px solid var(--biru); outline-offset:2px; }
+
 /* --- Pemilihan menu di form Pengguna --- */
 .akses-kotak{
   border:1px solid var(--line); border-radius:10px; padding:12px 14px;

@@ -182,6 +182,7 @@ function petaEndpoint(): array
         'opname/save.php'         => ['opname',     true],
         'opname/item.php'         => ['opname',     true],
         'opname/massal.php'       => ['opname',     true],
+        'opname/accurate.php'     => ['opname',     true],
         'opname/delete.php'       => ['opname',     true],
 
         // Pencarian barang dipakai form Barang masuk, Barang keluar, dan

@@ -136,6 +136,7 @@ if ($inisial === '') {
 </script>
 <script src="assets/vendor/pdf.min.js"></script>
 <script src="<?= e(aset('assets/js/pdf-parser.js')) ?>"></script>
+<script src="<?= e(aset('assets/js/accurate-parser.js')) ?>"></script>
 <script src="<?= e(aset('assets/js/api.js')) ?>"></script>
 <script src="<?= e(aset('assets/js/grafik.js')) ?>"></script>
 <script src="<?= e(aset('assets/js/app.js')) ?>"></script>

@@ -7,6 +7,13 @@
  * Field yang tidak dikirim tidak diubah, dan mengirim string kosong berarti
  * "kosongkan lagi" (kembali NULL = belum dihitung). Keduanya perlu dibedakan
  * karena 0 adalah hasil hitungan yang sah — barangnya memang habis.
+ *
+ * MENYENTUH STOK
+ * Memilih penyesuaian "Stok Disesuaikan" menulis satu baris barang masuk /
+ * barang keluar sebesar selisih stok hitung terhadap stok yang berlaku,
+ * sehingga stok akhir di seluruh aplikasi mengikuti hitungan fisik.
+ * Mencabutnya membatalkan baris itu lagi. Karena itu seluruh penyimpanan
+ * dijalankan dalam satu transaksi.
  */
 
 declare(strict_types=1);
@@ -14,6 +21,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/helpers.php';
 require_once __DIR__ . '/../../includes/response.php';
+require_once __DIR__ . '/../../includes/opname.php';
 
 pasangPenangananGalatApi();
 wajibMetode('POST');
@@ -74,15 +82,68 @@ if ($accurate !== null && $accurate < 0) {
     jsonError('Stok accurate tidak boleh negatif.');
 }
 
-dbExec(
-    'UPDATE opname_item
-        SET stok_hitung = ?, stok_accurate = ?, dicek = ?,
-            penyesuaian = ?, petugas = ?, catatan = ?
-      WHERE id = ?',
-    [$hitung, $accurate, $dicek, $penyesuaian, $petugas, $catatan, $id]
-);
+/* --- Penyesuaian stok ---------------------------------------------------- */
+$sesuaikan = ($penyesuaian === PENYESUAIAN_DISESUAIKAN);
+
+if ($sesuaikan) {
+    // Ditolak lebih dulu supaya pesannya jelas, bukan diam-diam tidak terjadi.
+    if ($hitung === null) {
+        jsonError('Isi stok hitung dulu sebelum menyesuaikan stok baris ini.', 422);
+    }
+    if ($item['master_id'] === null) {
+        jsonError(
+            'Barang ini tidak terhubung ke master, jadi stoknya tidak bisa disesuaikan.',
+            422
+        );
+    }
+}
+
+// Nilai baru dipasang ke salinan barisnya supaya sinkronPenyesuaianStok()
+// menghitung dari keadaan yang akan disimpan, bukan yang lama.
+$item['stok_hitung'] = $hitung;
+
+$adj = dbTransaksi(static function (PDO $pdo) use ($item, $sesuaikan, $id, $hitung, $accurate, $dicek, $penyesuaian, $petugas, $catatan) {
+    $hasil = sinkronPenyesuaianStok($pdo, $item, $sesuaikan);
+
+    $st = $pdo->prepare(
+        'UPDATE opname_item
+            SET stok_hitung = ?, stok_accurate = ?, dicek = ?,
+                penyesuaian = ?, petugas = ?, catatan = ?,
+                adj_jenis = ?, adj_id = ?, adj_qty = ?
+          WHERE id = ?'
+    );
+    $st->execute([
+        $hitung, $accurate, $dicek, $penyesuaian, $petugas, $catatan,
+        $hasil['jenis'], $hasil['id'], $hasil['qty'], $id,
+    ]);
+    return $hasil;
+});
+
+if ($sesuaikan) {
+    catatAktivitas('update', 'opname', (int)$item['sesi_id'], [
+        'aksi'    => 'sesuaikan stok',
+        'nama'    => $item['nama'],
+        'barcode' => $item['barcode'],
+        'jumlah'  => $adj['qty'],
+        'arah'    => $adj['jenis'] ?? 'tidak ada selisih',
+    ]);
+}
 
 $selisih = ($hitung !== null && $accurate !== null) ? $hitung - $accurate : null;
+
+// Stok yang berlaku sesudah penyimpanan — dipakai layar untuk menunjukkan
+// hasil penyesuaiannya tanpa memuat ulang seluruh halaman.
+$stokKini = $item['master_id'] !== null ? stokAkhirItem((int)$item['master_id']) : null;
+
+$pesan = '';
+if ($sesuaikan) {
+    $pesan = $adj['qty'] === 0
+        ? 'Stok sudah sama dengan hitungan fisik, tidak ada koreksi yang perlu ditulis.'
+        : 'Stok disesuaikan: ' . ($adj['jenis'] === 'masuk' ? '+' : '-')
+          . number_format((int)$adj['qty'], 0, ',', '.') . ' pcs lewat barang '
+          . $adj['jenis'] . ' "' . KET_PENYESUAIAN . '". Stok akhir sekarang '
+          . number_format((int)$stokKini, 0, ',', '.') . '.';
+}
 
 jsonOk([
     'id'            => $id,
@@ -90,8 +151,12 @@ jsonOk([
     'stok_accurate' => $accurate,
     'dicek'         => $dicek === 1,
     'penyesuaian'   => $penyesuaian,
-    'disesuaikan'   => $penyesuaian === PENYESUAIAN_DISESUAIKAN,
+    'disesuaikan'   => $sesuaikan,
     'petugas'       => $petugas,
     'catatan'       => $catatan,
     'selisih'       => $selisih,
+    'adj_jenis'     => $adj['jenis'],
+    'adj_qty'       => $adj['qty'],
+    'stok_kini'     => $stokKini,
+    'pesan'         => $pesan,
 ]);

@@ -1509,6 +1509,23 @@ kecuali Log aktivitas — sama persis dengan jangkauan operator sebelum fitur
 ini ada. Akun lama tidak kehilangan akses karena pembaruan, dan juga tidak
 mendadak mendapat akses yang dulu tidak dimilikinya.
 
+### Menu Master
+
+Grup Master di sidebar dulu memakan lima baris (Barang, Kategori, dua
+Keterangan, Pengguna) dan menenggelamkan menu operasional. Sekarang jadi
+**satu baris**, dan sub-halamannya pindah ke deretan tab di dalam
+halamannya.
+
+Yang berubah hanya tempat menggambarnya: id menu, router, dan peta izin
+tetap sama, jadi hak akses per sub-halaman tetap berlaku persis seperti
+sebelumnya — tab yang tidak boleh dibuka tidak muncul, dan akun tanpa
+akses Master sama sekali tidak melihat tombolnya.
+
+Sub-halaman menggambar ke `wadahIsi()`, yang mengembalikan `#masterIsi`
+bila kerangka bertab sedang terpasang dan `#content` bila tidak.
+Menanyakannya ke DOM alih-alih menyimpan status sendiri membuatnya selalu
+benar tanpa perlu dibereskan saat berpindah menu.
+
 ### Master keterangan transaksi
 
 | Metode | Endpoint | Parameter | Respons |
@@ -1624,7 +1641,8 @@ pertama sambil memberi peringatan.
 | POST | `api/opname/delete.php` | `{id}` | `{ok, pesan}` |
 | GET | `api/opname/detail.php` | `id`, `q`, `kategori`, `hanya`, `page` | `{ok, sesi, rows[], ringkas, kategori_options, …}` |
 | POST | `api/opname/item.php` | `{id, stok_hitung?, stok_accurate?, dicek?, penyesuaian?, petugas?, catatan?}` | `{ok, …, selisih}` |
-| POST | `api/opname/massal.php` | `{id, q?, kategori?, hanya?, petugas?, penyesuaian?, pratinjau?}` | `{ok, jumlah, cocok, pesan}` |
+| POST | `api/opname/massal.php` | `{id, q?, kategori?, hanya?, petugas?, pratinjau?}` | `{ok, jumlah, cocok, pesan}` |
+| POST | `api/opname/accurate.php` | `{id, rows:[{nama,qty}], gudang?, pratinjau?}` | `{ok, diisi, cocok, tak_ketemu[], ganda[], rusak}` |
 
 Membuat dan menghapus sesi hanya untuk admin; mengisi hasil hitungan boleh
 siapa saja yang bisa masuk, karena itu pekerjaan petugas gudang.
@@ -1648,12 +1666,67 @@ barangnya memang habis; mengirim string kosong mengembalikannya ke `NULL`.
 Sesi berstatus `selesai` menolak perubahan baris sampai statusnya dibuka
 kembali.
 
-**Penyesuaian** mencatat keputusan atas selisihnya — `Tidak Disesuaikan`
-atau `Stok Disesuaikan`. Ini catatan, bukan pemicu: memilih
-`Stok Disesuaikan` **tidak mengubah stok**. Pembetulan stok tetap lewat
-Barang masuk / Barang keluar, supaya setiap pergerakan stok punya satu
-jalur yang sama dan terbaca di Riwayat. Kalau opname boleh menggeser stok
-sendiri, akan ada dua sumber pergerakan yang tidak bisa direkonsiliasi.
+#### Impor Stok accurate dari PDF Accurate
+
+Kolom **Stok accurate** bisa diisi sekaligus dari laporan Accurate
+*Kuantitas Barang per Gudang*. PDF-nya dibaca **di browser**
+(`assets/js/accurate-parser.js`); yang dikirim ke server hanya pasangan
+nama + kuantitas. Berkasnya memuat harga pokok tiap barang, dan
+menyimpannya di server tanpa alasan hanya menambah tempat data itu bisa
+bocor.
+
+Laporannya punya dua kelompok kolom berjudul sama — gudang yang dipilih
+dan `Total Nama Gudang` — dan keduanya memakai sub-judul `Kuantitas`.
+Mencocokkan lewat teks sub-judul saja jadi ambigu, sehingga yang dipakai
+adalah kemunculan `Kuantitas` **paling kiri**, yaitu kelompok gudangnya.
+Nama gudangnya ikut dibaca dan ditunjukkan di dialog sebelum data dipakai.
+
+Pencocokan ke barang hanya bisa lewat **nama**: laporan Accurate tidak
+memuat barcode maupun SKU. Nama dinormalkan (huruf besar, spasi rangkap
+dirapatkan) lalu dicocokkan ke `opname_item` dalam sesi itu. Nama yang
+tidak ketemu, atau yang cocok ke lebih dari satu baris, dilaporkan balik
+dan **tidak** diisikan — menebak barang mana yang dimaksud lebih berbahaya
+daripada membiarkan kolomnya kosong.
+
+`tools/buat_pdf_accurate.php` membuat PDF contoh bergaya laporan itu dari
+nama barang di master dengan angka karangan, untuk menguji pembacanya
+tanpa perlu menyimpan berkas Accurate asli di repositori.
+
+**Penyesuaian** menggeser stok sungguhan. Memilih `Stok Disesuaikan`
+membuat stok akhir barang itu — di Dashboard, Riwayat, dan semua tempat
+lain — mengikuti **stok hitung**.
+
+Caranya bukan menimpa angka mana pun. Stok akhir di aplikasi ini selalu
+`stok_awal + masuk - keluar`, jadi penyesuaian menulis **satu baris
+barang masuk / barang keluar** berketerangan `Penyesuaian Opname` sebesar
+selisihnya. Koreksinya lalu terbaca seperti pergerakan lain: ada
+tanggalnya, jumlahnya, dan pelakunya, dan muncul di Riwayat. Kalau opname
+boleh menimpa angkanya langsung, akan ada dua sumber pergerakan stok yang
+tidak bisa direkonsiliasi.
+
+```
+stok akhir 52, stok hitung 47  ->  barang keluar 5 pcs "Penyesuaian Opname"
+                                   stok akhir jadi 47 di seluruh aplikasi
+```
+
+**Selisihnya dihitung terhadap stok yang berlaku sekarang, bukan terhadap
+`stok_sistem`.** `stok_sistem` adalah potret saat sesi dibuat; memakainya
+sebagai dasar akan menghitung dua kali transaksi yang terjadi sesudahnya,
+dan stok akhirnya meleset dari hitungan fisik. Yang dijanjikan ke pemakai
+adalah "stok akhir jadi sama dengan stok hitung", jadi dasarnya harus stok
+yang berlaku.
+
+Baris koreksinya disimpan di `adj_jenis` / `adj_id` / `adj_qty`, dan
+selalu dibatalkan lebih dulu sebelum dihitung ulang — kalau tidak,
+perhitungannya akan memasukkan dirinya sendiri. Mengubah stok hitung
+memperbarui koreksinya; mencabut penyesuaian membatalkannya dan stok
+kembali seperti semula. Bila arah koreksinya sama, barisnya dipakai ulang
+supaya bolak-balik memilih tidak menumpuk baris terhapus.
+
+Penyesuaian **tidak bisa diisi massal**: setiap baris menulis koreksi stok
+sendiri, dan keputusan sebesar itu harus diambil per barang di baris yang
+angkanya kelihatan. `api/opname/massal.php` menolaknya. Antarmuka juga
+menanyakan konfirmasi yang menyebut angkanya sebelum koreksi ditulis.
 
 **Petugas** menyimpan nama orang yang menghitung baris itu. Karena satu
 sesi bisa memuat ribuan barang yang dihitung orang yang sama,
@@ -2049,6 +2122,7 @@ phpMyAdmin dari hPanel → pilih database → tab **Import**:
 8. sql/008_opname_penyesuaian.sql kolom penyesuaian + petugas
 9. sql/009_akses_pengguna.sql     peran viewer + kolom akses menu
 10. sql/010_keterangan.sql        daftar pilihan keterangan transaksi
+11. sql/011_penyesuaian_stok.sql  kolom koreksi stok hasil opname
 ```
 
 **Sejak versi ini migrasi berjalan otomatis.** Berkas di `sql/` diterapkan

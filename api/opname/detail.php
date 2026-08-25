@@ -51,7 +51,7 @@ $offset = ($meta['page'] - 1) * PAGE_SIZE;
 $rows = dbAll(
     "SELECT i.id, i.master_id, i.sku, i.barcode, i.nama, i.kategori,
             i.stok_sistem, i.stok_hitung, i.stok_accurate, i.dicek,
-            i.penyesuaian, i.petugas, i.catatan
+            i.penyesuaian, i.adj_jenis, i.adj_qty, i.petugas, i.catatan
        FROM opname_item i
      $sqlWhere
      ORDER BY i.kategori, i.nama, i.id
@@ -67,6 +67,7 @@ foreach ($rows as &$r) {
     $r['stok_accurate'] = $r['stok_accurate'] === null ? null : (int)$r['stok_accurate'];
     $r['dicek']         = (int)$r['dicek'] === 1;
     $r['disesuaikan']   = $r['penyesuaian'] === PENYESUAIAN_DISESUAIKAN;
+    $r['adj_qty']       = $r['adj_qty'] === null ? null : (int)$r['adj_qty'];
     $r['selisih']       = ($r['stok_hitung'] !== null && $r['stok_accurate'] !== null)
         ? $r['stok_hitung'] - $r['stok_accurate']
         : null;

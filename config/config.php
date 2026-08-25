@@ -57,6 +57,10 @@ define('KET_RETUR_MASUK', 'Retur Masuk');
 define('PENYESUAIAN_OPNAME', ['Tidak Disesuaikan', 'Stok Disesuaikan']);
 define('PENYESUAIAN_DISESUAIKAN', 'Stok Disesuaikan');
 
+// Keterangan baris transaksi yang ditulis sistem saat stok opname
+// disesuaikan. Harus ada di tabel keterangan untuk kedua arah.
+define('KET_PENYESUAIAN', 'Penyesuaian Opname');
+
 // Boleh mencatat barang keluar melebihi stok tersedia? (audit D3)
 // false = tolak; true = izinkan tapi tetap beri peringatan di respons.
 define('IZINKAN_STOK_MINUS', false);

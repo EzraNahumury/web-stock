@@ -12,6 +12,12 @@
  *
  * `pratinjau` hanya menghitung, tidak mengubah apa pun. Antarmuka memakainya
  * untuk menyebut angkanya di dialog konfirmasi sebelum menimpa apa pun.
+ *
+ * PENYESUAIAN TIDAK BISA DIISI MASSAL
+ * Sejak penyesuaian benar-benar menggeser stok, mengisinya untuk ribuan
+ * baris sekaligus berarti menulis ribuan koreksi stok dalam satu klik.
+ * Keputusan sebesar itu harus diambil per barang, di baris yang angkanya
+ * kelihatan, jadi endpoint ini menolaknya.
  */
 
 declare(strict_types=1);
@@ -60,8 +66,11 @@ if (array_key_exists('petugas', $in)) {
     $isiSet[] = ambilStr($in, 'petugas', 100);
 }
 if (array_key_exists('penyesuaian', $in)) {
-    $set[]    = 'i.penyesuaian = ?';
-    $isiSet[] = pilihanValid(ambilStr($in, 'penyesuaian', 30), PENYESUAIAN_OPNAME);
+    jsonError(
+        'Penyesuaian stok tidak bisa diisi massal karena setiap baris menulis '
+        . 'koreksi stok sendiri. Aturlah per barang di kolom Penyesuaian.',
+        422
+    );
 }
 
 if (!$set) {

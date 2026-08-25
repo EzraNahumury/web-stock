@@ -393,6 +393,37 @@ function tabTerlihat(){
   return TABS.filter(t => bolehMenu(t.id));
 }
 
+/* --- Kerangka menu Master ------------------------------------------
+ * Grup Master dulu memakan lima baris di sidebar. Sekarang jadi satu
+ * baris, dan sub-halamannya pindah ke deretan tab di dalam halaman.
+ * ------------------------------------------------------------------ */
+const HUB_MASTER = {
+  id: "master_hub",
+  label: "Master",
+  ikon: '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/><path d="M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/>'
+};
+
+/** Sub-halaman Master yang boleh dibuka akun ini. */
+function subMaster(){
+  return TABS.filter(t => t.grup === "Master" && bolehMenu(t.id));
+}
+function tabMilikMaster(id){
+  const t = TABS.find(x => x.id === id);
+  return !!(t && t.grup === "Master");
+}
+
+/**
+ * Ke mana isi halaman digambar.
+ *
+ * Sub-halaman Master menulis ke dalam kerangka bertab bila kerangkanya
+ * sedang terpasang, dan ke #content bila tidak. Menanyakannya ke DOM,
+ * bukan menyimpan status sendiri, membuatnya selalu benar tanpa perlu
+ * dibereskan saat berpindah menu.
+ */
+function wadahIsi(){
+  return $("masterIsi") || $("content");
+}
+
 /** Jumlah kecil di sisi menu — diisi setelah dashboard dimuat. */
 let navHitung = { perluOrder:0 };
 
@@ -403,10 +434,25 @@ function renderNav(){
   let html = "";
   let grupTerakhir = null;
 
+  let masterSudah = false;
+
   tabTerlihat().forEach(t => {
     if(t.grup !== grupTerakhir){
       html += '<div class="nav-judul">' + esc(t.grup) + '</div>';
       grupTerakhir = t.grup;
+    }
+
+    // Seluruh grup Master diwakili satu tombol; sub-halamannya dipilih
+    // lewat deretan tab di dalam halamannya.
+    if(t.grup === "Master"){
+      if(masterSudah) return;
+      masterSudah = true;
+      html += '<button type="button" class="nav-btn' + (tabMilikMaster(tab) ? ' aktif' : '') + '"'
+        + ' data-tab="' + HUB_MASTER.id + '"' + (tabMilikMaster(tab) ? ' aria-current="page"' : '') + '>'
+        + '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
+        + ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + HUB_MASTER.ikon + '</svg>'
+        + esc(HUB_MASTER.label) + '</button>';
+      return;
     }
     // Ikon dashboard digambar dengan fill; sisanya dengan stroke.
     const gaya = t.id === "dashboard"
@@ -429,6 +475,8 @@ function renderNav(){
 function judulHalaman(){
   const t = TABS.find(x => x.id === tab);
   if(!t) return;
+  // Di dalam Master, judulnya menyebut halamannya; deretan tab di bawahnya
+  // yang menunjukkan di mana posisinya.
   const h = $("judulHalaman"), p = $("subJudulHalaman");
   if(h) h.textContent = t.label;
   if(p) p.textContent = t.sub;
@@ -436,6 +484,13 @@ function judulHalaman(){
 }
 
 function switchTab(id){
+  // Tombol Master di sidebar membuka sub-halaman pertama yang boleh dibuka.
+  if(id === HUB_MASTER.id){
+    const sub = subMaster();
+    if(!sub.length) return;
+    if(tabMilikMaster(tab)) return;   // sudah di dalam Master
+    id = sub[0].id;
+  }
   if(tab === id) return;
   if(!bolehMenu(id)) return;
   tab = id;
@@ -1533,7 +1588,7 @@ function renderMaster(){
   html += '<div class="toolbar"><div class="search-wrap">'+svgIcon("search")+'<input type="text" id="masterSearch" placeholder="Cari SKU, barcode, atau nama…" oninput="onMasterSearchInput()"></div>'
     + '<a class="btn ghost" id="masterExport" href="api/export/pdf.php?jenis=master">'+svgIcon("download")+'Unduh PDF</a></div>';
   html += '<div id="masterResults"></div>';
-  $("content").innerHTML = html;
+  wadahIsi().innerHTML = html;
   $("masterSearch").value = masterFilters.q;
   refreshMasterTable();
 }
@@ -2306,6 +2361,7 @@ let opnameSesiPage = 1;
 // Pilihan penyesuaian datang dari server, sama seperti status retur.
 let opnamePenyesuaian = ["Tidak Disesuaikan", "Stok Disesuaikan"];
 let opnamePenyesuaianYa = "Stok Disesuaikan";
+let opnameRows = [];
 
 function renderOpname(){
   if(opnameSesiId === null) renderOpnameDaftar();
@@ -2488,6 +2544,10 @@ function renderOpnameDetail(){
     + '<button type="button" class="btn ghost" id="oiMassal" onclick="isiMassalOpname()"'
       + ' title="Isi petugas untuk seluruh baris yang sedang tersaring">'
       + svgIcon("edit") + 'Isi petugas</button>'
+    + '<label class="btn ghost" id="oiAccurate" title="Isi kolom Stok accurate dari laporan Accurate">'
+      + svgIcon("plus") + 'PDF Accurate'
+      + '<input type="file" accept="application/pdf,.pdf" id="oiAccurateFile"'
+      + ' style="display:none" onchange="unggahPdfAccurate(event)"></label>'
     + '<a class="btn ghost" id="oiUnduh" href="#">' + svgIcon("download") + 'Unduh PDF</a>'
     + '</div>'
     + '<div class="stat-row" id="oiRingkas"></div>'
@@ -2595,9 +2655,16 @@ async function refreshOpnameDetail(){
       Grafik.angkaNaik(n, Number(n.getAttribute("data-nilai"))));
   }
 
+  opnameRows = d.rows;
   const mati = terkunci ? " disabled" : "";
   const tblMassal = $("oiMassal");
   if(tblMassal) tblMassal.disabled = terkunci;
+  const tblAcc = $("oiAccurate");
+  if(tblAcc){
+    tblAcc.classList.toggle("mati", terkunci);
+    const inp = $("oiAccurateFile");
+    if(inp) inp.disabled = terkunci;
+  }
   let baris = d.rows.map(it =>
     '<tr>'
     + '<td class="mono" style="font-size:11px; color:var(--slateLo)">' + esc(it.sku || "-") + '</td>'
@@ -2621,10 +2688,12 @@ async function refreshOpnameDetail(){
     + '<td class="num"><span id="sel' + it.id + '" class="' + kelasSelisih(it.selisih) + '">'
       + teksSelisih(it.selisih) + '</span></td>'
     + '<td><select class="sel-penyesuaian' + (it.disesuaikan ? ' ya' : '') + '" id="oy' + it.id + '"'
-      + ' onchange="simpanItemOpname(' + it.id + ')"' + mati + '>'
+      + ' onchange="onPenyesuaianBerubah(' + it.id + ')"' + mati + '>'
       + opnamePenyesuaian.map(v => '<option value="' + esc(v) + '"'
           + (v === it.penyesuaian ? ' selected' : '') + '>' + esc(v) + '</option>').join("")
-      + '</select></td>'
+      + '</select>'
+      + '<div class="item-sub" style="font-family:Inter" id="oq' + it.id + '">'
+      + teksKoreksi(it) + '</div></td>'
     + '<td><input type="text" class="sel-catatan" id="ok' + it.id + '" maxlength="255"'
       + ' value="' + esc(it.catatan || "") + '" placeholder="Ket."'
       + ' onchange="simpanItemOpname(' + it.id + ')"' + mati + '></td>'
@@ -2664,6 +2733,54 @@ function kelasSelisih(v){
   return v > 0 ? "sel-lebih" : "sel-kurang";
 }
 
+/** Keterangan kecil di bawah dropdown penyesuaian. */
+function teksKoreksi(it){
+  if(!it.disesuaikan) return "";
+  if(!it.adj_qty) return "stok sudah sama";
+  return "stok " + (it.adj_jenis === "masuk" ? "+" : "-") + fmtNum(it.adj_qty);
+}
+
+/**
+ * Memilih "Stok Disesuaikan" benar-benar menggeser stok, jadi ditanya dulu.
+ * Angkanya disebut supaya keputusannya diambil dengan mata terbuka, bukan
+ * dari satu klik dropdown yang tampak seperti label biasa.
+ */
+async function onPenyesuaianBerubah(id){
+  const y = $("oy" + id);
+  const h = $("oh" + id);
+  if(!y) return;
+
+  if(y.value !== opnamePenyesuaianYa){
+    await simpanItemOpname(id);
+    return;
+  }
+
+  const hitung = h && h.value !== "" ? Number(h.value) : null;
+  if(hitung === null){
+    toast("Isi stok hitung dulu sebelum menyesuaikan stok baris ini.", "err");
+    y.value = opnamePenyesuaian[0];
+    return;
+  }
+
+  const baris = opnameRows.find(x => x.id === id);
+  const nama = baris ? baris.nama : "barang ini";
+  const kini = baris ? baris.stok_sistem : null;
+
+  const ya = await konfirmasi(
+    "Sesuaikan stok " + nama + "?",
+    "Stok akhir barang ini akan diubah menjadi " + fmtNum(hitung) + " mengikuti hitungan fisik"
+    + (kini !== null ? " (menurut sistem saat laporan dibuat: " + fmtNum(kini) + ")" : "")
+    + ". Koreksinya dicatat sebagai barang masuk atau keluar berketerangan "
+    + '"Penyesuaian Opname" dan langsung terlihat di Dashboard dan Riwayat.',
+    "Sesuaikan stok"
+  );
+  if(!ya){
+    y.value = opnamePenyesuaian[0];
+    return;
+  }
+  await simpanItemOpname(id);
+}
+
 async function simpanItemOpname(id){
   const h = $("oh" + id), a = $("oa" + id), c = $("oc" + id),
         k = $("ok" + id), pg = $("op" + id), y = $("oy" + id);
@@ -2688,7 +2805,30 @@ async function simpanItemOpname(id){
       sel.className   = kelasSelisih(res.selisih);
     }
     if(y) y.classList.toggle("ya", !!res.disesuaikan);
-  }catch(e){ tampilGalat(e); }
+
+    const ket = $("oq" + id);
+    if(ket){
+      ket.textContent = teksKoreksi({
+        disesuaikan: res.disesuaikan, adj_qty: res.adj_qty, adj_jenis: res.adj_jenis
+      });
+    }
+    // Baris tersimpan diperbarui juga, supaya dialog berikutnya menyebut
+    // angka yang benar tanpa memuat ulang halaman.
+    const baris = opnameRows.find(x => x.id === id);
+    if(baris){
+      baris.stok_hitung = res.stok_hitung;
+      baris.disesuaikan = res.disesuaikan;
+      baris.adj_qty     = res.adj_qty;
+      baris.adj_jenis   = res.adj_jenis;
+    }
+    if(res.pesan) toast(res.pesan);
+  }catch(e){
+    tampilGalat(e);
+    // Dropdown dikembalikan ke keadaan tersimpan supaya layarnya tidak
+    // menunjukkan sesuatu yang sebenarnya ditolak server.
+    const baris = opnameRows.find(x => x.id === id);
+    if(y && baris) y.value = baris.disesuaikan ? opnamePenyesuaianYa : opnamePenyesuaian[0];
+  }
 }
 
 /**
@@ -2733,6 +2873,99 @@ async function isiMassalOpname(){
     const res = await API.post("opname/massal.php", {
       id: opnameSesiId, petugas: nama.trim(),
       q: opnameFilter.q, kategori: opnameFilter.kategori, hanya: opnameFilter.hanya
+    });
+    setSaveStatus("ok");
+    toast(res.pesan || "Tersimpan.");
+    refreshOpnameDetail();
+  }catch(e){ tampilGalat(e); }
+}
+
+/**
+ * Baca PDF "Kuantitas Barang per Gudang" dari Accurate, lalu isikan
+ * kuantitasnya ke kolom Stok accurate.
+ *
+ * PDF-nya dibaca di browser dan yang dikirim ke server hanya pasangan nama
+ * + kuantitas. Berkasnya memuat harga pokok tiap barang; tidak ada gunanya
+ * menyimpannya di server, jadi tidak diunggah.
+ */
+async function unggahPdfAccurate(ev){
+  const berkas = ev.target.files && ev.target.files[0];
+  ev.target.value = "";                     // supaya berkas sama bisa dipilih lagi
+  if(!berkas) return;
+
+  const isPdf = berkas.type === "application/pdf" || /\.pdf$/i.test(berkas.name);
+  if(!isPdf){ toast("File harus berformat PDF.", "err"); return; }
+
+  setSaveStatus("saving");
+  let hasil;
+  try{
+    const buf = await berkas.arrayBuffer();
+    hasil = await parsePdfAccurate(buf);
+  }catch(e){
+    setSaveStatus("ok");
+    toast(e && e.message === "JUDUL_KOLOM_TIDAK_DITEMUKAN"
+      ? "Kolom Kuantitas tidak ketemu di PDF ini. Pastikan yang diunggah laporan Kuantitas Barang per Gudang."
+      : "PDF tidak bisa dibaca.", "err");
+    return;
+  }
+
+  if(!hasil.rows.length){
+    setSaveStatus("ok");
+    toast("Tidak ada baris barang yang terbaca dari PDF ini.", "err");
+    return;
+  }
+
+  // Pratinjau ke server dulu: pencocokan namanya dilakukan di sana, jadi
+  // angka yang disebut di dialog adalah angka yang benar-benar akan dipakai.
+  let pra;
+  try{
+    pra = await API.post("opname/accurate.php", {
+      id: opnameSesiId, gudang: hasil.gudang, rows: hasil.rows, pratinjau: true
+    });
+  }catch(e){ setSaveStatus("ok"); tampilGalat(e); return; }
+  setSaveStatus("ok");
+
+  const contoh = (pra.tak_ketemu || []).slice(0, 8);
+  const isiDialog =
+    '<p>Dari <b>' + fmtNum(pra.dibaca) + '</b> baris di PDF'
+      + (hasil.gudang ? ' (gudang <b>' + esc(hasil.gudang) + '</b>)' : '')
+      + ', <b>' + fmtNum(pra.cocok) + '</b> cocok dengan barang di laporan ini.</p>'
+    + '<div class="rapikan-daftar">'
+      + '<div><b>' + fmtNum(pra.cocok) + '</b> baris akan terisi stok accurate-nya'
+        + (pra.cocok ? '' : ' — tidak ada yang berubah') + '</div>'
+      + (pra.tak_ketemu && pra.tak_ketemu.length
+          ? '<div style="margin-top:8px"><b>' + fmtNum(pra.tak_ketemu.length)
+            + '</b> nama tidak ketemu di laporan ini:<div class="rapikan-contoh">'
+            + contoh.map(n => '<div class="rapikan-lama">' + esc(n) + '</div>').join("")
+            + (pra.tak_ketemu.length > contoh.length
+                ? '<div style="color:var(--slateLo)">…dan ' + fmtNum(pra.tak_ketemu.length - contoh.length) + ' lagi</div>'
+                : '')
+            + '</div></div>'
+          : '')
+      + (pra.ganda && pra.ganda.length
+          ? '<div style="margin-top:8px"><b>' + fmtNum(pra.ganda.length) + '</b> nama kembar di laporan ini, '
+            + 'dilewati supaya tidak salah barang.</div>'
+          : '')
+      + (pra.rusak
+          ? '<div style="margin-top:8px">' + fmtNum(pra.rusak) + ' baris PDF tidak terbaca angkanya.</div>'
+          : '')
+    + '</div>'
+    + '<p style="margin-top:10px; color:var(--slate); font-size:12px;">'
+    + 'Kolom Stok accurate yang sudah terisi akan tertimpa. Kolom lain tidak disentuh.</p>';
+
+  if(!pra.cocok){
+    await konfirmasiIsi("Tidak ada yang cocok", isiDialog, "Tutup");
+    return;
+  }
+
+  const ya = await konfirmasiIsi(
+    "Isi stok accurate dari PDF?", isiDialog, "Isikan " + fmtNum(pra.cocok) + " baris");
+  if(!ya) return;
+
+  setSaveStatus("saving");
+  try{
+    const res = await API.post("opname/accurate.php", {
+      id: opnameSesiId, gudang: hasil.gudang, rows: hasil.rows
     });
     setSaveStatus("ok");
     toast(res.pesan || "Tersimpan.");
@@ -2944,7 +3177,7 @@ function renderKategori(){
   }
 
   html += '<div id="katHasil"></div>';
-  $("content").innerHTML = html;
+  wadahIsi().innerHTML = html;
   refreshKategori();
 }
 
@@ -3158,7 +3391,7 @@ function renderKeterangan(jenis){
   }
 
   html += '<div id="ketHasil"></div>';
-  $("content").innerHTML = html;
+  wadahIsi().innerHTML = html;
   refreshKeterangan();
 }
 
@@ -3365,7 +3598,7 @@ let peranOptions = { operator:"Operator", admin:"Admin" };
 
 function renderPengguna(){
   if(!sayaAdmin()){
-    $("content").innerHTML = '<div class="info-box">Halaman ini hanya untuk admin.</div>';
+    wadahIsi().innerHTML = '<div class="info-box">Halaman ini hanya untuk admin.</div>';
     return;
   }
 
@@ -3402,7 +3635,7 @@ function renderPengguna(){
     + '</div></form>'
     + '<div id="pHasil"></div>';
 
-  $("content").innerHTML = html;
+  wadahIsi().innerHTML = html;
   refreshPengguna();
 }
 
@@ -3649,6 +3882,7 @@ async function hapusPengguna(id){
 /* Router & init                                                      */
 /* ---------------------------------------------------------------- */
 function renderContent(){
+  if(tabMilikMaster(tab)) pasangKerangkaMaster();
   if(tab==="dashboard") renderDashboard();
   else if(tab==="masuk") renderTransaksiTab("masuk");
   else if(tab==="keluar") renderTransaksiTab("keluar");
@@ -3662,6 +3896,20 @@ function renderContent(){
   else if(tab==="ket_masuk") renderKeterangan("masuk");
   else if(tab==="ket_keluar") renderKeterangan("keluar");
   else if(tab==="pengguna") renderPengguna();
+}
+
+/** Deretan tab Master + wadah kosong untuk sub-halamannya. */
+function pasangKerangkaMaster(){
+  const sub = subMaster();
+  $("content").innerHTML =
+    '<div class="sub-tabs" role="tablist">'
+    + sub.map(t =>
+        '<button type="button" class="sub-tab' + (t.id === tab ? ' aktif' : '') + '"'
+        + ' role="tab" aria-selected="' + (t.id === tab) + '"'
+        + ' data-tab="' + t.id + '">' + esc(t.label) + '</button>'
+      ).join("")
+    + '</div>'
+    + '<div id="masterIsi"></div>';
 }
 
 function init(){
