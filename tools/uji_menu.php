@@ -108,6 +108,20 @@ foreach (array_keys($peta) as $rel) {
     }
 }
 
+// Tiap menu harus punya kelompok, kalau tidak daftar centang hak akses
+// akan menaruhnya di kelompok "Lainnya" tanpa ada yang memberi tahu.
+$grup = menuGrup();
+foreach (array_keys(menuIzin()) as $id) {
+    if (!isset($grup[$id])) {
+        $galat[] = "Menu \"$id\" tidak punya kelompok di menuGrup().";
+    }
+}
+foreach (array_keys($grup) as $id) {
+    if (!isset(menuIzin()[$id])) {
+        $galat[] = "menuGrup() menyebut \"$id\" yang tidak ada di menuIzin().";
+    }
+}
+
 // Menu yang disebut peta harus benar-benar ada di daftar menu.
 $menuSah = array_merge(array_keys(menuIzin()), menuAdminSaja(), ['@ekspor', '@keterangan']);
 foreach ($peta as $rel => $baris) {

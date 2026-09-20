@@ -53,6 +53,7 @@ jsonOk([
     'admin_aktif'  => $adminAktif,
     'saya'         => $saya,
     'menu_options' => menuIzin(),
+    'menu_grup'    => menuGrup(),
     'menu_bawaan'  => menuBawaan(),
     'peran_options'=> peranIzin(),
 ]);

@@ -1509,6 +1509,15 @@ kecuali Log aktivitas — sama persis dengan jangkauan operator sebelum fitur
 ini ada. Akun lama tidak kehilangan akses karena pembaruan, dan juga tidak
 mendadak mendapat akses yang dulu tidak dimilikinya.
 
+Daftar centangnya dikelompokkan sama dengan sidebar, lewat `menuGrup()`.
+Itu bukan hiasan: menu **Barang**, **Kategori**, dan kedua **Keterangan**
+sama-sama tinggal di grup Master dan tampil sebagai satu tombol Master,
+jadi mencabut Barang saja tidak membuat tombol itu hilang. Dengan daftar
+rata tanpa kelompok, hal itu terbaca seperti izin yang tidak bekerja.
+Keterangan di bawah daftar menyebutnya langsung — berapa tab yang akan
+muncul di menu Master, atau bahwa menunya tidak akan muncul sama sekali.
+`tools/uji_menu.php` memastikan tiap menu punya kelompok.
+
 ### Menu Master
 
 Grup Master di sidebar dulu memakan lima baris (Barang, Kategori, dua

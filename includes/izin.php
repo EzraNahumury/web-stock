@@ -38,11 +38,38 @@ function menuIzin(): array
         'pertukaran' => 'Pertukaran barang',
         'retur'      => 'Retur',
         'opname'     => 'Laporan stok opname',
-        'master'     => 'Barang (master)',
+        'master'     => 'Barang',
         'kategori'   => 'Kategori',
         'ket_masuk'  => 'Keterangan barang masuk',
         'ket_keluar' => 'Keterangan barang keluar',
         'aktivitas'  => 'Log aktivitas',
+    ];
+}
+
+/**
+ * Kelompok tiap menu, sama dengan pengelompokan di sidebar.
+ *
+ * Dikirim ke layar supaya daftar centang hak akses bisa dikelompokkan
+ * seperti menunya. Tanpa itu, "Barang" terbaca seolah mewakili seluruh
+ * grup Master, padahal Kategori dan kedua Keterangan adalah menu terpisah
+ * yang hanya tinggal di grup yang sama — mencabut "Barang" tidak membuat
+ * tombol Master hilang, dan itu tampak seperti izin yang tidak bekerja.
+ */
+function menuGrup(): array
+{
+    return [
+        'dashboard'  => 'Operasional',
+        'masuk'      => 'Operasional',
+        'keluar'     => 'Operasional',
+        'riwayat'    => 'Operasional',
+        'pertukaran' => 'Operasional',
+        'retur'      => 'Operasional',
+        'opname'     => 'Operasional',
+        'master'     => 'Master',
+        'kategori'   => 'Master',
+        'ket_masuk'  => 'Master',
+        'ket_keluar' => 'Master',
+        'aktivitas'  => 'Sistem',
     ];
 }
 

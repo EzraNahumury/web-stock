@@ -3598,6 +3598,7 @@ let penggunaRows = [];
 // Daftar menu dan peran datang dari server, supaya layar tidak pernah
 // menawarkan sesuatu yang tidak dikenal includes/izin.php.
 let menuOptions = {};
+let menuGrupMenu = {};
 let menuBawaan  = [];
 let peranOptions = { operator:"Operator", admin:"Admin" };
 
@@ -3654,6 +3655,7 @@ async function refreshPengguna(){
 
   penggunaRows = d.rows;
   if(d.menu_options)  menuOptions  = d.menu_options;
+  if(d.menu_grup)     menuGrupMenu = d.menu_grup;
   if(d.menu_bawaan)   menuBawaan   = d.menu_bawaan;
   if(d.peran_options) peranOptions = d.peran_options;
   isiPilihanPengguna();
@@ -3707,9 +3709,34 @@ function isiPilihanPengguna(){
 
   const daftar = $("pAksesDaftar");
   if(daftar && !daftar.children.length){
-    daftar.innerHTML = Object.keys(menuOptions).map(id =>
-      '<label class="akses-item"><input type="checkbox" value="' + esc(id) + '"'
-      + ' onchange="onAksesBerubah()"> ' + esc(menuOptions[id]) + '</label>'
+    // Dikelompokkan sama dengan sidebar. Sebelumnya daftarnya rata tanpa
+    // kelompok, sehingga "Barang" terbaca seolah mewakili seluruh menu
+    // Master — padahal Kategori dan kedua Keterangan adalah menu tersendiri
+    // yang hanya tinggal di grup yang sama.
+    const urut = ["Operasional", "Master", "Sistem"];
+    const perGrup = {};
+    Object.keys(menuOptions).forEach(id => {
+      const g = menuGrupMenu[id] || "Lainnya";
+      (perGrup[g] = perGrup[g] || []).push(id);
+    });
+
+    const grupAda = urut.filter(g => perGrup[g])
+      .concat(Object.keys(perGrup).filter(g => urut.indexOf(g) === -1));
+
+    daftar.innerHTML = grupAda.map(g =>
+      '<div class="akses-grup">'
+      + '<div class="akses-grup-judul">' + esc(g)
+        + (g === "Master"
+            ? '<span class="akses-grup-catatan">tampil sebagai satu menu Master; '
+              + 'isinya sesuai yang dicentang</span>'
+            : '')
+        + '</div>'
+      + '<div class="akses-grup-isi">'
+      + perGrup[g].map(id =>
+          '<label class="akses-item"><input type="checkbox" value="' + esc(id) + '"'
+          + ' onchange="onAksesBerubah()"> ' + esc(menuOptions[id]) + '</label>'
+        ).join("")
+      + '</div></div>'
     ).join("");
   }
   onPeranBerubah();
@@ -3773,8 +3800,17 @@ function onAksesBerubah(){
   const catatan = role === "viewer"
     ? " Akun ini hanya bisa melihat — semua tombol simpan dan hapus ditolak server."
     : "";
+
+  // Tombol Master muncul bila ADA SATU saja sub-halamannya yang dicentang.
+  // Disebut supaya tidak lagi terlihat seperti izin yang tidak bekerja.
+  const subMasterDipilih = dipilih.filter(id => menuGrupMenu[id] === "Master");
+  const tentangMaster = subMasterDipilih.length
+    ? " Menu Master akan muncul dengan " + subMasterDipilih.length + " tab: "
+      + subMasterDipilih.map(id => menuOptions[id] || id).join(", ") + "."
+    : " Menu Master tidak akan muncul.";
+
   kaki.textContent = dipilih.length
-    ? dipilih.length + " menu dipilih." + catatan
+    ? dipilih.length + " menu dipilih." + tentangMaster + catatan
     : "Tidak ada yang dicentang — akun ini mendapat menu bawaan ("
       + menuBawaan.length + " menu, tanpa Log aktivitas)." + catatan;
 }
