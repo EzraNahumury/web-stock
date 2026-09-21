@@ -1868,6 +1868,27 @@ SKU, stok awal, stok minimal, dan kategori, ditambah total stok. Barcode
 yang diubah impor dicocokkan lewat nama + SKU dan dilaporkan terpisah, bukan
 dihitung sebagai selisih. Keluar dengan kode 1 bila ada yang tidak cocok.
 
+#### Menerapkannya ke server
+
+Database produksi tidak bisa dicapai dari mesin pengembangan, jadi hasil
+yang sudah diverifikasi dituangkan menjadi **berkas migrasi** yang berjalan
+sendiri saat deploy:
+
+```
+php tools\buat_migrasi_reset.php 012 "OKTOBER 2026"
+```
+
+Isinya diambil dari `master_barang` yang sudah terbukti benar, bukan dari
+XLSX-nya dibaca ulang — supaya yang sampai ke server persis apa yang sudah
+diperiksa, bukan hasil pembacaan kedua yang bisa berbeda. `INSERT`-nya
+dipecah per 200 baris: penerap migrasi menjalankan perintah satu per satu,
+dan batas paket MySQL di server bersama tidak selalu longgar.
+
+Berkas itu **menghapus data**, tidak seperti migrasi lain yang hanya
+mengubah struktur, jadi ia membawa penjaga `@lewati-jika-jumlah`. Cara
+manual lewat `deploy/reset-<periode>.sql` dan phpMyAdmin masih tersedia
+bila penerapannya ingin dikendalikan sendiri.
+
 ---
 
 ## 12. Rencana Kerja Bertahap
@@ -2219,7 +2240,7 @@ phpMyAdmin dari hPanel → pilih database → tab **Import**:
 
 ```
 1. sql/001_schema.sql             7 tabel + akun admin awal
-2. sql/002_seed_master.sql        1.404 barang, 79.123 unit, 350 ambang (108 KB)
+2. sql/002_seed_master.sql        1.435 barang, 92.573 unit, 340 ambang (113 KB)
 3. sql/003_kategori_pengguna.sql  tabel kategori + 11 kategori awal
 4. sql/004_pertukaran.sql         tabel riwayat pertukaran produk
 5. sql/005_indeks_aktivitas.sql   indeks waktu untuk halaman Log aktivitas
@@ -2229,6 +2250,7 @@ phpMyAdmin dari hPanel → pilih database → tab **Import**:
 9. sql/009_akses_pengguna.sql     peran viewer + kolom akses menu
 10. sql/010_keterangan.sql        daftar pilihan keterangan transaksi
 11. sql/011_penyesuaian_stok.sql  kolom koreksi stok hasil opname
+12. sql/012_reset_oktober_2026.sql  pendataan ulang katalog — MENGHAPUS DATA
 ```
 
 **Sejak versi ini migrasi berjalan otomatis.** Berkas di `sql/` diterapkan
@@ -2245,11 +2267,19 @@ syarat lewatnya sendiri:
 -- @lewati-jika-terisi: master_barang    lewati bila tabel itu sudah berisi
 -- @lewati-jika-indeks: activity_log.idx_waktu   lewati bila indeks sudah ada
 -- @lewati-jika-kolom: opname_item.penyesuaian   lewati bila kolom sudah ada
+-- @lewati-jika-jumlah: master_barang = 1435     lewati bila barisnya sudah sejumlah itu
 ```
 
-Dua penjaga terakhir ada karena `ADD INDEX` dan `ADD COLUMN` tidak punya
-bentuk `IF NOT EXISTS` yang berlaku di MySQL maupun MariaDB sekaligus;
-keberadaannya diperiksa dari PHP lewat `information_schema`.
+Penjaga indeks dan kolom ada karena `ADD INDEX` dan `ADD COLUMN` tidak
+punya bentuk `IF NOT EXISTS` yang berlaku di MySQL maupun MariaDB
+sekaligus; keberadaannya diperiksa dari PHP lewat `information_schema`.
+
+`@lewati-jika-jumlah` untuk migrasi yang **mengganti data**, bukan
+struktur. Tabel `migrasi` sudah mencegah pengulangan, tapi migrasi yang
+menghapus data tidak boleh bergantung pada satu baris catatan: database yang
+dipulihkan dari cadangan bisa kehilangan catatan itu sementara datanya sudah
+masuk, dan migrasinya akan menghapus transaksi yang dicatat sesudahnya.
+Jumlah baris yang dituju dipakai sebagai penanda "sudah terjadi".
 
 Database yang sudah berisi data otomatis ter-baseline: berkas lama dicatat
 sebagai dilewati tanpa dijalankan, dan hanya migrasi baru yang benar-benar

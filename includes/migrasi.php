@@ -19,6 +19,7 @@
  *   -- @lewati-jika-terisi: master_barang    lewati bila tabel itu sudah berisi
  *   -- @lewati-jika-indeks: tabel.nama_indeks  lewati bila indeks itu sudah ada
  *   -- @lewati-jika-kolom: tabel.nama_kolom    lewati bila kolom itu sudah ada
+ *   -- @lewati-jika-jumlah: tabel = 1435      lewati bila barisnya sudah sejumlah itu
  *
  * Berkas yang dilewati tetap tercatat sebagai sudah diterapkan, jadi
  * database lama otomatis ter-"baseline" pada pemeriksaan pertama dan hanya
@@ -160,6 +161,17 @@ function migrasiPerluDilewati(string $isi): bool
     }
     if (preg_match('/--\s*@lewati-jika-kolom:\s*([A-Za-z0-9_]+)\.([A-Za-z0-9_]+)/', $isi, $m)) {
         if (kolomAda($m[1], $m[2])) {
+            return true;
+        }
+    }
+    // Untuk migrasi yang MENGGANTI DATA, bukan struktur. Jumlah baris yang
+    // dituju dipakai sebagai penanda "sudah terjadi": bila sudah sejumlah
+    // itu, migrasinya tidak dijalankan lagi. Tabel migrasi memang sudah
+    // mencegah pengulangan, tapi migrasi yang menghapus data tidak boleh
+    // bergantung pada satu baris catatan saja — database yang dipulihkan
+    // dari cadangan bisa kehilangan catatan itu sementara datanya sudah ada.
+    if (preg_match('/--\s*@lewati-jika-jumlah:\s*([A-Za-z0-9_]+)\s*=\s*(\d+)/', $isi, $m)) {
+        if (tabelAda($m[1]) && (int)dbValue('SELECT COUNT(*) FROM `' . $m[1] . '`') === (int)$m[2]) {
             return true;
         }
     }
