@@ -15,6 +15,10 @@
  * baru yang lupa didaftarkan akan mati dengan galat 500. Lebih baik
  * ketahuan di sini daripada di tangan pemakai.
  *
+ * Termasuk memastikan setiap endpoint hapus ditandai sebagai penghapusan.
+ * Penghapusan hanya untuk admin; endpoint hapus baru yang lupa ditandai akan
+ * diam-diam terbuka untuk operator, dan itu tidak akan gagal dengan berisik.
+ *
  * Keduanya murni membaca teks: tanpa Node, tanpa browser, tanpa paket
  * tambahan, tanpa menyentuh database. Jalankan sebelum commit:
  *
@@ -108,6 +112,21 @@ foreach (array_keys($peta) as $rel) {
     }
 }
 
+// Endpoint yang namanya delete.php harus ditandai sebagai penghapusan,
+// supaya aturan "hapus = admin" tidak bisa terlewat karena lupa.
+foreach ($peta as $rel => $baris) {
+    $namanya  = basename($rel);
+    $ditandai = isset($baris[2]) && $baris[2];
+    if ($namanya === 'delete.php' && !$ditandai) {
+        $galat[] = "api/$rel belum ditandai sebagai penghapusan di petaEndpoint() "
+            . '- akan terbuka untuk operator.';
+    }
+    if ($namanya !== 'delete.php' && $ditandai) {
+        $galat[] = "api/$rel ditandai sebagai penghapusan tapi namanya bukan delete.php "
+            . '- pastikan itu memang disengaja.';
+    }
+}
+
 // Tiap menu harus punya kelompok, kalau tidak daftar centang hak akses
 // akan menaruhnya di kelompok "Lainnya" tanpa ada yang memberi tahu.
 $grup = menuGrup();
@@ -133,6 +152,9 @@ foreach ($peta as $rel => $baris) {
 echo "\n--- Izin ---\n";
 echo 'Endpoint di api/ : ' . count($berkas) . "\n";
 echo 'Baris peta izin  : ' . count($peta) . "\n";
+echo 'Endpoint hapus   : ' . count(array_filter($peta, static function ($b) {
+    return isset($b[2]) && $b[2];
+})) . " (hanya admin)\n";
 echo 'Menu bisa diberi : ' . count(menuIzin()) . ' (' . implode(', ', array_keys(menuIzin())) . ")\n";
 echo 'Menu bawaan      : ' . implode(', ', menuBawaan()) . "\n";
 

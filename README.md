@@ -1466,17 +1466,27 @@ Diatur per akun lewat menu **Pengguna**, dan ditegakkan di
 | | |
 |---|---|
 | **Menu** | daftar menu yang boleh dibuka akun ini |
-| **Peran** | `admin` penuh · `operator` boleh menulis · `viewer` hanya melihat |
+| **Peran** | `admin` penuh · `operator` mencatat & mengubah · `viewer` hanya melihat |
 
 Peran `viewer` ditolak di **setiap** endpoint yang menulis, di menu mana pun
 — bukan sekadar tombolnya disembunyikan.
 
+**Menghapus catatan hanya untuk admin**, di menu mana pun. Operator boleh
+mencatat dan mengubah, tapi tidak menghapus: penghapusan barang masuk atau
+keluar langsung menggeser stok, dan barisnya hilang dari seluruh layar, jadi
+salah hapus baru ketahuan saat stok opname. Aturannya ditulis sekali sebagai
+kolom ketiga di `petaEndpoint()`, bukan ditempel `wajibAdminApi()` di tiap
+berkas — endpoint hapus baru tidak bisa lolos hanya karena penulisnya lupa,
+dan `tools/uji_menu.php` menolak berkas bernama `delete.php` yang belum
+ditandai.
+
 ```php
-// includes/izin.php — jalur endpoint -> [menu yang dibutuhkan, apakah menulis]
+// includes/izin.php — [menu yang dibutuhkan, apakah menulis, apakah menghapus]
 'keluar/create.php'      => ['keluar', true],
-'master/list.php'        => [null,     false],   // dipakai form di banyak menu
+'keluar/delete.php'      => ['keluar', true, true],   // hapus = admin saja
+'master/list.php'        => [null,     false],        // dipakai form di banyak menu
 'master/save.php'        => ['master', true],
-'export/pdf.php'         => ['@ekspor', false],  // menu ditentukan dari `jenis`
+'export/pdf.php'         => ['@ekspor', false],       // menu dari parameter `jenis`
 ```
 
 Petanya ditulis lengkap dan eksplisit, bukan ditebak dari nama folder atau
@@ -1795,8 +1805,11 @@ Dua pemeriksaan sekaligus:
    terpampang. Tidak ada yang gagal dengan berisik, jadi lolos sampai
    dipakai.
 2. **Endpoint vs peta izin.** Setiap berkas di `api/` terdaftar di
-   `petaEndpoint()` dan sebaliknya, dan menu yang disebutnya benar-benar
-   ada. Endpoint yang lupa didaftarkan akan ditolak 500 saat dipakai.
+   `petaEndpoint()` dan sebaliknya, menu yang disebutnya benar-benar ada,
+   setiap menu punya kelompok, dan setiap `delete.php` ditandai sebagai
+   penghapusan. Endpoint yang lupa didaftarkan akan ditolak 500 saat
+   dipakai; endpoint hapus yang lupa ditandai akan diam-diam terbuka untuk
+   operator.
 
 Keduanya hanya membaca teks: tanpa Node, tanpa browser, tanpa paket
 tambahan, tanpa menyentuh database.

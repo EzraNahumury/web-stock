@@ -169,7 +169,22 @@ function bolehTulis(): bool
 }
 
 /**
- * Peta endpoint API -> [menu yang dibutuhkan, apakah menulis].
+ * Boleh menghapus catatan? Hanya admin.
+ *
+ * Dipisah dari bolehTulis() karena operator memang perlu mencatat dan
+ * mengubah, tapi penghapusan menggeser stok dan menghilangkan barisnya dari
+ * seluruh layar — kekeliruannya baru ketahuan saat stok opname.
+ */
+function bolehHapus(): bool
+{
+    // Perannya dibaca dari userDb(), bukan lewat adalahAdmin() di auth.php:
+    // berkas ini juga dipakai tools/uji_menu.php yang tidak memuat auth.
+    $u = userDb();
+    return $u !== null && $u['role'] === 'admin';
+}
+
+/**
+ * Peta endpoint API -> [menu yang dibutuhkan, apakah menulis, apakah menghapus].
  *
  * Ditulis lengkap dan eksplisit, bukan ditebak dari nama folder atau metode
  * HTTP. Sebagian endpoint POST sebenarnya hanya membaca (cek_barcode), dan
@@ -178,6 +193,15 @@ function bolehTulis(): bool
  *
  * menu null = boleh diakses siapa pun yang sudah masuk. Dipakai untuk
  * pencarian barang yang dibutuhkan form di hampir semua menu.
+ *
+ * Kolom ketiga menandai endpoint yang MENGHAPUS catatan. Penghapusan hanya
+ * untuk admin, di menu mana pun — ditaruh di sini sebagai satu aturan, bukan
+ * ditempel wajibAdminApi() di tiap berkas, supaya endpoint hapus yang baru
+ * tidak bisa lolos hanya karena penulisnya lupa.
+ *
+ * Alasannya operasional: menghapus barang masuk atau keluar langsung
+ * menggeser stok, dan yang terhapus tidak kelihatan lagi di layar mana pun.
+ * Salah hapus oleh petugas gudang baru ketahuan saat stok opname.
  */
 function petaEndpoint(): array
 {
@@ -187,11 +211,11 @@ function petaEndpoint(): array
 
         'masuk/list.php'          => ['masuk',      false],
         'masuk/create.php'        => ['masuk',      true],
-        'masuk/delete.php'        => ['masuk',      true],
+        'masuk/delete.php'        => ['masuk',      true, true],
 
         'keluar/list.php'         => ['keluar',     false],
         'keluar/create.php'       => ['keluar',     true],
-        'keluar/delete.php'       => ['keluar',     true],
+        'keluar/delete.php'       => ['keluar',     true, true],
 
         // Impor PDF picking list adalah bagian dari menu Barang keluar.
         'import/check.php'        => ['keluar',     false],
@@ -202,7 +226,7 @@ function petaEndpoint(): array
 
         'retur/list.php'          => ['retur',      false],
         'retur/save.php'          => ['retur',      true],
-        'retur/delete.php'        => ['retur',      true],
+        'retur/delete.php'        => ['retur',      true, true],
 
         'opname/list.php'         => ['opname',     false],
         'opname/detail.php'       => ['opname',     false],
@@ -210,7 +234,7 @@ function petaEndpoint(): array
         'opname/item.php'         => ['opname',     true],
         'opname/massal.php'       => ['opname',     true],
         'opname/accurate.php'     => ['opname',     true],
-        'opname/delete.php'       => ['opname',     true],
+        'opname/delete.php'       => ['opname',     true, true],
 
         // Pencarian barang dipakai form Barang masuk, Barang keluar, dan
         // Retur; popup riwayat dibuka dari Dashboard.
@@ -218,24 +242,24 @@ function petaEndpoint(): array
         'master/cek_barcode.php'  => [null,         false],
         'master/riwayat.php'      => [null,         false],
         'master/save.php'         => ['master',     true],
-        'master/delete.php'       => ['master',     true],
+        'master/delete.php'       => ['master',     true, true],
         'master/samakan_nama.php' => ['master',     true],
 
         'kategori/list.php'       => [null,         false],
         'kategori/save.php'       => ['kategori',   true],
-        'kategori/delete.php'     => ['kategori',   true],
+        'kategori/delete.php'     => ['kategori',   true, true],
 
         // Satu berkas melayani dua menu; arah mana yang dibuka ditentukan
         // parameter jenis-nya.
         'keterangan/list.php'     => ['@keterangan', false],
         'keterangan/save.php'     => ['@keterangan', true],
-        'keterangan/delete.php'   => ['@keterangan', true],
+        'keterangan/delete.php'   => ['@keterangan', true, true],
 
         'aktivitas/list.php'      => ['aktivitas',  false],
 
         'pengguna/list.php'       => ['pengguna',   false],
         'pengguna/save.php'       => ['pengguna',   true],
-        'pengguna/delete.php'     => ['pengguna',   true],
+        'pengguna/delete.php'     => ['pengguna',   true, true],
 
         // Menu yang dibutuhkan ditentukan dari parameter jenis-nya.
         'export/pdf.php'          => ['@ekspor',    false],
@@ -308,6 +332,7 @@ function periksaIzinApi(): void
 
     $menu  = $peta[$rel][0];
     $tulis = $peta[$rel][1];
+    $hapus = isset($peta[$rel][2]) ? (bool)$peta[$rel][2] : false;
 
     if ($menu === '@ekspor') {
         $jenis = isset($_GET['jenis']) ? (string)$_GET['jenis'] : '';
@@ -333,5 +358,8 @@ function periksaIzinApi(): void
     }
     if ($tulis && !bolehTulis()) {
         jsonError('Akun ini hanya bisa melihat, tidak bisa mengubah data.', 403);
+    }
+    if ($hapus && !bolehHapus()) {
+        jsonError('Menghapus catatan hanya bisa dilakukan admin.', 403);
     }
 }

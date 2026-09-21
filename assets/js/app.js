@@ -388,6 +388,19 @@ function bolehTulis(){
   return !(window.APP_USER && window.APP_USER.boleh_tulis === false);
 }
 
+/**
+ * Menghapus catatan hanya untuk admin.
+ *
+ * Dipisah dari bolehTulis() karena operator memang perlu mencatat dan
+ * mengubah; yang tidak boleh hanya menghapus. Penghapusan menggeser stok
+ * dan menghilangkan barisnya dari seluruh layar, jadi kekeliruannya baru
+ * ketahuan saat stok opname. Penegakannya di includes/izin.php — ini hanya
+ * merapikan tampilan.
+ */
+function bolehHapus(){
+  return sayaAdmin() && bolehTulis();
+}
+
 /** Menu yang boleh dilihat pengguna ini. */
 function tabTerlihat(){
   return TABS.filter(t => bolehMenu(t.id));
@@ -849,6 +862,10 @@ function renderTransaksiTab(kind){
   if(!bisaTulis){
     html += '<div class="info-box">Akun ini hanya bisa melihat. Pencatatan dan '
       + 'penghapusan dimatikan.</div>';
+  } else if(!bolehHapus()){
+    html += '<div class="info-box">Menghapus catatan hanya bisa dilakukan admin, '
+      + 'karena penghapusan ikut menggeser stok. Salah catat? Catat koreksinya, '
+      + 'atau minta admin menghapusnya.</div>';
   }
   if(kind === "keluar" && bisaTulis){
     html += '<div class="pdf-import-card" id="pdfImportCard">'
@@ -1027,17 +1044,17 @@ async function renderTransaksiTable(kind){
     + '<td style="color:var(--slate)">'+esc(r.keterangan)+'</td>'
     + (showPesanan ? '<td class="mono" style="font-size:11.5px; color:var(--slate)">'+esc(r.no_pesanan || "-")+'</td>' : '')
     + '<td style="color:var(--slate); font-size:11.5px">'+esc(r.oleh || "-")+'</td>'
-    + (bolehTulis()
+    + (bolehHapus()
         ? '<td class="num"><button class="icon-btn" onclick="deleteTransaksi(\''+kind+'\','+r.id+')" aria-label="Hapus">'+svgIcon("trash")+'</button></td>'
         : '')
     + '</tr>'
   ).join("");
 
-  const kolomJml = (showPesanan ? 8 : 7) - (bolehTulis() ? 0 : 1);
+  const kolomJml = (showPesanan ? 8 : 7) - (bolehHapus() ? 0 : 1);
   if(data.rows.length===0) body = '<tr class="empty-row"><td colspan="'+kolomJml+'">Belum ada catatan.</td></tr>';
 
   const headers = ["Tanggal","Barang","Barcode",jumlahLabel,"Keterangan"]
-    .concat(showPesanan?["No. Pesanan"]:[]).concat(["Oleh"]).concat(bolehTulis()?[""]:[]);
+    .concat(showPesanan?["No. Pesanan"]:[]).concat(["Oleh"]).concat(bolehHapus()?[""]:[]);
 
   wadah.innerHTML = '<div class="table-card"><table style="min-width:720px"><thead><tr>'
     + headers.map(h=>'<th>'+h+'</th>').join("")
@@ -1621,7 +1638,10 @@ async function refreshMasterTable(){
     + '<td style="color:var(--slate)">'+esc(m.kategori||'-')+'</td>'
     + (bolehTulis()
         ? '<td class="num" style="white-space:nowrap"><button class="icon-btn" onclick="editMaster('+m.id+')" aria-label="Ubah">'+svgIcon("edit")+'</button>'
-          + '<button class="icon-btn" onclick="deleteMaster('+m.id+')" aria-label="Hapus">'+svgIcon("trash")+'</button></td>'
+          + (bolehHapus()
+              ? '<button class="icon-btn" onclick="deleteMaster('+m.id+')" aria-label="Hapus">'+svgIcon("trash")+'</button>'
+              : '')
+          + '</td>'
         : '')
     + '</tr>'
   ).join("");
@@ -2233,7 +2253,9 @@ async function refreshRetur(){
       + (bolehTulis()
           ? '<td class="num" style="white-space:nowrap">'
             + '<button class="icon-btn" onclick="editRetur(' + r.id + ')" aria-label="Ubah retur">' + svgIcon("edit") + '</button>'
-            + '<button class="icon-btn bahaya" onclick="hapusRetur(' + r.id + ')" aria-label="Hapus retur">' + svgIcon("trash") + '</button>'
+            + (bolehHapus()
+                ? '<button class="icon-btn bahaya" onclick="hapusRetur(' + r.id + ')" aria-label="Hapus retur">' + svgIcon("trash") + '</button>'
+                : '')
             + '</td>'
           : '')
       + '</tr>';
