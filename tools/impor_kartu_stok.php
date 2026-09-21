@@ -22,8 +22,15 @@
  * lagi, supaya dua produk bernama sama tidak berebut baris yang sama.
  *
  * Jalankan:
- *   php tools\impor_kartu_stok.php            <- simulasi, tidak menulis
- *   php tools\impor_kartu_stok.php --tulis    <- benar-benar menyimpan
+ *   php tools\impor_kartu_stok.php                       <- simulasi
+ *   php tools\impor_kartu_stok.php --tulis               <- benar-benar simpan
+ *   php tools\impor_kartu_stok.php "BERKAS.xlsx" --tulis <- berkas tertentu
+ *
+ * Tanpa nama berkas, KARTU STOK terbaru di folder proyek yang dipakai.
+ *
+ * --kosongkan  hapus dulu seluruh transaksi dan master sebelum mengimpor,
+ *              untuk memulai pendataan dari nol. Lihat tools/reset_data.php
+ *              yang memakai jalur itu dengan pemeriksaan dan ringkasan.
  */
 
 declare(strict_types=1);
@@ -37,7 +44,14 @@ const K_SKU = 0, K_BARCODE = 1, K_NAMA = 2, K_STOK_AWAL = 3,
       K_STOK_MINIMAL = 7, K_KATEGORI = 9;
 const BARIS_DATA_AWAL = 6;
 
-$sumber = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'KARTU STOK AGUSTUS 2026 (1).xlsx';
+$berkasArg = null;
+foreach (array_slice($argv, 1) as $a) {
+    if (strpos($a, '--') !== 0) {
+        $berkasArg = $a;
+        break;
+    }
+}
+$sumber = berkasKartuStok($berkasArg);
 
 echo "==========================================================\n";
 echo ' IMPOR KARTU STOK -> master_barang   [' . ($TULIS ? 'MENULIS' : 'SIMULASI') . "]\n";

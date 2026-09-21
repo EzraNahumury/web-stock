@@ -12,6 +12,41 @@
 
 declare(strict_types=1);
 
+/**
+ * Cari berkas KARTU STOK di folder proyek.
+ *
+ * Tanpa nama, yang dipakai adalah berkas KARTU STOK dengan waktu ubah
+ * terbaru. Nama periodenya berganti tiap bulan, jadi memakunya di kode
+ * berarti setiap pendataan ulang harus menyunting berkas PHP lebih dulu.
+ */
+function berkasKartuStok(?string $nama = null): string
+{
+    $akar = dirname(__DIR__);
+
+    if ($nama !== null && $nama !== '') {
+        $jalur = (strpos($nama, DIRECTORY_SEPARATOR) !== false || strpos($nama, '/') !== false)
+            ? $nama
+            : $akar . DIRECTORY_SEPARATOR . $nama;
+        if (!is_file($jalur)) {
+            fwrite(STDERR, "Berkas tidak ditemukan: $jalur
+");
+            exit(1);
+        }
+        return $jalur;
+    }
+
+    $calon = glob($akar . DIRECTORY_SEPARATOR . 'KARTU STOK*.xlsx') ?: [];
+    if (!$calon) {
+        fwrite(STDERR, "Tidak ada berkas KARTU STOK*.xlsx di " . $akar . "
+");
+        exit(1);
+    }
+    usort($calon, static function ($a, $b) {
+        return filemtime($b) <=> filemtime($a);
+    });
+    return $calon[0];
+}
+
 /** Ubah referensi kolom Excel (A, B, ..., AA) menjadi indeks 0-basis. */
 function kolomKeIndeks(string $ref): int
 {

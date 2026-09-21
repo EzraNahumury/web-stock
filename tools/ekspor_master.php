@@ -17,6 +17,12 @@ require_once __DIR__ . '/../includes/db.php';
 
 $keluar = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'sql' . DIRECTORY_SEPARATOR . '002_seed_master.sql';
 
+// Nama berkas sumbernya ikut dicatat di kepala berkas. Dulu dipaku
+// sebagai "KARTU STOK AGUSTUS 2026", jadi setiap pendataan ulang
+// meninggalkan keterangan yang salah di berkas yang digenerate.
+require_once __DIR__ . '/baca_xlsx.php';
+$sumberNama = $argv[1] ?? basename(berkasKartuStok(null));
+
 $baris = dbAll(
     'SELECT sku, barcode, nama, stok_awal, stok_minimal, kategori, barcode_asli, aktif
        FROM master_barang
@@ -46,7 +52,7 @@ $out  = "-- ====================================================================
 $out .= "-- 002_seed_master.sql — DIGENERATE OTOMATIS, jangan diedit manual.\n";
 $out .= "--\n";
 $out .= "-- Isi master_barang siap pakai: hasil konversi MASTER_SEED prototipe yang\n";
-$out .= "-- sudah diperbarui dengan data nyata dari KARTU STOK AGUSTUS 2026.\n";
+$out .= '-- sudah diperbarui dengan data nyata dari ' . $sumberNama . ".\n";
 $out .= "--\n";
 $out .= '-- Dibuat        : ' . date('Y-m-d H:i:s') . "\n";
 $out .= '-- Jumlah baris  : ' . count($baris) . "\n";

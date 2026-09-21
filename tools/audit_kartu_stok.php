@@ -6,14 +6,18 @@
  * (barcode kosong/duplikat, angka rusak, kategori tak dikenal) supaya
  * keputusan impor diambil sadar, bukan menabrak constraint di tengah jalan.
  *
- * Jalankan: C:\xampp\php\php.exe tools\audit_kartu_stok.php
+ * Jalankan: php tools\audit_kartu_stok.php ["NAMA BERKAS.xlsx"]
+ *
+ * Tanpa argumen, berkas KARTU STOK terbaru di folder proyek yang dipakai.
  */
 
 declare(strict_types=1);
 
 require_once __DIR__ . '/baca_xlsx.php';
+require_once __DIR__ . '/../includes/helpers.php';
 
-$path = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'KARTU STOK AGUSTUS 2026 (1).xlsx';
+$path = berkasKartuStok($argv[1] ?? null);
+echo 'Sumber : ' . basename($path) . "\n";
 $baris = bacaXlsx($path);
 
 const KOL = ['sku' => 0, 'barcode' => 1, 'nama' => 2, 'stok_awal' => 3,
@@ -40,7 +44,7 @@ foreach ($baris as $n => $b) {
 }
 
 echo "==========================================================\n";
-echo " AUDIT: KARTU STOK AGUSTUS 2026\n";
+echo ' AUDIT: ' . strtoupper(pathinfo($path, PATHINFO_FILENAME)) . "\n";
 echo "==========================================================\n";
 echo 'Baris data (nama terisi) : ' . count($data) . "\n\n";
 
@@ -150,7 +154,11 @@ foreach ($data as $b) {
     $kat[$k === '' ? '(kosong)' : $k] = ($kat[$k === '' ? '(kosong)' : $k] ?? 0) + 1;
 }
 arsort($kat);
-$dikenal = ['FISIO', 'FOX', 'AVO', 'AYRES', 'AC', 'LAINNYA'];
+// Dibaca dari tabel kategori, bukan daftar yang dipaku di sini. Daftar
+// lama masih berisi kategori prototipe (FOX, AC) dan menandai kategori sah
+// seperti AYRES dan SAIFENU sebagai "tak dikenal" — peringatan palsu yang
+// membuat bagian ini tidak bisa dipercaya.
+$dikenal = array_map('mb_strtoupper', daftarKategori());
 foreach ($kat as $k => $c) {
     $tanda = ($k === '(kosong)' || in_array($k, $dikenal, true)) ? '   ' : ' ! ';
     echo "  $tanda" . str_pad((string)$k, 22) . " $c\n";

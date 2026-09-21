@@ -1814,6 +1814,60 @@ Dua pemeriksaan sekaligus:
 Keduanya hanya membaca teks: tanpa Node, tanpa browser, tanpa paket
 tambahan, tanpa menyentuh database.
 
+### Pendataan ulang katalog barang
+
+Saat periode berganti dan katalog didata dari nol:
+
+```
+php tools\audit_kartu_stok.php  "KARTU STOK OKTOBER 2026 (1).xlsx"   # periksa dulu
+php tools\reset_data.php        "KARTU STOK OKTOBER 2026 (1).xlsx"   # simulasi
+php tools\reset_data.php        "KARTU STOK OKTOBER 2026 (1).xlsx" --tulis
+php tools\verifikasi_master.php "KARTU STOK OKTOBER 2026 (1).xlsx"   # cocokkan
+php tools\ekspor_master.php                                          # segarkan seed
+```
+
+Nama berkasnya sekarang argumen, bukan dipaku di kode — dulu setiap
+pendataan ulang menuntut penyuntingan tiga berkas PHP lebih dulu. Tanpa
+argumen, berkas `KARTU STOK*.xlsx` dengan waktu ubah terbaru yang dipakai.
+
+`reset_data.php` mengosongkan **transaksi dan katalog**, lalu mengisi
+katalog dari berkas sumber:
+
+| Dikosongkan | Tidak disentuh |
+|---|---|
+| `barang_masuk`, `barang_keluar` | `users` — akun dan hak aksesnya |
+| `import_batch` | `kategori` |
+| `pertukaran_barang` | `keterangan` |
+| `retur` | `activity_log` — jejak audit justru harus utuh |
+| `opname_sesi`, `opname_item` | `migrasi` |
+| `master_barang` | |
+
+Riwayat tidak punya tabelnya sendiri — dihitung dari kedua tabel transaksi,
+jadi ikut kosong begitu keduanya dikosongkan.
+
+Tanpa `--tulis` tidak ada yang berubah; yang dicetak hanya rencananya.
+Dengan `--tulis`, seluruh penghapusan dan pengisian berjalan dalam **satu
+transaksi**, dan dua berkas ditulis ke `deploy/` (folder itu tidak pernah
+masuk repo karena memuat data operasional nyata):
+
+- `cadangan-<waktu>.sql` — isi tabel **sebelum** dikosongkan, untuk
+  dipulihkan bila hasilnya tidak seperti yang diharapkan
+- `reset-<periode>.sql` — perintah yang sama untuk dijalankan di server
+  lewat phpMyAdmin, karena database produksi tidak bisa dicapai dari sini
+
+Aturan barcode mengikuti yang sudah dipakai sejak awal, supaya katalog baru
+tidak berbeda bentuk dengan yang sudah pernah dikirim: barcode kosong jadi
+`INT-<SKU>` (atau `INT-GEN-<nnnn>` bila SKU juga kosong), barcode kembar
+diberi akhiran `-D2`, `-D3`, dan keduanya ditandai `barcode_asli = 0`
+sehingga tampil sebagai **SEMENTARA** di layar. Kolom `stok_minimal` di
+sumber berupa pecahan sedangkan kolomnya `INT`, jadi **dibulatkan ke atas** —
+ambang order yang dibulatkan ke bawah membuat peringatan terlambat menyala.
+
+`verifikasi_master.php` membandingkan **setiap** baris, bukan sampel: nama,
+SKU, stok awal, stok minimal, dan kategori, ditambah total stok. Barcode
+yang diubah impor dicocokkan lewat nama + SKU dan dilaporkan terpisah, bukan
+dihitung sebagai selisih. Keluar dengan kode 1 bila ada yang tidak cocok.
+
 ---
 
 ## 12. Rencana Kerja Bertahap
