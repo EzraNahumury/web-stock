@@ -74,11 +74,24 @@ function toast(msg, jenis){
   setTimeout(()=> { if(div.parentNode) w.removeChild(div); }, jenis === "err" ? 4200 : 2200);
 }
 
+// Keadaan terakhir diingat supaya kegagalan bisa disebut dengan benar.
+// Sebelumnya setiap galat berbunyi "Gagal menyimpan", termasuk saat yang
+// gagal hanya memuat daftar — menyesatkan, karena tidak ada yang sedang
+// disimpan dan tidak ada data yang hilang.
+let statusTerakhir = "ok";
+
 function setSaveStatus(state, pesan){
   const el = $("saveStatus");
+  if(state === "saving" || state === "ok") statusTerakhir = state;
   if(!el) return;
   if(state === "saving") el.innerHTML = "Menyimpan…";
-  else if(state === "error") el.innerHTML = esc(pesan || "Gagal menyimpan — coba lagi.");
+  else if(state === "error"){
+    const bawaan = statusTerakhir === "saving"
+      ? "Gagal menyimpan — coba lagi."
+      : "Gagal memuat — coba lagi.";
+    el.innerHTML = esc(pesan || bawaan);
+    statusTerakhir = "ok";
+  }
   else el.innerHTML = svgIcon("check") + " Tersimpan di server";
 }
 
@@ -91,7 +104,9 @@ function tampilGalat(e){
     if(e.detail.length > 3) pesan += " (+" + (e.detail.length-3) + " lainnya)";
   }
   toast(pesan, "err");
-  setSaveStatus("error", "Gagal menyimpan");
+  // Tanpa pesan sendiri: setSaveStatus yang memutuskan kata-katanya dari
+  // keadaan terakhir, jadi memuat dan menyimpan tidak tertukar.
+  setSaveStatus("error");
 }
 
 /** Tunda pemanggilan agar tiap ketikan tidak langsung memanggil server. */
@@ -399,6 +414,31 @@ function bolehTulis(){
  */
 function bolehHapus(){
   return sayaAdmin() && bolehTulis();
+}
+
+/**
+ * Mengubah catatan yang sudah tersimpan juga hanya untuk admin.
+ *
+ * Operator tetap boleh mencatat hal baru. Yang dicabut hanya menimpa
+ * catatan lama: mengubah qty atau barangnya menggeser stok tanpa
+ * meninggalkan jejak di daftar, jadi koreksi oleh petugas dilakukan dengan
+ * mencatat baris baru. Pengisian hasil hitungan stok opname tidak termasuk —
+ * itu memang pekerjaannya.
+ */
+function bolehUbahCatatan(){
+  return bolehHapus();
+}
+
+/**
+ * Perlu kolom aksi pada tabel? Hanya bila ada tombol yang akan mengisinya.
+ *
+ * Kolom ini dulu bergantung pada bolehTulis(). Sejak mengubah dan menghapus
+ * dibatasi ke admin, operator yang boleh menulis tetap mendapat kolom itu —
+ * kosong di setiap baris, seakan tombolnya gagal dimuat. Tabel barang masuk
+ * dan keluar sudah memakai cara ini; master dan retur kini mengikut.
+ */
+function adaKolomAksi(){
+  return bolehUbahCatatan() || bolehHapus();
 }
 
 /** Menu yang boleh dilihat pengguna ini. */
@@ -1550,10 +1590,29 @@ async function confirmPdfReview(){
   if(tombol) tombol.disabled = true;
   setSaveStatus("saving");
 
+  // Yang dikirim hanya baris tercentang, dan hanya kolom yang dibaca
+  // server. Baris hasil parse ikut membawa sisa keadaan antarmuka, dan judul
+  // etalase marketplace bisa ratusan karakter; keduanya memperbesar badan
+  // permintaan tanpa guna — dan badan yang besar adalah yang paling sering
+  // dipangkas pengaman hosting.
+  const kirim = dipilih.map(r => ({
+    barcode:    r.barcode,
+    nama:       String(r.nama || "").slice(0, 255),
+    sku:        r.sku || "",
+    qty:        r.qty,
+    keterangan: r.keterangan || "",
+    noPesanan:  r.noPesanan || "",
+    asli: {
+      barcode: (r.asli && r.asli.barcode) || "",
+      sku:     (r.asli && r.asli.sku) || "",
+      nama:    String((r.asli && r.asli.nama) || "").slice(0, 255)
+    }
+  }));
+
   try{
     const res = await API.importSave({
       header:  pdfImport.header || {},
-      rows:    rows,
+      rows:    kirim,
       fileName: pdfImport.fileName,
       fileHash: pdfImport.fileHash,
       tanggal:  pdfImport.tanggal || todayISO(),
@@ -1587,6 +1646,9 @@ function renderMaster(){
   let html = "";
   if(!bisaTulis){
     html += '<div class="info-box">Akun ini hanya bisa melihat katalog barang.</div>';
+  } else if(!bolehUbahCatatan()){
+    html += '<div class="info-box">Menambah barang baru boleh. Mengubah atau menghapus '
+      + 'barang yang sudah terdaftar hanya bisa dilakukan admin.</div>';
   }
   if(bisaTulis){
   html += '<form class="form-card" id="masterForm" onsubmit="submitMaster(event)">';
@@ -1636,8 +1698,11 @@ async function refreshMasterTable(){
     + '<td>'+fmtNum(m.stok_awal)+'</td>'
     + '<td>'+fmtNum(m.stok_minimal)+'</td>'
     + '<td style="color:var(--slate)">'+esc(m.kategori||'-')+'</td>'
-    + (bolehTulis()
-        ? '<td class="num" style="white-space:nowrap"><button class="icon-btn" onclick="editMaster('+m.id+')" aria-label="Ubah">'+svgIcon("edit")+'</button>'
+    + (adaKolomAksi()
+        ? '<td class="num" style="white-space:nowrap">'
+          + (bolehUbahCatatan()
+              ? '<button class="icon-btn" onclick="editMaster('+m.id+')" aria-label="Ubah">'+svgIcon("edit")+'</button>'
+              : '')
           + (bolehHapus()
               ? '<button class="icon-btn" onclick="deleteMaster('+m.id+')" aria-label="Hapus">'+svgIcon("trash")+'</button>'
               : '')
@@ -1645,14 +1710,14 @@ async function refreshMasterTable(){
         : '')
     + '</tr>'
   ).join("");
-  if(data.rows.length===0) rows = '<tr class="empty-row"><td colspan="' + (bolehTulis()?7:6) + '">Tidak ada barang yang cocok.</td></tr>';
+  if(data.rows.length===0) rows = '<tr class="empty-row"><td colspan="' + (adaKolomAksi()?7:6) + '">Tidak ada barang yang cocok.</td></tr>';
 
   const unduhM = $("masterExport");
   if(unduhM) unduhM.href = "api/export/pdf.php?jenis=master&q=" + encodeURIComponent(masterFilters.q);
 
   wadah.innerHTML = '<div class="table-card"><table style="min-width:720px"><thead><tr>'
     + ["SKU","Barcode","Nama barang","Stok awal","Stok minimal","Kategori"]
-        .concat(bolehTulis()?[""]:[]).map(h=>'<th>'+h+'</th>').join("")
+        .concat(adaKolomAksi()?[""]:[]).map(h=>'<th>'+h+'</th>').join("")
     + '</tr></thead><tbody>'+rows+'</tbody></table>'
     + paginationBar(data.total, data.page, data.total_pages, "masterGoPage")
     + '</div>';
@@ -2077,6 +2142,10 @@ function renderRetur(){
   let html = "";
   if(!bisaTulis){
     html += '<div class="info-box">Akun ini hanya bisa melihat daftar retur.</div>';
+  } else if(!bolehUbahCatatan()){
+    html += '<div class="info-box">Mencatat retur baru boleh. Mengubah atau menghapus '
+      + 'retur yang sudah tercatat hanya bisa dilakukan admin, karena ikut menggeser '
+      + 'stok. Salah catat? Catat koreksinya, atau minta admin memperbaikinya.</div>';
   }
   if(bisaTulis){
   html += '<form class="form-card" id="rtForm" onsubmit="submitRetur(event)">'
@@ -2226,10 +2295,10 @@ async function refreshRetur(){
     ringkas.innerHTML =
         statCard({ label:"Retur", nilai:d.total, ikon:"tag", nada:"biru", kaki:"baris tercatat" })
       + statCard({ label:"Unit diretur", nilai:d.total_unit, ikon:"unit", nada:"", kaki:"pcs dikembalikan" })
-      + statCard({ label:"Masuk stok", nilai:d.unit_ke_stok, ikon:"sku", nada:"safe", tone:"safe",
-                   kaki:"sudah lengkap" })
-      + statCard({ label:"Tertahan", nilai:d.unit_tertahan, ikon:"alert", nada:"amber",
-                   kaki:"belum menambah stok" });
+      + statCard({ label:"Sudah masuk stok", nilai:d.unit_ke_stok, ikon:"sku", nada:"safe", tone:"safe",
+                   kaki:"pcs dari retur berketerangan " + returStatusMasuk })
+      + statCard({ label:"Belum masuk stok", nilai:d.unit_tertahan, ikon:"alert", nada:"amber",
+                   kaki:"pcs masih menunggu diselesaikan" });
     ringkas.querySelectorAll(".stat-value[data-nilai]").forEach(n =>
       Grafik.angkaNaik(n, Number(n.getAttribute("data-nilai"))));
   }
@@ -2250,9 +2319,11 @@ async function refreshRetur(){
       + '<td><span class="badge ' + (masukStok ? 'aman' : 'kritis') + '">' + esc(r.status) + '</span>'
         + (masukStok ? '<div class="item-sub" style="font-family:Inter">stok bertambah</div>' : '') + '</td>'
       + '<td style="font-size:11.5px; color:var(--slate)">' + esc(r.keterangan || "-") + '</td>'
-      + (bolehTulis()
+      + (adaKolomAksi()
           ? '<td class="num" style="white-space:nowrap">'
-            + '<button class="icon-btn" onclick="editRetur(' + r.id + ')" aria-label="Ubah retur">' + svgIcon("edit") + '</button>'
+            + (bolehUbahCatatan()
+                ? '<button class="icon-btn" onclick="editRetur(' + r.id + ')" aria-label="Ubah retur">' + svgIcon("edit") + '</button>'
+                : '')
             + (bolehHapus()
                 ? '<button class="icon-btn bahaya" onclick="hapusRetur(' + r.id + ')" aria-label="Hapus retur">' + svgIcon("trash") + '</button>'
                 : '')
@@ -2262,7 +2333,7 @@ async function refreshRetur(){
   }).join("");
 
   if(!d.rows.length){
-    baris = '<tr class="empty-row"><td colspan="' + (bolehTulis()?8:7) + '">Belum ada retur pada penyaring ini.</td></tr>';
+    baris = '<tr class="empty-row"><td colspan="' + (adaKolomAksi()?8:7) + '">Belum ada retur pada penyaring ini.</td></tr>';
   }
 
   returRows = d.rows;
@@ -2273,7 +2344,7 @@ async function refreshRetur(){
     + 'sampai keterangannya diubah.</div>'
     + '<div class="table-card"><table style="min-width:980px"><thead><tr>'
     + ["Tanggal","No. pesanan","SKU","Nama produk","Qty","Keterangan retur","Ket."]
-        .concat(bolehTulis()?[""]:[])
+        .concat(adaKolomAksi()?[""]:[])
         .map((h,i)=>'<th'+(i===4?' class="num"':'')+'>'+esc(h)+'</th>').join("")
     + '</tr></thead><tbody>' + baris + '</tbody></table>'
     + paginationBar(d.total, d.page, d.total_pages, "returGoPage")

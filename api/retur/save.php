@@ -7,6 +7,11 @@
  * Retur dan baris barang masuknya selalu ditulis dalam SATU transaksi. Bila
  * salah satunya gagal, keduanya batal — stok tidak boleh pernah bertambah
  * tanpa retur yang menerangkannya, dan sebaliknya.
+ *
+ * Mencatat retur baru boleh dilakukan operator. MENGUBAH retur yang sudah
+ * tersimpan hanya untuk admin: mengubah qty atau statusnya menggeser stok
+ * lewat baris barang masuknya, dan perubahan itu tidak meninggalkan jejak
+ * di daftar retur.
  */
 
 declare(strict_types=1);
@@ -15,6 +20,7 @@ require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/helpers.php';
 require_once __DIR__ . '/../../includes/response.php';
 require_once __DIR__ . '/../../includes/retur.php';
+require_once __DIR__ . '/../../includes/izin.php';
 
 pasangPenangananGalatApi();
 wajibMetode('POST');
@@ -23,7 +29,11 @@ wajibLoginApi();
 $in = jsonInput();
 wajibCsrf($in);
 
-$id        = ambilInt($in, 'id', 0);
+$id = ambilInt($in, 'id', 0);
+if ($id > 0 && !bolehUbahCatatan()) {
+    jsonError('Mengubah retur yang sudah tersimpan hanya bisa dilakukan admin.', 403);
+}
+
 $tanggal   = ambilTanggal($in, 'tanggal');
 $noPesanan = ambilStr($in, 'no_pesanan', 100);
 $barcode   = ambilStr($in, 'barcode', 50);

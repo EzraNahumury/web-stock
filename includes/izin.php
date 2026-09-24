@@ -184,6 +184,24 @@ function bolehHapus(): bool
 }
 
 /**
+ * Boleh mengubah catatan yang sudah tersimpan? Hanya admin.
+ *
+ * Operator tetap boleh MENCATAT hal baru; yang dicabut hanya mengubah dan
+ * menghapus catatan yang sudah ada. Alasannya sama dengan penghapusan:
+ * mengubah qty atau barang pada catatan lama menggeser stok tanpa
+ * meninggalkan jejak apa pun di daftar, jadi kekeliruannya baru ketahuan
+ * saat stok opname. Koreksi oleh petugas dilakukan dengan mencatat baris
+ * baru, bukan menimpa yang lama.
+ *
+ * Pengisian hasil hitungan stok opname TIDAK termasuk di sini — itu memang
+ * pekerjaan petugas gudang, dan endpoint-nya terpisah.
+ */
+function bolehUbahCatatan(): bool
+{
+    return bolehHapus();
+}
+
+/**
  * Peta endpoint API -> [menu yang dibutuhkan, apakah menulis, apakah menghapus].
  *
  * Ditulis lengkap dan eksplisit, bukan ditebak dari nama folder atau metode

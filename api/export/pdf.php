@@ -96,20 +96,23 @@ switch ($jenis) {
             $params[] = $kategori;
         }
 
-        $having = '';
+        // Disaring lewat tabel turunan, bukan HAVING tanpa GROUP BY: yang
+        // terakhir ditolak MySQL saat sql_mode memuat ONLY_FULL_GROUP_BY.
+        // Lihat catatan panjangnya di api/dashboard/stats.php.
+        $saring = '';
         if (in_array($status, ['kritis', 'rendah', 'aman', 'belum_diatur'], true)) {
-            $having = 'HAVING status = ?';
+            $saring = 'WHERE t.status = ?';
             $params[] = $status;
         }
 
-        $data = dbAll("
+        $pilih = "
             SELECT m.sku, m.barcode, m.nama, m.kategori, m.stok_awal, m.stok_minimal,
                    COALESCE(i.total,0) AS masuk, COALESCE(o.total,0) AS keluar,
                    $akhir AS akhir, $ekspr AS status
               FROM master_barang m " . sqlJoinAgregat() . '
-             WHERE ' . implode(' AND ', $where) . "
-             $having
-             ORDER BY m.nama", $params);
+             WHERE ' . implode(' AND ', $where);
+
+        $data = dbAll("SELECT * FROM ($pilih) t $saring ORDER BY t.nama", $params);
 
         $pdf = new PdfTabel('lanskap');
         $pdf->siapkan('Laporan Stok Barang', [
@@ -539,8 +542,8 @@ switch ($jenis) {
             ]);
         }
         $pdf->ringkasan(count($data) . ' retur  ·  total '
-            . number_format($totalQty, 0, ',', '.') . ' pcs  ·  masuk stok '
-            . number_format($qtyStok, 0, ',', '.') . ' pcs  ·  tertahan '
+            . number_format($totalQty, 0, ',', '.') . ' pcs  ·  sudah masuk stok '
+            . number_format($qtyStok, 0, ',', '.') . ' pcs  ·  belum masuk stok '
             . number_format($totalQty - $qtyStok, 0, ',', '.') . ' pcs');
         $pdf->kirim('laporan-retur-' . date('Ymd-His') . '.pdf');
         break;

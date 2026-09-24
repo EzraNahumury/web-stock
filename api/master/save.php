@@ -9,6 +9,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/helpers.php';
 require_once __DIR__ . '/../../includes/response.php';
+require_once __DIR__ . '/../../includes/izin.php';
 
 pasangPenangananGalatApi();
 wajibMetode('POST');
@@ -17,7 +18,11 @@ wajibLoginApi();
 $in = jsonInput();
 wajibCsrf($in);
 
-$id          = ambilInt($in, 'id', 0);
+$id = ambilInt($in, 'id', 0);
+if ($id > 0 && !bolehUbahCatatan()) {
+    jsonError('Mengubah data barang yang sudah tersimpan hanya bisa dilakukan admin.', 403);
+}
+
 $sku         = ambilStr($in, 'sku', 50);
 $barcode     = ambilStr($in, 'barcode', 50);
 $nama        = ambilStr($in, 'nama', 255);

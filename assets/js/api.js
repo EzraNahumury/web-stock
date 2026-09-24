@@ -23,11 +23,27 @@ const API = (function(){
       location.href = "login.php";
       throw new Error("Sesi berakhir.");
     }
+    // Endpoint kita SELALU menjawab JSON, juga saat menolak. Jadi badan
+    // respons yang tidak bisa diurai berarti yang menolak bukan aplikasi ini,
+    // melainkan lapisan di depannya: pengaman hosting (mod_security /
+    // Imunify), pembatas ukuran permintaan, atau proses PHP yang mati.
+    // Pesannya menyebut itu, supaya yang membacanya tidak mengira haknya
+    // kurang lalu sia-sia menyuruh admin menambah centang menu.
+    //
+    // Badan respons dibaca sebagai teks lebih dulu, bukan res.json(). Badan
+    // hanya boleh dibaca sekali, jadi mengurai JSON yang gagal akan
+    // menghabiskannya dan cuplikan untuk diagnosa hilang.
+    const teks = await res.text();
     let data;
     try{
-      data = await res.json();
+      data = JSON.parse(teks);
     }catch(e){
-      throw new Error("Respons server tidak bisa dibaca (HTTP " + res.status + ").");
+      console.error("Respons bukan JSON", res.status, teks.slice(0, 300));
+      throw new Error(res.status === 403
+        ? "Permintaan diblokir sebelum sampai ke aplikasi (HTTP 403). "
+          + "Biasanya ini pengaman hosting, bukan hak akses akun. Coba lagi; "
+          + "bila tetap gagal, tunjukkan pesan ini ke admin server."
+        : "Respons server tidak bisa dibaca (HTTP " + res.status + ").");
     }
     if(!res.ok || !data.ok){
       const err = new Error(data.error || ("Permintaan gagal (HTTP " + res.status + ")."));

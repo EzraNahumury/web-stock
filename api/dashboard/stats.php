@@ -42,11 +42,19 @@ if ($kategori !== '' && $kategori !== 'Semua') {
 
 $sqlWhere = 'WHERE ' . implode(' AND ', $where);
 
-// Status dihitung dari agregat, jadi penyaringannya harus di HAVING.
-$having = '';
-if (in_array($status, ['kritis', 'rendah', 'aman', 'belum_diatur'], true)) {
-    $having = 'HAVING status = ?';
-}
+// Status barang dihitung dari agregat masuk/keluar, jadi tidak bisa
+// disaring di WHERE bersama kolom biasa.
+//
+// Dulu memakai "HAVING status = ?" tanpa GROUP BY. MariaDB menerimanya,
+// tapi MySQL menganggap HAVING tanpa GROUP BY sebagai satu grup tunggal
+// dan menolak kolom non-agregat di dalamnya bila sql_mode memuat
+// ONLY_FULL_GROUP_BY — yang berlaku secara bawaan di MySQL 8. Akibatnya
+// memilih status apa pun di Dashboard gagal 500 di server, sementara di
+// mesin pengembangan berjalan mulus.
+//
+// Sekarang seluruh pilihannya dibungkus tabel turunan dan disaring dengan
+// WHERE biasa: sama hasilnya, dan tidak bergantung pada sql_mode.
+$statusSah = in_array($status, ['kritis', 'rendah', 'aman', 'belum_diatur'], true);
 
 $sqlDasar = "
     FROM master_barang m
@@ -65,35 +73,31 @@ $ringkasan = dbOne("
       COUNT(DISTINCT NULLIF(m.kategori, ''))                          AS jml_kategori
     $sqlDasar", $params);
 
-// --- Hitung total baris hasil filter --------------------------------------
-if ($having !== '') {
-    $paramsHitung = array_merge($params, [$status]);
-    $total = (int)dbValue("
-        SELECT COUNT(*) FROM (
-            SELECT $statusExpr AS status $sqlDasar $having
-        ) t", $paramsHitung);
-} else {
-    $paramsHitung = $params;
-    $total = (int)dbValue("SELECT COUNT(*) $sqlDasar", $params);
-}
-
-$meta   = metaPaginasi($total, $page);
-$offset = ($meta['page'] - 1) * PAGE_SIZE;
-
-// --- Ambil baris halaman ini ----------------------------------------------
-$sqlRows = "
+// Satu bentuk pilihan dipakai baik untuk menghitung maupun mengambil baris,
+// supaya jumlah halaman tidak mungkin menyimpang dari isinya.
+$sqlPilih = "
     SELECT m.id, m.sku, m.barcode, m.nama, m.kategori,
            m.stok_awal, m.stok_minimal, m.barcode_asli,
            COALESCE(i.total, 0) AS masuk_total,
            COALESCE(o.total, 0) AS keluar_total,
            $akhir                AS stok_akhir,
            $statusExpr           AS status
-    $sqlDasar
-    $having
-    ORDER BY m.nama
-    LIMIT " . PAGE_SIZE . " OFFSET $offset";
+    $sqlDasar";
 
-$rows = dbAll($sqlRows, $paramsHitung);
+$saring       = $statusSah ? 'WHERE t.status = ?' : '';
+$paramsHitung = $statusSah ? array_merge($params, [$status]) : $params;
+
+// --- Hitung total baris hasil filter --------------------------------------
+$total = (int)dbValue("SELECT COUNT(*) FROM ($sqlPilih) t $saring", $paramsHitung);
+
+$meta   = metaPaginasi($total, $page);
+$offset = ($meta['page'] - 1) * PAGE_SIZE;
+
+// --- Ambil baris halaman ini ----------------------------------------------
+$rows = dbAll(
+    "SELECT * FROM ($sqlPilih) t $saring ORDER BY t.nama LIMIT " . PAGE_SIZE . " OFFSET $offset",
+    $paramsHitung
+);
 
 // Samakan tipe agar JavaScript tidak menerima angka sebagai string.
 foreach ($rows as &$r) {
