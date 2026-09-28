@@ -31,23 +31,51 @@ async function parsePdfPickingList(arrayBuffer){
     const items = content.items
       .map(it => ({ text:(it.str||""), x:it.transform[4], y:it.transform[5] }))
       .filter(it => it.text.trim());
-    items.sort((a,b) => (b.y - a.y) || (a.x - b.x));
-    let lines = [], currentY = null, currentLine = [];
-    const TOL = 3.5;
-    items.forEach(it => {
-      if(currentY===null || Math.abs(it.y-currentY) <= TOL){
-        currentLine.push(it);
-        if(currentY===null) currentY = it.y;
-      } else {
-        lines.push(currentLine.sort((a,b)=>a.x-b.x));
-        currentLine = [it];
-        currentY = it.y;
-      }
-    });
-    if(currentLine.length) lines.push(currentLine.sort((a,b)=>a.x-b.x));
-    allLines = allLines.concat(lines);
+    allLines = allLines.concat(susunBarisDariItem(items));
   }
   return extractPickingListRows(allLines);
+}
+
+/**
+ * Susun potongan teks satu halaman menjadi baris, berdasarkan koordinatnya.
+ *
+ * pdf.js memberi potongan teks lepas, bukan baris. Yang berselisih tinggi
+ * kurang dari TOL dianggap satu baris, lalu diurutkan dari kiri ke kanan.
+ *
+ * Terpisah dari parsePdfPickingList supaya bisa diuji tanpa pdf.js: lihat
+ * tools/uji_pdf_parser.js, yang menjalankannya atas geometri berkas nyata.
+ *
+ * @param {Array<{text:string,x:number,y:number}>} items
+ * @returns {Array<Array<{text:string,x:number,y:number}>>}
+ */
+function susunBarisDariItem(items){
+  const TOL = 3.5;
+  items.sort((a,b) => (b.y - a.y) || (a.x - b.x));
+  const lines = [];
+  let currentY = null, currentLine = [];
+  items.forEach(it => {
+    if(currentY===null || Math.abs(it.y-currentY) <= TOL){
+      currentLine.push(it);
+      if(currentY===null) currentY = it.y;
+    } else {
+      lines.push(currentLine.sort((a,b)=>a.x-b.x));
+      currentLine = [it];
+      currentY = it.y;
+    }
+  });
+  if(currentLine.length) lines.push(currentLine.sort((a,b)=>a.x-b.x));
+  return lines;
+}
+
+/** Nomor urut baris, hanya bila kolom No benar-benar berisi bilangan. */
+/**
+ * Apakah baris ini perabot halaman — kaki, kepala, atau penunjuk sambungan?
+ *
+ * Dipakai untuk mengenali pergantian halaman. Bedanya dengan isNonDataLine:
+ * yang ini khusus penanda batas halaman, bukan seluruh baris bukan-data.
+ */
+function perabotHalaman(items){
+  return /halaman/i.test(items.map(it => it.text).join(" "));
 }
 
 function extractPickingListRows(lines){
@@ -65,22 +93,56 @@ function extractPickingListRows(lines){
   }
   const rows = [];
   let current = null;
+  let ulangan = false;        // sedang di dalam blok barang yang dicetak ulang
   const penanda = pilihPenandaBaris(lines, headerIdx, cols);
-  const awalBaris = hitungAwalBaris(lines, headerIdx, cols, penanda);
+  const tanda = hitungAwalBaris(lines, headerIdx, cols, penanda);
   for(let i=headerIdx+1; i<lines.length; i++){
     if(isNonDataLine(lines[i])) continue; // header berulang / info halaman lain, jangan dianggap data ataupun disambung ke baris berjalan
     const assigned = assignLineToColumns(lines[i], cols);
-    const isNewRow = awalBaris.has(i);
-    if(isNewRow){
+
+    // Blok barang yang dicetak ulang di puncak halaman berikutnya.
+    //
+    // Bila daftar nomor pesanan satu barang tidak habis dalam satu halaman,
+    // Desty mencetak ULANG seluruh blok barangnya di puncak halaman
+    // berikutnya — nomor urut, nama, SKU, barcode dan Qty yang sama — lalu
+    // meneruskan nomor pesanan yang tersisa. Yang baru di situ hanya nomor
+    // pesanannya. Tanpa penjagaan ini blok ulangan menjadi baris kedua:
+    // qty-nya dihitung dua kali dan stoknya terpotong dua kali. Pada satu
+    // picking list nyata dua barang terulang seperti ini dan totalnya
+    // menjadi 160, padahal kepala berkasnya menyebut 131.
+    if(tanda.ulangan.has(i)){
+      ulangan = true;
+      continue;
+    }
+
+    if(tanda.awal.has(i)){
       if(current) rows.push(finalizePdfRow(current));
       current = { barcode:assigned.barcode||"", nama:assigned.nama?[assigned.nama]:[], sku:assigned.sku||"", qty:assigned.qty||"", noPesanan:assigned.noPesanan||"" };
-    } else if(current){
-      if(assigned.barcode) current.barcode += assigned.barcode;
-      if(assigned.nama) current.nama.push(assigned.nama);
-      if(assigned.sku) current.sku += (" "+assigned.sku);
-      if(assigned.qty) current.qty += assigned.qty;
-      if(assigned.noPesanan) current.noPesanan += (" "+assigned.noPesanan);
+      ulangan = false;
+      continue;
     }
+
+    if(!current) continue;
+
+    if(ulangan){
+      // Dari blok ulangan hanya nomor pesanannya yang diambil. Kolom lain
+      // cuma dilengkapi bila masih kosong — itu terjadi bila halaman
+      // sebelumnya terpotong sebelum baris barcodenya. Yang sudah terisi
+      // tidak disambung: isinya sama, dan menyambungnya menghasilkan qty
+      // "1212" atau nama yang tertulis dua kali.
+      if(assigned.noPesanan) current.noPesanan += (" "+assigned.noPesanan);
+      if(!current.barcode && assigned.barcode)  current.barcode = assigned.barcode;
+      if(!current.sku && assigned.sku)          current.sku     = assigned.sku;
+      if(!current.qty && assigned.qty)          current.qty     = assigned.qty;
+      if(!current.nama.length && assigned.nama) current.nama.push(assigned.nama);
+      continue;
+    }
+
+    if(assigned.barcode) current.barcode += assigned.barcode;
+    if(assigned.nama) current.nama.push(assigned.nama);
+    if(assigned.sku) current.sku += (" "+assigned.sku);
+    if(assigned.qty) current.qty += assigned.qty;
+    if(assigned.noPesanan) current.noPesanan += (" "+assigned.noPesanan);
   }
   if(current) rows.push(finalizePdfRow(current));
   return { header, rows: rows.filter(r => r.barcode || r.nama) };
@@ -121,16 +183,29 @@ function tampakBarcode(s){
 function pilihPenandaBaris(lines, headerIdx, cols){
   if(!cols.some(c => c.key === "no")) return "barcode";
 
-  let berangka = 0, diperiksa = 0;
+  let berangka = 0, diperiksa = 0, pertama = "";
   for(let i = headerIdx + 1; i < lines.length && diperiksa < 60; i++){
     if(isNonDataLine(lines[i])) continue;
     const a = assignLineToColumns(lines[i], cols);
     diperiksa++;
-    if(/^\d+$/.test((a.no || "").trim())) berangka++;
+    const nilai = (a.no || "").trim();
+    if(/^\d+$/.test(nilai)){
+      berangka++;
+      if(pertama === "") pertama = nilai;
+    }
   }
   // Butuh minimal dua nomor urut sebelum mempercayai kolom itu; satu
   // kecocokan kebetulan tidak cukup.
-  return berangka >= 2 ? "no" : "barcode";
+  //
+  // Kecualinya: bila nomor satu-satunya itu "1". Picking list yang memuat
+  // SATU barang memang hanya punya satu nomor urut, dan menolaknya membuat
+  // seluruh berkas dibaca dengan penanda barcode. Pada layout Desty barcode
+  // berada di baris teks tersendiri, di bawah nama dan SKU, sehingga barang
+  // dimulai terlambat dan kolom SKU, Qty serta nomor pesanannya terbuang —
+  // hasilnya satu baris berqty 0 yang tidak bisa disimpan. Nomor urut yang
+  // kebetulan berbunyi tepat "1" jauh lebih jarang daripada picking list
+  // berisi satu barang.
+  return (berangka >= 2 || (berangka === 1 && pertama === "1")) ? "no" : "barcode";
 }
 
 /**
@@ -154,10 +229,18 @@ function pilihPenandaBaris(lines, headerIdx, cols){
  * hanya berisi nomor pesanan tidak memenuhi syarat itu, jadi ekor daftar
  * pesanan barang sebelumnya tetap utuh.
  *
- * @return {Set<number>} indeks baris tempat setiap barang dimulai
+ * Baris penanda yang, ditelusuri ke belakang, langsung bertemu perabot
+ * halaman adalah blok barang yang dicetak ulang di puncak halaman berikutnya.
+ * Isinya ada di halaman sebelumnya, jadi ia bukan awal barang baru — dan
+ * menoleh lebih jauh ke belakang justru merampas baris sambungan terakhir
+ * halaman sebelumnya, yang dulu memecah satu barang menjadi dua.
+ *
+ * @return {{awal: Set<number>, ulangan: Set<number>}} indeks awal setiap
+ *         barang, dan indeks baris penanda blok yang dicetak ulang
  */
 function hitungAwalBaris(lines, headerIdx, cols, penanda){
   const awal = new Set();
+  const ulangan = new Set();
 
   const adalahPenanda = (a) => penanda === "no"
     ? /^\d+$/.test((a.no || "").trim())
@@ -179,17 +262,27 @@ function hitungAwalBaris(lines, headerIdx, cols, penanda){
     // dari "FINGERTAPE HIJAU MUDA"). Pada layout Desty, baris penanda hanya
     // berisi nomor urut dan Qty, jadi isinya memang ada di baris sebelumnya.
     if(!punyaIsi(a)){
+      let blokUlangan = false;
       for(let j=i-1; j>headerIdx; j--){
-        if(isNonDataLine(lines[j])) continue;
+        if(isNonDataLine(lines[j])){
+          // Perabot halaman lebih dulu ditemui daripada isi: blok barangnya
+          // dicetak ulang di puncak halaman ini.
+          if(perabotHalaman(lines[j])){ blokUlangan = true; break; }
+          continue;
+        }
         const b = assignLineToColumns(lines[j], cols);
         // Jangan mengambil baris yang sudah menjadi awal barang lain.
         if(punyaIsi(b) && !adalahPenanda(b) && !awal.has(j)) mulai = j;
         break;
       }
+      if(blokUlangan){
+        ulangan.add(i);
+        continue;
+      }
     }
     awal.add(mulai);
   }
-  return awal;
+  return { awal: awal, ulangan: ulangan };
 }
 
 // Baris yang BUKAN baris data barang: header tabel yang tercetak ulang di
@@ -202,6 +295,11 @@ function isNonDataLine(items){
   const t = text.toLowerCase();
   if(t.includes("barcode") && t.includes("nama") && t.includes("sku") && t.includes("qty")) return true;
   if(/dicetak\s*oleh/i.test(text)) return true;
+  // Blok tanda tangan di kaki halaman terakhir. "Diambil oleh" dicetak tepat
+  // di kolom No. Pesanan, jadi tanpa aturan ini ia tersambung ke baris barang
+  // terakhir dan ikut tersimpan sebagai nomor pesanan.
+  if(/diambil\s*oleh/i.test(text)) return true;
+  if(/catatan\s*pengambilan/i.test(text)) return true;
   if(/tanggal\s*cetak/i.test(text)) return true;
   if(/jumlah\s*pesanan/i.test(text)) return true;
   if(/jumlah\s*produk/i.test(text)) return true;

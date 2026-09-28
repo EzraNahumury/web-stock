@@ -1176,7 +1176,10 @@ async function prosesPdf(arrayBuffer, fileName){
 
     if(parsed.rows.length){
       await cekBarcodeMassal();
-      samakanDenganMaster();
+      const lewatSku = samakanDenganMaster();
+      if(lewatSku){
+        toast(lewatSku + " baris tidak mencantumkan barcode di PDF dan dicocokkan lewat SKU.");
+      }
       await cekDuplikatImpor();
     }
   }catch(err){
@@ -1215,15 +1218,49 @@ async function cekBarcodeMassal(){
  * titik ini berarti admin sengaja menukar produknya.
  */
 function samakanDenganMaster(){
+  let lewatSku = 0;
   pdfImport.rows.forEach(r => {
-    const m = r.barcode ? pdfImport.cocok[r.barcode] : null;
+    const bcPdf = r.barcode;            // sebagaimana tercetak di PDF
+    let m = r.barcode ? pdfImport.cocok[r.barcode] : null;
+
+    // Barcodenya kosong atau tidak dikenal: coba lewat SKU.
+    //
+    // Picking list Desty hanya mencetak gambar barcode untuk barang yang di
+    // sana belum punya barcode terdaftar, jadi kolomnya memang kosong
+    // sementara SKU-nya ada dan dikenal di master kita. Baris seperti itu
+    // dulu tidak bisa disimpan sama sekali, dan karena satu baris cacat
+    // membatalkan seluruh impor, satu barang tanpa barcode cukup untuk
+    // menggagalkan satu picking list penuh.
+    //
+    // SKU kembar tidak dipakai: menebak salah satunya berarti memotong stok
+    // barang yang salah, jadi barisnya dibiarkan untuk diisi tangan.
+    if(!(m && typeof m === "object") && r.sku){
+      const s = pdfImport.cocokSku[r.sku];
+      if(s && typeof s === "object" && !s.ganda && s.barcode){
+        m = s;
+        r.barcode = s.barcode;
+        lewatSku++;
+      }
+    }
+
     if(m && typeof m === "object"){
       r.nama = m.nama;
       r.sku  = m.sku || "";
     }
     r.pilih = true;                       // semua baris tercentang secara bawaan
-    r.asli  = { barcode: r.barcode, nama: r.nama, sku: r.sku };
+
+    // Kolom barcode yang MEMANG kosong lalu diisi dari SKU bukan pertukaran
+    // produk — tidak ada yang digantikan, jadi jangan diberi tanda tukar.
+    // Tapi barcode yang tercetak lalu DIGANTI karena tidak dikenal memang
+    // pertukaran, dan itu harus terlihat: ikon tukar di tabel review, dan
+    // catatan pertukaran di sisi server.
+    r.asli = {
+      barcode: bcPdf !== "" ? bcPdf : r.barcode,
+      nama:    r.nama,
+      sku:     r.sku
+    };
   });
+  return lewatSku;
 }
 
 async function cekDuplikatImpor(){
@@ -1249,9 +1286,17 @@ function renderPdfImportStatus(){
 
 function pdfRowStatusBadge(r){
   if(!r.barcode) return '<span class="badge kritis">'+svgIcon("alert")+'Barcode kosong</span>';
-  const found = Object.prototype.hasOwnProperty.call(pdfImport.cocok, r.barcode);
-  return found ? '<span class="badge aman">'+svgIcon("check")+'Cocok master</span>'
-               : '<span class="badge rendah">'+svgIcon("alert")+'Tak dikenal</span>';
+  if(Object.prototype.hasOwnProperty.call(pdfImport.cocok, r.barcode)){
+    return '<span class="badge aman">'+svgIcon("check")+'Cocok master</span>';
+  }
+  // Barcode yang barusan diisikan dari master tidak ada dalam daftar yang
+  // ditanyakan ke server — yang ditanyakan barcode hasil baca PDF. Tanpa
+  // cabang ini, baris yang justru sudah dikenali malah dicap "Tak dikenal".
+  const s = r.sku ? pdfImport.cocokSku[r.sku] : null;
+  if(s && typeof s === "object" && s.barcode === r.barcode){
+    return '<span class="badge aman">'+svgIcon("check")+'Cocok lewat SKU</span>';
+  }
+  return '<span class="badge rendah">'+svgIcon("alert")+'Tak dikenal</span>';
 }
 
 /** Apakah baris ini produknya sudah ditukar dari hasil baca PDF? */
@@ -1574,8 +1619,17 @@ async function confirmPdfReview(){
   const dipilih = rows.filter(r => r.pilih !== false);
   if(!dipilih.length){ toast("Centang minimal satu baris untuk disimpan.", "err"); return; }
 
-  const invalid = dipilih.some(r => !r.barcode || !r.qty);
-  if(invalid){ toast("Lengkapi Barcode dan Qty di semua baris yang dicentang.", "err"); return; }
+  // Nomor barisnya disebut. Pada picking list berisi puluhan baris, "ada
+  // yang belum lengkap" memaksa petugas memeriksa satu per satu.
+  const kurang = [];
+  pdfImport.rows.forEach((r, i) => {
+    if(r.pilih !== false && (!r.barcode || !r.qty)) kurang.push(i + 1);
+  });
+  if(kurang.length){
+    toast("Baris " + kurang.slice(0, 8).join(", ") + (kurang.length > 8 ? ", …" : "")
+      + " belum lengkap: isi Barcode dan Qty, atau hapus centangnya.", "err");
+    return;
+  }
 
   if(pdfImport.duplikat){
     const ok = await konfirmasi(
@@ -1609,24 +1663,57 @@ async function confirmPdfReview(){
     }
   }));
 
-  try{
-    const res = await API.importSave({
-      header:  pdfImport.header || {},
-      rows:    kirim,
-      fileName: pdfImport.fileName,
-      fileHash: pdfImport.fileHash,
-      tanggal:  pdfImport.tanggal || todayISO(),
-      abaikanDuplikat: !!pdfImport.duplikat
-    });
+  const kirimKe = (abaikanStok) => API.importSave({
+    header:  pdfImport.header || {},
+    rows:    kirim,
+    fileName: pdfImport.fileName,
+    fileHash: pdfImport.fileHash,
+    tanggal:  pdfImport.tanggal || todayISO(),
+    abaikanDuplikat: !!pdfImport.duplikat,
+    abaikanStokKurang: !!abaikanStok
+  });
 
+  const selesai = (res) => {
     setSaveStatus("ok");
     toast(res.pesan || (res.tersimpan + " barang keluar berhasil disimpan."));
     (res.peringatan || []).forEach(p => toast(p, "err"));
-
     cancelPdfReview();
     trxFilters.keluar.page = 1;
     renderTransaksiTable("keluar");
+  };
+
+  try{
+    selesai(await kirimKe(false));
   }catch(err){
+    // Stok tercatat kurang bukan alasan menolak: picking list mencatat
+    // barang yang sudah dikirim. Petugas yang memutuskan, dan bila ia
+    // melanjutkan, stok barang itu menjadi minus sebagai tanda perlu
+    // ditelusuri lewat stok opname.
+    if(err.status === 409 && err.data && err.data.stok_kurang){
+      const daftar = (err.detail || []).slice(0, 5).join("; ");
+      const ok = await konfirmasi(
+        "Stok sebagian barang tidak mencukupi",
+        daftar + ((err.detail || []).length > 5 ? "; …" : "")
+          + ". Picking list mencatat barang yang sudah dikirim, jadi ini "
+          + "biasanya berarti stok di sistem yang belum benar. Simpan tetap? "
+          + "Stok barang tersebut akan menjadi minus.",
+        "Ya, simpan tetap"
+      );
+      if(!ok){
+        setSaveStatus("ok");
+        if(tombol) tombol.disabled = false;
+        return;
+      }
+      try{
+        setSaveStatus("saving");
+        selesai(await kirimKe(true));
+      }catch(err2){
+        tampilGalat(err2);
+      }finally{
+        if(tombol) tombol.disabled = false;
+      }
+      return;
+    }
     tampilGalat(err);
   }finally{
     if(tombol) tombol.disabled = false;

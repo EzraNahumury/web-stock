@@ -1186,6 +1186,32 @@ baris hasil parse
 Hash file dihitung di browser (`crypto.subtle.digest('SHA-256', buffer)`) dari
 `ArrayBuffer` yang sudah ada di tangan — tidak perlu mengunggah PDF sama sekali.
 
+#### Barang yang tidak mencantumkan barcode
+
+Desty hanya mencetak digit barcode untuk barang yang di sana punya barcode
+terdaftar. Untuk sisanya kolom itu memuat gambar saja, jadi pembacaan yang
+benar pun menghasilkan sel kosong — pada satu picking list nyata, tiga dari
+31 barang. Dulu satu baris seperti itu menggagalkan SELURUH berkas, karena
+satu galat membatalkan semuanya.
+
+Barang itu tetap membawa SKU, dan SKU-nya ada di master. Jadi baris tanpa
+barcode dicocokkan lewat SKU — di tabel review oleh `samakanDenganMaster()`,
+dan sekali lagi di `api/import/commit.php` untuk permintaan yang tidak
+melewati antarmuka. Barcode master yang dipakai, supaya barcode yang tercatat
+dan `master_id`-nya tidak pernah menunjuk barang berbeda. SKU kembar tidak
+ditebak: menebaknya berarti memotong stok barang yang salah, jadi barisnya
+dibiarkan untuk diisi tangan.
+
+#### Stok tercatat kurang
+
+Picking list adalah catatan barang yang SUDAH diambil dan dikirim. Menolaknya
+karena stok tercatat kurang membuat sistem makin jauh dari kenyataan gudang,
+dan satu barang bersaldo nol cukup untuk menggagalkan berkas berisi puluhan
+baris. Karena itu `commit.php` menjawab **409** berisi daftar barangnya, dan
+petugas yang memutuskan: batal, atau simpan dengan `abaikanStokKurang` dan
+biarkan stoknya minus sebagai tanda barang itu perlu ditelusuri lewat stok
+opname. Pola konfirmasinya sama dengan impor ganda.
+
 ---
 
 ## 10. Skema Database
@@ -1813,6 +1839,22 @@ Dua pemeriksaan sekaligus:
 
 Keduanya hanya membaca teks: tanpa Node, tanpa browser, tanpa paket
 tambahan, tanpa menyentuh database.
+
+```
+node tools\uji_pdf_parser.js
+```
+
+Pembacaan PDF picking list, diuji atas geometri empat berkas nyata yang
+pernah gagal diimpor — masing-masing dengan sebab berbeda, dan tiga di
+antaranya gagal dalam diam: angkanya salah, bukan berhenti dengan pesan.
+Patokannya angka yang dicetak Desty di kepala berkas, bukan angka yang kita
+tentukan sendiri: jumlah unit seluruh baris harus sama dengan "Jumlah
+produk", dan nomor pesanan yang unik harus sama dengan "Jumlah Pesanan".
+
+Fixturnya, `tools/fixtur/picking-list.json`, menyimpan koordinat dan isi
+potongan teks — bukan PDF-nya, karena `*.pdf` memang tidak masuk repositori
+ini. Nomor pesanannya sudah disamarkan. Perlu Node, tapi tanpa satu pun
+paket: pdf.js tidak dipakai, sebab yang diuji dimulai dari geometri.
 
 ### Pendataan ulang katalog barang
 

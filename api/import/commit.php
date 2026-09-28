@@ -10,7 +10,8 @@
  * sisi klien saja tidak pernah cukup, karena permintaan bisa dikirim langsung
  * tanpa melewati antarmuka.
  *
- * Body: { header, fileName, fileHash, tanggal, abaikanDuplikat, rows[] }
+ * Body: { header, fileName, fileHash, tanggal, abaikanDuplikat,
+ *          abaikanStokKurang, rows[] }
  */
 
 declare(strict_types=1);
@@ -32,6 +33,7 @@ $fileName = ambilStr($in, 'fileName', 255);
 $fileHash = ambilStr($in, 'fileHash', 64);
 $tanggal  = ambilTanggal($in, 'tanggal');
 $abaikan  = !empty($in['abaikanDuplikat']);
+$abaikanStok = !empty($in['abaikanStokKurang']);
 
 if (!$rows) {
     jsonError('Tidak ada data untuk disimpan.');
@@ -66,6 +68,7 @@ if (!$abaikan) {
 // --- Validasi & normalisasi seluruh baris SEBELUM transaksi dimulai -------
 $bersih  = [];
 $galat   = [];
+$viaSku  = 0;
 foreach ($rows as $i => $r) {
     if (!is_array($r)) {
         continue;
@@ -86,16 +89,42 @@ foreach ($rows as $i => $r) {
     $sku     = ambilStr($r, 'sku', 50);
     $noPes   = ambilStr($r, 'noPesanan', 100);
 
-    if ($barcode === '') {
-        $galat[] = "Baris $baris: barcode kosong.";
-        continue;
-    }
     if ($qty <= 0) {
         $galat[] = "Baris $baris: qty harus lebih dari 0.";
         continue;
     }
 
+    /* Barcode boleh kosong asal SKU-nya mengenali barangnya.
+     *
+     * Picking list Desty tidak mencetak digit barcode untuk barang yang di
+     * sana belum punya barcode terdaftar — kolomnya hanya memuat gambar,
+     * sehingga pembacaan PDF yang benar pun menghasilkan sel kosong. Baris
+     * seperti itu tetap membawa SKU, dan SKU-nya ada di master kita. Dulu
+     * satu baris semacam ini menggagalkan SELURUH impor, karena satu galat
+     * membatalkan semuanya.
+     *
+     * Bila cocok lewat SKU, barcode master yang dipakai — barcode yang
+     * tercatat dan master_id-nya tidak boleh menunjuk barang berbeda.
+     */
     $master = cariMasterByBarcode($barcode);
+    if ($master === null && $sku !== '') {
+        $cocokSku = cariMasterBySku($sku);
+        if (count($cocokSku) === 1) {
+            $master  = $cocokSku[0];
+            $barcode = (string)$master['barcode'];
+            $viaSku++;
+        } elseif ($barcode === '' && count($cocokSku) > 1) {
+            $galat[] = "Baris $baris: barcode kosong dan SKU \"$sku\" dipakai "
+                . "lebih dari satu barang — isi barcodenya.";
+            continue;
+        }
+    }
+    if ($barcode === '') {
+        $galat[] = $sku === ''
+            ? "Baris $baris: barcode dan SKU dua-duanya kosong."
+            : "Baris $baris: barcode kosong dan SKU \"$sku\" tidak ada di master.";
+        continue;
+    }
 
     // Nama: hasil parse -> nama master -> penanda. Sama seperti prototipe.
     if ($nama === '') {
@@ -156,8 +185,28 @@ if (!IZINKAN_STOK_MINUS) {
                 . 'tersedia ' . $tersedia . ', diminta ' . $totalQty;
         }
     }
+    /* Stok kurang: ditanyakan, bukan ditolak mati.
+     *
+     * Picking list adalah catatan barang yang SUDAH diambil dan dikirim.
+     * Menolaknya karena stok tercatat kurang membuat sistem makin jauh dari
+     * kenyataan gudang, dan satu barang bersaldo nol cukup untuk
+     * menggagalkan seluruh berkas — itulah sebabnya sebagian picking list
+     * "terbaca tapi gagal input".
+     *
+     * Jadi jawabannya 409 berisi daftar barangnya. Petugas memutuskan:
+     * batal, atau simpan dan biarkan stoknya minus sebagai tanda bahwa
+     * barang itu perlu ditelusuri lewat stok opname. Pola konfirmasinya
+     * sama dengan impor ganda di atas.
+     */
+    if ($kurang && !$abaikanStok) {
+        jsonError('Stok tidak mencukupi untuk sebagian barang.', 409, [
+            'stok_kurang' => true,
+            'detail'      => $kurang,
+        ]);
+    }
     if ($kurang) {
-        jsonError('Stok tidak mencukupi untuk sebagian barang.', 422, ['detail' => $kurang]);
+        $peringatan[] = count($kurang) . ' barang dicatat keluar melebihi stok '
+            . 'tercatat, jadi stoknya kini minus. Telusuri lewat stok opname.';
     }
 }
 
@@ -166,6 +215,10 @@ foreach ($bersih as $b) {
     if ($b['master_id'] === null) {
         $tanpaMaster++;
     }
+}
+if ($viaSku > 0) {
+    $peringatan[] = $viaSku . ' baris tidak mencantumkan barcode di PDF dan '
+        . 'dicocokkan lewat SKU.';
 }
 if ($tanpaMaster > 0) {
     $peringatan[] = $tanpaMaster . ' baris barcodenya belum terdaftar di master barang. '

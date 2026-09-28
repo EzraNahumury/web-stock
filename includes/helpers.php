@@ -222,6 +222,35 @@ function cariMasterByBarcode(string $barcode): ?array
 }
 
 /**
+ * Cari master berdasarkan SKU.
+ *
+ * SKU TIDAK dijamin unik di master — data sumbernya memuat beberapa yang
+ * kembar — jadi yang dikembalikan daftar, bukan satu baris. Pemanggilnya
+ * yang memutuskan: satu kecocokan boleh dipakai, lebih dari satu harus
+ * ditanyakan, karena menebak salah satunya berarti memotong stok barang
+ * yang salah.
+ *
+ * Yang barcodenya kosong dilewati: hasil pencarian ini dipakai untuk
+ * mengisi barcode sebuah baris, jadi baris master tanpa barcode tidak
+ * menolong apa pun.
+ *
+ * @return array daftar baris master, paling banyak $batas
+ */
+function cariMasterBySku(string $sku, int $batas = 2): array
+{
+    if ($sku === '') {
+        return [];
+    }
+    return dbAll(
+        "SELECT id, sku, barcode, nama, stok_awal, stok_minimal, kategori
+           FROM master_barang
+          WHERE sku = ? AND barcode <> '' AND deleted_at IS NULL
+          ORDER BY id LIMIT " . max(1, $batas),
+        [$sku]
+    );
+}
+
+/**
  * Bentuk metadata paginasi yang konsisten untuk semua endpoint list.
  */
 function metaPaginasi(int $total, int $page, int $perPage = PAGE_SIZE): array
