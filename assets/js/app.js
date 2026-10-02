@@ -372,6 +372,8 @@ const TABS = [
     ikon:'<path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><path d="M3 17v2a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-2"/>' },
   { id:"ket_keluar", label:"Keterangan barang keluar", sub:"Isi dropdown Keterangan di menu Barang keluar", grup:"Master",
     ikon:'<path d="M12 21V9"/><polyline points="7 14 12 9 17 14"/><path d="M3 7V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2"/>' },
+  { id:"ket_retur", label:"Keterangan retur", sub:"Isi dropdown Keterangan retur di menu Retur", grup:"Master",
+    ikon:'<path d="M3 7v6h6"/><path d="M3.5 13a9 9 0 1 0 2.1-9.4L3 7"/>' },
   { id:"pengguna", label:"Pengguna", sub:"Kelola akun yang bisa masuk ke aplikasi", grup:"Master",
     adminSaja:true,
     ikon:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13A4 4 0 0 1 16 11"/>' },
@@ -3606,12 +3608,21 @@ let ketJenis = "masuk";
 let editKetId = null;
 let ketRows = [];
 
+// Nama arah dan contoh isian, satu tempat saja. Dipakai judul, penjelasan,
+// dan placeholder, supaya menambah arah baru tidak menuntut penyuntingan di
+// beberapa tempat sekaligus.
+const KET_ARAH = {
+  masuk:  { menu:"Barang masuk",  kata:"barang masuk",  contoh:"Contoh: Retur Supplier" },
+  keluar: { menu:"Barang keluar", kata:"barang keluar", contoh:"Contoh: Kirim Cabang" },
+  retur:  { menu:"Retur",         kata:"retur",         contoh:"Contoh: Menunggu Kurir" }
+};
+
 function renderKeterangan(jenis){
-  ketJenis = jenis === "keluar" ? "keluar" : "masuk";
+  ketJenis = KET_ARAH[jenis] ? jenis : "masuk";
   editKetId = null;
 
   const bolehUbah = sayaAdmin() && bolehTulis();
-  const arah = ketJenis === "masuk" ? "barang masuk" : "barang keluar";
+  const arah = KET_ARAH[ketJenis].kata;
 
   let html = "";
   if(!bolehUbah){
@@ -3624,7 +3635,7 @@ function renderKeterangan(jenis){
       + '<div class="form-grid">'
       + '<div><label class="field-label" for="ketNama">Nama keterangan</label>'
         + '<input type="text" id="ketNama" maxlength="50" placeholder="'
-        + (ketJenis === "masuk" ? "Contoh: Retur Supplier" : "Contoh: Kirim Cabang")
+        + KET_ARAH[ketJenis].contoh
         + '" required></div>'
       + '<div class="span2"><label class="field-label" for="ketCatatan">Catatan</label>'
         + '<input type="text" id="ketCatatan" maxlength="120" placeholder="Kapan pilihan ini dipakai"></div>'
@@ -3655,7 +3666,7 @@ async function refreshKeterangan(){
 
   ketRows = d.rows;
   const bolehUbah = sayaAdmin() && bolehTulis();
-  const arah = ketJenis === "masuk" ? "Barang masuk" : "Barang keluar";
+  const arah = KET_ARAH[ketJenis].menu;
 
   let baris = d.rows.map(k => {
     // Baris terkunci dipakai sistem; tombolnya dimatikan sekalian, bukan
@@ -3691,8 +3702,13 @@ async function refreshKeterangan(){
 
   wadah.innerHTML =
     '<div class="info-box">Daftar ini mengisi dropdown <b>Keterangan</b> di menu <b>' + esc(arah) + '</b>. '
-    + 'Mengganti nama pilihan ikut memperbarui catatan transaksi yang sudah memakainya, '
-    + 'jadi riwayat lama tidak kehilangan artinya.</div>'
+    + 'Mengganti nama pilihan ikut memperbarui catatan yang sudah memakainya, '
+    + 'jadi riwayat lama tidak kehilangan artinya.'
+    + (ketJenis === "retur" && d.nilai_sistem
+        ? ' Pilihan <b>' + esc(d.nilai_sistem) + '</b> dikunci: retur berketerangan itulah '
+          + 'yang menambah stok, jadi namanya tidak bisa diubah dan barisnya tidak bisa dihapus.'
+        : '')
+    + '</div>'
     + (d.tanpa_keterangan > 0
         ? '<div class="warn-box">' + fmtNum(d.tanpa_keterangan) + ' catatan ' + esc(arah.toLowerCase())
           + ' keterangannya masih kosong.</div>'
@@ -3826,12 +3842,15 @@ async function kirimHapusKeterangan(id, pindahKe){
  */
 async function segarkanDaftarKeterangan(){
   try{
-    const [m, k] = await Promise.all([
+    const [m, k, r] = await Promise.all([
       API.get("keterangan/list.php", { jenis:"masuk" }),
-      API.get("keterangan/list.php", { jenis:"keluar" })
+      API.get("keterangan/list.php", { jenis:"keluar" }),
+      API.get("keterangan/list.php", { jenis:"retur" })
     ]);
-    window.KET_MASUK  = m.rows.filter(r => r.aktif).map(r => r.nama);
-    window.KET_KELUAR = k.rows.filter(r => r.aktif).map(r => r.nama);
+    window.KET_MASUK  = m.rows.filter(x => x.aktif).map(x => x.nama);
+    window.KET_KELUAR = k.rows.filter(x => x.aktif).map(x => x.nama);
+    // Menu Retur membangun dropdownnya dari daftar ini juga.
+    returStatusOptions = r.rows.filter(x => x.aktif).map(x => x.nama);
   }catch(e){ /* bukan galat fatal */ }
 }
 
@@ -4181,6 +4200,7 @@ function renderContent(){
   else if(tab==="kategori") renderKategori();
   else if(tab==="ket_masuk") renderKeterangan("masuk");
   else if(tab==="ket_keluar") renderKeterangan("keluar");
+  else if(tab==="ket_retur") renderKeterangan("retur");
   else if(tab==="pengguna") renderPengguna();
 }
 

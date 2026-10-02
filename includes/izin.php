@@ -42,6 +42,7 @@ function menuIzin(): array
         'kategori'   => 'Kategori',
         'ket_masuk'  => 'Keterangan barang masuk',
         'ket_keluar' => 'Keterangan barang keluar',
+        'ket_retur'  => 'Keterangan retur',
         'aktivitas'  => 'Log aktivitas',
     ];
 }
@@ -69,6 +70,7 @@ function menuGrup(): array
         'kategori'   => 'Master',
         'ket_masuk'  => 'Master',
         'ket_keluar' => 'Master',
+        'ket_retur'  => 'Master',
         'aktivitas'  => 'Sistem',
     ];
 }
@@ -368,7 +370,8 @@ function periksaIzinApi(): void
             $body  = jsonInput();
             $jenis = isset($body['jenis']) ? (string)$body['jenis'] : '';
         }
-        $menu = $jenis === 'keluar' ? 'ket_keluar' : 'ket_masuk';
+        $daftar = ['keluar' => 'ket_keluar', 'retur' => 'ket_retur'];
+        $menu   = $daftar[$jenis] ?? 'ket_masuk';
     }
 
     /* Penolakan menyebut apa yang kurang.

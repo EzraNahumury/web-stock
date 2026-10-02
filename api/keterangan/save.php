@@ -5,8 +5,8 @@
  * Body: { id?, jenis, nama, catatan?, urutan?, aktif? }
  *
  * MENGGANTI NAMA IKUT MEMPERBARUI TRANSAKSI
- * Keterangan disimpan sebagai teks di barang_masuk / barang_keluar, bukan
- * sebagai relasi. Kalau namanya diubah tanpa memperbarui transaksinya,
+ * Keterangan disimpan sebagai teks di barang_masuk / barang_keluar / retur,
+ * bukan sebagai relasi. Kalau namanya diubah tanpa memperbarui transaksinya,
  * catatan lama akan memuat nilai yang tidak lagi ada di daftar pilihan dan
  * tidak bisa disaring lagi. Karena itu keduanya diubah dalam satu transaksi.
  *
@@ -27,8 +27,9 @@ wajibAdminApi();
 $in = jsonInput();
 wajibCsrf($in);
 
+$arah    = arahKeterangan();
 $id      = ambilInt($in, 'id', 0);
-$jenis   = pilihanValid(ambilStr($in, 'jenis', 10), ['masuk', 'keluar']);
+$jenis   = pilihanValid(ambilStr($in, 'jenis', 10), array_keys($arah));
 $nama    = ambilStr($in, 'nama', 50);
 $catatan = ambilStr($in, 'catatan', 120);
 $urutan  = ambilInt($in, 'urutan', 0);
@@ -41,7 +42,8 @@ if ($urutan < 0) {
     jsonError('Urutan tidak boleh negatif.');
 }
 
-$tabel = $jenis === 'masuk' ? 'barang_masuk' : 'barang_keluar';
+$tabel = $arah[$jenis]['tabel'];
+$kolom = $arah[$jenis]['kolom'];
 
 // Unik per arah: "Retur" boleh ada di keluar sekaligus di masuk.
 $bentrok = dbOne(
@@ -79,10 +81,10 @@ if ($id > 0) {
         }
     }
 
-    $ikut = dbTransaksi(static function (PDO $pdo) use ($id, $jenis, $nama, $catatan, $urutan, $aktif, $lama, $gantiNama, $tabel) {
+    $ikut = dbTransaksi(static function (PDO $pdo) use ($id, $jenis, $nama, $catatan, $urutan, $aktif, $lama, $gantiNama, $tabel, $kolom) {
         $n = 0;
         if ($gantiNama) {
-            $st = $pdo->prepare("UPDATE $tabel SET keterangan = ? WHERE keterangan = ?");
+            $st = $pdo->prepare("UPDATE $tabel SET `$kolom` = ? WHERE `$kolom` = ?");
             $st->execute([$nama, $lama['nama']]);
             $n = $st->rowCount();
         }

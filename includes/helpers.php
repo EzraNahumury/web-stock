@@ -170,6 +170,25 @@ function daftarKategori(): array
 }
 
 /**
+ * Arah keterangan yang dikenal, beserta tempat nilainya dipakai.
+ *
+ * Satu daftar untuk semuanya, supaya daftar pilihan, penyimpanan, dan
+ * penghapusan tidak mungkin berbeda pendapat tentang arah mana yang ada dan
+ * kolom mana yang menyimpannya. Retur menyimpannya di kolom `status`, bukan
+ * `keterangan` — itulah satu-satunya alasan kolomnya ikut disebut di sini.
+ *
+ * @return array<string, array{tabel: string, kolom: string, label: string}>
+ */
+function arahKeterangan(): array
+{
+    return [
+        'masuk'  => ['tabel' => 'barang_masuk',  'kolom' => 'keterangan', 'label' => 'Barang masuk'],
+        'keluar' => ['tabel' => 'barang_keluar', 'kolom' => 'keterangan', 'label' => 'Barang keluar'],
+        'retur'  => ['tabel' => 'retur',         'kolom' => 'status',     'label' => 'Retur'],
+    ];
+}
+
+/**
  * Daftar pilihan keterangan untuk satu arah transaksi.
  *
  * Dibaca dari tabel keterangan supaya bisa dikelola dari menu Master.
@@ -177,7 +196,7 @@ function daftarKategori(): array
  * lama di config.php dipakai sebagai cadangan, sehingga form transaksi
  * tidak pernah kehilangan pilihannya.
  *
- * @param string $jenis 'masuk' atau 'keluar'
+ * @param string $jenis 'masuk', 'keluar', atau 'retur'
  * @return string[]
  */
 function daftarKeterangan(string $jenis): array
@@ -187,7 +206,11 @@ function daftarKeterangan(string $jenis): array
         return $cache[$jenis];
     }
 
-    $bawaan = $jenis === 'masuk' ? KET_MASUK : KET_KELUAR;
+    if ($jenis === 'retur') {
+        $bawaan = STATUS_RETUR;
+    } else {
+        $bawaan = $jenis === 'masuk' ? KET_MASUK : KET_KELUAR;
+    }
 
     try {
         $rows = dbAll(

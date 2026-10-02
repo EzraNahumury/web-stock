@@ -109,6 +109,26 @@ terhenti gara-gara master belum lengkap.
 
 - Barang masuk: `Barang Baru`, `Restock`, `Retur Masuk`, `Lainnya`
 - Barang keluar: `Pesanan MP`, `Retur`, `Rusak / Reject`, `Lainnya`
+- Retur: `Lengkap`, `Sistem Belum Selesai`
+
+Itu isi awalnya saja. Ketiga daftar dikelola dari menu **Master** —
+Keterangan barang masuk, Keterangan barang keluar, dan Keterangan retur —
+dan tersimpan di tabel `keterangan` dengan kolom `jenis`. Nilai di
+`config/config.php` tinggal menjadi cadangan bila tabelnya belum ada.
+
+Dua nilai dikunci karena bukan sekadar label:
+
+| Daftar | Nilai | Dipakai untuk |
+|---|---|---|
+| Barang masuk | `Retur Masuk` | keterangan baris yang ditulis retur saat lengkap |
+| Retur | `Lengkap` | penanda bahwa retur itu menambah stok |
+
+Keduanya tidak bisa diganti nama, dinonaktifkan, atau dihapus: sambungannya
+dibandingkan apa adanya di kode, jadi mengubahnya akan menghentikan
+penambahan stok tanpa ada yang memberi tahu. Retur juga tidak bisa
+dipindahkan *menjadi* `Lengkap` lewat penghapusan pilihan, karena pemindahan
+di sana hanya menulis ulang kolom status — returnya akan tampak lengkap
+sementara stoknya tidak pernah bertambah.
 
 ### 2.3 Alur master barang
 

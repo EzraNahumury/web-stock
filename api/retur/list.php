@@ -39,7 +39,8 @@ if ($sampai !== '' && ambilTanggal(['d' => $sampai], 'd') !== null) {
     $where[] = 'r.tanggal <= ?';
     $params[] = $sampai;
 }
-if ($status !== '' && in_array($status, STATUS_RETUR, true)) {
+$pilihanStatus = daftarKeterangan('retur');
+if ($status !== '' && in_array($status, $pilihanStatus, true)) {
     $where[] = 'r.status = ?';
     $params[] = $status;
 }
@@ -81,7 +82,7 @@ jsonOk([
     'total_unit'     => $totalUnit,
     'unit_ke_stok'   => $masukStok,
     'unit_tertahan'  => $totalUnit - $masukStok,
-    'status_options' => STATUS_RETUR,
+    'status_options' => $pilihanStatus,
     // Status mana yang berarti "sudah masuk stok" ditentukan server, supaya
     // layar tidak perlu menebaknya dari teks yang bisa berubah.
     'status_masuk'   => STATUS_RETUR_MASUK,

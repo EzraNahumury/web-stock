@@ -489,7 +489,7 @@ switch ($jenis) {
             $where[] = 'r.tanggal <= ?';
             $params[] = $sampai;
         }
-        if ($status !== '' && in_array($status, STATUS_RETUR, true)) {
+        if ($status !== '' && in_array($status, daftarKeterangan('retur'), true)) {
             $where[] = 'r.status = ?';
             $params[] = $status;
         }

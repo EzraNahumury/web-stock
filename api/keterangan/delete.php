@@ -2,8 +2,8 @@
 /**
  * POST api/keterangan/delete.php — hapus satu pilihan keterangan.
  *
- * Keterangan tersimpan sebagai teks di barang_masuk / barang_keluar, bukan
- * sebagai relasi. Menghapus pilihan yang masih dipakai akan meninggalkan
+ * Keterangan tersimpan sebagai teks di barang_masuk / barang_keluar / retur,
+ * bukan sebagai relasi. Menghapus pilihan yang masih dipakai akan meninggalkan
  * transaksi memuat nilai yang tidak ada lagi di daftar — hilang dari
  * penyaringan tanpa pesan apa pun. Jadi ada dua jalan, sama seperti kategori:
  *
@@ -48,12 +48,14 @@ if ((int)$k['terkunci'] === 1) {
     );
 }
 
+$arah  = arahKeterangan();
 $jenis = (string)$k['jenis'];
 $nama  = (string)$k['nama'];
-$tabel = $jenis === 'masuk' ? 'barang_masuk' : 'barang_keluar';
+$tabel = $arah[$jenis]['tabel'];
+$kolom = $arah[$jenis]['kolom'];
 
 $dipakai = (int)dbValue(
-    "SELECT COUNT(*) FROM $tabel WHERE keterangan = ? AND deleted_at IS NULL",
+    "SELECT COUNT(*) FROM $tabel WHERE `$kolom` = ? AND deleted_at IS NULL",
     [$nama]
 );
 
@@ -77,13 +79,30 @@ if ($dipakai > 0 && $pindahKe !== '') {
     if ($tujuanAda === null) {
         jsonError('Keterangan tujuan tidak ditemukan di daftar ini.');
     }
+
+    /* Retur tidak boleh dipindahkan MENJADI "Lengkap" dari sini.
+     *
+     * Retur berketerangan Lengkap menambah stok lewat baris barang masuk
+     * miliknya sendiri. Pemindahan di sini cuma menulis ulang kolom status,
+     * jadi retur yang dipindahkan akan tampak lengkap sementara stoknya tidak
+     * pernah bertambah — selisih yang baru ketahuan saat stok opname.
+     * Arah sebaliknya aman: nilai yang menambah stok itu terkunci, jadi tidak
+     * pernah sampai ke sini sebagai yang dihapus. */
+    if ($jenis === 'retur' && $pindahKe === STATUS_RETUR_MASUK) {
+        jsonError(
+            'Retur tidak bisa dipindahkan ke "' . STATUS_RETUR_MASUK . '" dari sini, '
+            . 'karena keterangan itu ikut menambah stok. Ubah returnya satu per satu '
+            . 'di menu Retur, atau pindahkan ke keterangan lain.',
+            409
+        );
+    }
 }
 
 $dipindah = 0;
-dbTransaksi(static function (PDO $pdo) use ($id, $nama, $pindahKe, $dipakai, $tabel, &$dipindah) {
+dbTransaksi(static function (PDO $pdo) use ($id, $nama, $pindahKe, $dipakai, $tabel, $kolom, &$dipindah) {
     if ($dipakai > 0) {
         $st = $pdo->prepare(
-            "UPDATE $tabel SET keterangan = ? WHERE keterangan = ? AND deleted_at IS NULL"
+            "UPDATE $tabel SET `$kolom` = ? WHERE `$kolom` = ? AND deleted_at IS NULL"
         );
         $st->execute([$pindahKe, $nama]);
         $dipindah = $st->rowCount();

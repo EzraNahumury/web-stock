@@ -40,7 +40,9 @@ $barcode   = ambilStr($in, 'barcode', 50);
 $sku       = ambilStr($in, 'sku', 50);
 $nama      = ambilStr($in, 'nama', 255);
 $jumlah    = ambilInt($in, 'jumlah', 0);
-$status    = pilihanValid(ambilStr($in, 'status', 30), STATUS_RETUR);
+// Daftarnya dikelola dari menu Master, jadi dibaca dari sana — bukan dari
+// konstanta, yang kini hanya jadi cadangan bila tabelnya belum ada.
+$status    = pilihanValid(ambilStr($in, 'status', 30), daftarKeterangan('retur'));
 $ket       = ambilStr($in, 'keterangan', 255);
 
 if ($tanggal === null) {

@@ -2,7 +2,7 @@
 /**
  * GET api/keterangan/list.php — daftar pilihan keterangan satu arah.
  *
- * Parameter: jenis = masuk | keluar
+ * Parameter: jenis = masuk | keluar | retur
  *
  * Jumlah pemakaian ikut dihitung: pilihan yang sudah dipakai transaksi tidak
  * boleh dihapus begitu saja, dan admin perlu melihat angkanya sebelum
@@ -19,13 +19,15 @@ pasangPenangananGalatApi();
 wajibMetode('GET');
 wajibLoginApi();
 
-$jenis = pilihanValid(ambilStr($_GET, 'jenis', 10), ['masuk', 'keluar']);
-$tabel = $jenis === 'masuk' ? 'barang_masuk' : 'barang_keluar';
+$arah  = arahKeterangan();
+$jenis = pilihanValid(ambilStr($_GET, 'jenis', 10), array_keys($arah));
+$tabel = $arah[$jenis]['tabel'];
+$kolom = $arah[$jenis]['kolom'];
 
 $rows = dbAll(
     "SELECT k.id, k.jenis, k.nama, k.catatan, k.urutan, k.aktif, k.terkunci,
             (SELECT COUNT(*) FROM $tabel t
-              WHERE t.keterangan = k.nama AND t.deleted_at IS NULL) AS dipakai
+              WHERE t.`$kolom` = k.nama AND t.deleted_at IS NULL) AS dipakai
        FROM keterangan k
       WHERE k.jenis = ? AND k.deleted_at IS NULL
       ORDER BY k.urutan, k.nama",
@@ -43,12 +45,17 @@ unset($r);
 
 // Transaksi yang keteranganya kosong — bukan galat, tapi berguna diketahui.
 $tanpaKeterangan = (int)dbValue(
-    "SELECT COUNT(*) FROM $tabel WHERE keterangan = '' AND deleted_at IS NULL"
+    "SELECT COUNT(*) FROM $tabel WHERE `$kolom` = '' AND deleted_at IS NULL"
 );
 
 jsonOk([
     'rows'             => $rows,
     'jenis'            => $jenis,
+    'label'            => $arah[$jenis]['label'],
+    // Nilai yang menggerakkan stok, supaya layar bisa menerangkan kenapa
+    // barisnya terkunci tanpa menebak namanya sendiri.
+    'nilai_sistem'     => $jenis === 'retur' ? STATUS_RETUR_MASUK
+                        : ($jenis === 'masuk' ? KET_RETUR_MASUK : ''),
     'tanpa_keterangan' => $tanpaKeterangan,
     'total'            => count($rows),
 ]);
