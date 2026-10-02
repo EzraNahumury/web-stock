@@ -371,11 +371,19 @@ function periksaIzinApi(): void
         $menu = $jenis === 'keluar' ? 'ket_keluar' : 'ket_masuk';
     }
 
+    /* Penolakan menyebut apa yang kurang.
+     *
+     * Dulu ketiganya berbunyi umum, dan layar hanya menampilkan kalimatnya —
+     * sehingga penolakan izin tidak bisa dibedakan dari gangguan lain, dan
+     * penelusurannya dimulai dari tebakan. Nama menunya sudah ada di tangan,
+     * jadi tidak ada alasan menyembunyikannya: yang membaca pesan ini adalah
+     * pemilik akun, dan admin yang bisa memperbaikinya. */
     if ($menu !== null && !bolehMenu($menu)) {
-        jsonError('Akun ini tidak punya akses ke menu tersebut.', 403);
+        jsonError('Akun ini tidak punya akses ke menu "' . $menu . '".', 403);
     }
     if ($tulis && !bolehTulis()) {
-        jsonError('Akun ini hanya bisa melihat, tidak bisa mengubah data.', 403);
+        jsonError('Akun ini hanya bisa melihat, tidak bisa mengubah data. '
+            . 'Bila haknya baru diubah, muat ulang halaman.', 403);
     }
     if ($hapus && !bolehHapus()) {
         jsonError('Menghapus catatan hanya bisa dilakukan admin.', 403);

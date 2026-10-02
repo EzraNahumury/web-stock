@@ -225,6 +225,23 @@ if ($tanpaMaster > 0) {
         . 'Transaksinya tercatat, tapi belum mempengaruhi perhitungan stok.';
 }
 
+/* Mode periksa: jalankan seluruh pemeriksaan, jangan tulis apa pun.
+ *
+ * Dipakai antarmuka ketika penyimpanan gagal dengan jawaban yang tidak bisa
+ * diurai. Dengan ini permintaan yang sama persis bisa dikirim ulang — utuh,
+ * lalu separuh, lalu seperempat — untuk mengetahui apakah yang menghalangi
+ * itu isinya, ukurannya, atau bukan keduanya, tanpa risiko menyimpan impor
+ * separuh jadi. Berguna juga sebagai "cek dulu" biasa. */
+if (!empty($in['periksa'])) {
+    jsonOk([
+        'periksa'    => true,
+        'baris'      => count($bersih),
+        'unit'       => array_sum(array_column($bersih, 'qty')),
+        'via_sku'    => $viaSku,
+        'peringatan' => $peringatan,
+    ]);
+}
+
 // --- Simpan dalam satu transaksi -----------------------------------------
 $tanggalCetak = null;
 $tc = ambilStr($header, 'tanggalCetak', 20);

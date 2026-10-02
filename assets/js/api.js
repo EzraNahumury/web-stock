@@ -23,27 +23,46 @@ const API = (function(){
       location.href = "login.php";
       throw new Error("Sesi berakhir.");
     }
-    // Endpoint kita SELALU menjawab JSON, juga saat menolak. Jadi badan
-    // respons yang tidak bisa diurai berarti yang menolak bukan aplikasi ini,
-    // melainkan lapisan di depannya: pengaman hosting (mod_security /
-    // Imunify), pembatas ukuran permintaan, atau proses PHP yang mati.
-    // Pesannya menyebut itu, supaya yang membacanya tidak mengira haknya
-    // kurang lalu sia-sia menyuruh admin menambah centang menu.
-    //
-    // Badan respons dibaca sebagai teks lebih dulu, bukan res.json(). Badan
-    // hanya boleh dibaca sekali, jadi mengurai JSON yang gagal akan
-    // menghabiskannya dan cuplikan untuk diagnosa hilang.
+    // Endpoint kita SELALU menjawab JSON, juga saat menolak. Badan respons
+    // dibaca sebagai teks lebih dulu, bukan res.json(): badan hanya boleh
+    // dibaca sekali, jadi penguraian yang gagal akan menghabiskannya dan
+    // buktinya hilang.
     const teks = await res.text();
-    let data;
+
+    let data = null;
     try{
       data = JSON.parse(teks);
     }catch(e){
-      console.error("Respons bukan JSON", res.status, teks.slice(0, 300));
-      throw new Error(res.status === 403
-        ? "Permintaan diblokir sebelum sampai ke aplikasi (HTTP 403). "
-          + "Biasanya ini pengaman hosting, bukan hak akses akun. Coba lagi; "
-          + "bila tetap gagal, tunjukkan pesan ini ke admin server."
-        : "Respons server tidak bisa dibaca (HTTP " + res.status + ").");
+      // Sebelum menyerah, coba selamatkan.
+      //
+      // Yang berdiri di depan PHP kadang menempelkan byte di depan badan
+      // respons: tanda urutan byte dari berkas yang tersimpan dengan BOM,
+      // atau peringatan PHP yang tercetak duluan. JSON-nya sendiri utuh dan
+      // masih terbaca, jadi menolak seluruh jawaban karena sampah di depannya
+      // berarti menyembunyikan pesan server yang sebenarnya — dan itu yang
+      // membuat penolakan izin biasa tampak seperti gangguan hosting.
+      const bersih = teks.replace(/^[﻿\s\0]+/, "");
+      const mulai  = bersih.indexOf("{");
+      if(mulai >= 0){
+        try{ data = JSON.parse(bersih.slice(mulai)); }catch(e2){ data = null; }
+      }
+    }
+
+    if(data === null){
+      // Tidak ada JSON sama sekali. Jawaban mentahnya ikut ditampilkan, bukan
+      // hanya dicatat ke konsol: yang memakai aplikasi ini petugas gudang,
+      // dan tebakan tentang sebabnya pernah menyesatkan. Biar server sendiri
+      // yang bicara.
+      console.error("Respons bukan JSON", res.status, teks.slice(0, 500));
+      const cuplikan = teks.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 140);
+      const err = new Error("Server menjawab tanpa JSON (HTTP " + res.status + ", "
+        + teks.length + " byte). "
+        + (cuplikan ? "Jawabannya: “" + cuplikan + "”" : "Jawabannya kosong.")
+        + " Tunjukkan pesan ini apa adanya.");
+      err.status  = res.status;
+      err.nonJson = true;          // dipakai pemanggil untuk menjalankan uji sendiri
+      err.mentah  = teks.slice(0, 500);
+      throw err;
     }
     if(!res.ok || !data.ok){
       const err = new Error(data.error || ("Permintaan gagal (HTTP " + res.status + ")."));

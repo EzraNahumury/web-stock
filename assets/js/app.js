@@ -1714,10 +1714,75 @@ async function confirmPdfReview(){
       }
       return;
     }
+
     tampilGalat(err);
+
+    // Jawaban yang tidak bisa diurai tidak menyebutkan sebabnya, dan menebak
+    // sebabnya pernah menyesatkan: pesan sebelumnya menuduh pengaman hosting
+    // padahal pengujian dari luar menunjukkan endpoint ini terbuka. Jadi
+    // aplikasi memeriksanya sendiri, di tempat kejadian, dengan permintaan
+    // yang tidak menulis apa pun.
+    if(err.nonJson){ await diagnosaImpor(kirim); }
   }finally{
     if(tombol) tombol.disabled = false;
   }
+}
+
+/**
+ * Cari tahu kenapa penyimpanan impor dijawab tanpa JSON.
+ *
+ * Seluruh permintaannya memakai mode "periksa": server menjalankan semua
+ * pemeriksaan lalu berhenti sebelum menulis, jadi mengulang permintaan yang
+ * sama — utuh, separuh, seperempat — tidak berisiko menyimpan impor separuh
+ * jadi. Yang dicari cuma satu: pada bentuk permintaan seperti apa jawabannya
+ * berhenti bisa dibaca.
+ */
+async function diagnosaImpor(kirim){
+  const dasar = {
+    header: pdfImport.header || {},
+    fileName: pdfImport.fileName,
+    fileHash: pdfImport.fileHash,
+    tanggal:  pdfImport.tanggal || todayISO(),
+    abaikanDuplikat: true,
+    abaikanStokKurang: true,
+    periksa: true
+  };
+
+  const coba = async (baris) => {
+    try{
+      await API.importSave(Object.assign({}, dasar, { rows: baris }));
+      return { ok: true };
+    }catch(e){
+      // Penolakan ber-JSON tetap "sampai": server menjawab, kita paham.
+      return { ok: !e.nonJson, pesan: e.message };
+    }
+  };
+
+  const satu  = await coba(kirim.slice(0, 1));
+  const penuh = satu.ok ? await coba(kirim) : { ok: false };
+
+  if(!satu.ok){
+    toast("Uji: permintaan sekecil apa pun ke endpoint ini juga tidak terjawab. "
+      + "Jadi bukan soal banyaknya baris — yang menghalangi berlaku untuk "
+      + "seluruh penyimpanan barang keluar dari akun ini.", "err");
+    return;
+  }
+  if(penuh.ok){
+    toast("Uji: permintaan yang sama persis kini terjawab normal. "
+      + "Gangguannya sesaat — coba simpan lagi.", "err");
+    return;
+  }
+
+  // Satu baris lolos, semuanya tidak: cari batasnya dengan membelah dua.
+  let lolos = 1, gagal = kirim.length;
+  while(gagal - lolos > 1){
+    const tengah = Math.floor((lolos + gagal) / 2);
+    const r = await coba(kirim.slice(0, tengah));
+    if(r.ok) lolos = tengah; else gagal = tengah;
+  }
+  toast("Uji: " + lolos + " baris pertama masih terjawab, " + gagal + " baris tidak. "
+    + "Jadi yang menghalangi muncul pada baris ke-" + gagal
+    + " — entah isinya, entah ukuran permintaannya. Tunjukkan angka ini.", "err");
 }
 
 /* ---------------------------------------------------------------- */
