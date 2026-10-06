@@ -11,6 +11,7 @@ Dokumentasi lengkap, hasil audit, dan rancangan migrasi ke PHP (Hostinger).
 | **Target produksi** | PHP 8.x + MySQL, shared hosting Hostinger |
 | **Status** | Versi PHP **sudah dibangun dan berjalan** — lihat [Bagian 14](#14-status-implementasi) |
 | **Dokumen ini** | Hasil audit mendalam + spesifikasi versi PHP |
+| **Catatan revisi** | [REVISI.md](REVISI.md) — apa yang berubah tiap deploy, ditulis singkat |
 
 ---
 
