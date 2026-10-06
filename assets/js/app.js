@@ -59,6 +59,8 @@ function svgIcon(name){
     edit:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>',
     check:'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>',
     x:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+    naik:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="18 15 12 9 6 15"/></svg>',
+    turun:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>',
     tukar:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>',
     download:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
   };
@@ -84,7 +86,7 @@ function setSaveStatus(state, pesan){
   const el = $("saveStatus");
   if(state === "saving" || state === "ok") statusTerakhir = state;
   if(!el) return;
-  if(state === "saving") el.innerHTML = "Menyimpan…";
+  if(state === "saving") el.innerHTML = esc(pesan || "Menyimpan…");
   else if(state === "error"){
     const bawaan = statusTerakhir === "saving"
       ? "Gagal menyimpan — coba lagi."
@@ -918,6 +920,7 @@ function renderTransaksiTab(kind){
       + '<input type="file" accept="application/pdf,.pdf" id="pdfFileInput" style="display:none" onchange="handlePdfUpload(event)"></label>'
       + '</div>'
       + '<div id="pdfImportStatus"></div>'
+      + '<div id="pdfGalatImpor"></div>'
       + '<div id="pdfReviewArea"></div>'
       + '</div>'
       + '<div style="font-size:11.5px; font-weight:600; letter-spacing:.04em; text-transform:uppercase; color:var(--slate); margin:4px 0 10px;">Atau input manual</div>';
@@ -1607,6 +1610,7 @@ function removePdfReviewRow(idx){
 
 function cancelPdfReview(){
   pdfImport = { status:"idle", header:null, rows:[], fileName:"", fileHash:"", tanggal:"", cocok:{}, cocokSku:{}, duplikat:null };
+  if($("pdfGalatImpor")) $("pdfGalatImpor").innerHTML = "";
   const fi = $("pdfFileInput");
   if(fi) fi.value = "";
   renderPdfImportStatus();
@@ -1644,6 +1648,7 @@ async function confirmPdfReview(){
 
   const tombol = $("pdfConfirmBtn");
   if(tombol) tombol.disabled = true;
+  if($("pdfGalatImpor")) $("pdfGalatImpor").innerHTML = "";
   setSaveStatus("saving");
 
   // Yang dikirim hanya baris tercentang, dan hanya kolom yang dibaca
@@ -1651,29 +1656,87 @@ async function confirmPdfReview(){
   // etalase marketplace bisa ratusan karakter; keduanya memperbesar badan
   // permintaan tanpa guna — dan badan yang besar adalah yang paling sering
   // dipangkas pengaman hosting.
-  const kirim = dipilih.map(r => ({
-    barcode:    r.barcode,
-    nama:       String(r.nama || "").slice(0, 255),
-    sku:        r.sku || "",
-    qty:        r.qty,
-    keterangan: r.keterangan || "",
-    noPesanan:  r.noPesanan || "",
-    asli: {
-      barcode: (r.asli && r.asli.barcode) || "",
-      sku:     (r.asli && r.asli.sku) || "",
-      nama:    String((r.asli && r.asli.nama) || "").slice(0, 255)
+  const kirim = dipilih.map(r => {
+    const b = {
+      barcode:    r.barcode,
+      nama:       String(r.nama || "").slice(0, 255),
+      sku:        r.sku || "",
+      qty:        r.qty,
+      keterangan: r.keterangan || "",
+      noPesanan:  r.noPesanan || ""
+    };
+    // Keadaan asli hanya perlu dikirim bila produknya memang ditukar — itu
+    // satu-satunya yang membacanya di server. Pada baris biasa isinya sama
+    // persis dengan kolom di atasnya, jadi mengirimnya cuma menggandakan
+    // judul etalase yang panjang.
+    if(barisDitukar(r)){
+      b.asli = {
+        barcode: (r.asli && r.asli.barcode) || "",
+        sku:     (r.asli && r.asli.sku) || "",
+        nama:    String((r.asli && r.asli.nama) || "").slice(0, 255)
+      };
     }
-  }));
-
-  const kirimKe = (abaikanStok) => API.importSave({
-    header:  pdfImport.header || {},
-    rows:    kirim,
-    fileName: pdfImport.fileName,
-    fileHash: pdfImport.fileHash,
-    tanggal:  pdfImport.tanggal || todayISO(),
-    abaikanDuplikat: !!pdfImport.duplikat,
-    abaikanStokKurang: !!abaikanStok
+    return b;
   });
+
+  /* Picking list panjang dikirim sedikit-sedikit.
+   *
+   * Di server produksi, permintaan berisi lebih dari sekitar sepuluh baris
+   * ditolak sebelum sampai ke PHP — jawabannya bukan JSON, jadi aplikasi
+   * tidak pernah tahu alasannya, dan impor yang panjang tidak pernah bisa
+   * disimpan. Dengan POTONGAN, ukuran tiap permintaan tetap kecil berapa pun
+   * panjang picking listnya. Server menampungnya dan baru menulis apa pun
+   * setelah perintah terakhir, jadi jaminan satu transaksi tidak berubah.
+   *
+   * Sesinya diingat di pdfImport: kalau penyimpanan gagal karena stok kurang
+   * lalu petugas memilih lanjut, potongannya tidak perlu diunggah lagi.
+   */
+  const POTONG = 5;
+
+  if(!pdfImport.sesiKirim){
+    pdfImport.sesiKirim = Array.from({ length: 4 }, () =>
+      Math.floor(Math.random() * 0x100000000).toString(16).padStart(8, "0")).join("");
+  }
+
+  const unggahPotongan = async () => {
+    for(let i = 0; i < kirim.length; i += POTONG){
+      await API.importSave({
+        sesi:   pdfImport.sesiKirim,
+        potong: true,
+        mulai:  i === 0,
+        rows:   kirim.slice(i, i + POTONG)
+      });
+      setSaveStatus("saving", "Mengirim " + Math.min(i + POTONG, kirim.length)
+        + " dari " + kirim.length + " baris…");
+    }
+    pdfImport.terunggah = true;
+  };
+
+  const kirimKe = async (abaikanStok) => {
+    // Daftar pendek tetap dikirim sekaligus: satu permintaan, satu perjalanan.
+    if(kirim.length <= POTONG){
+      return API.importSave({
+        header:  pdfImport.header || {},
+        rows:    kirim,
+        fileName: pdfImport.fileName,
+        fileHash: pdfImport.fileHash,
+        tanggal:  pdfImport.tanggal || todayISO(),
+        abaikanDuplikat: !!pdfImport.duplikat,
+        abaikanStokKurang: !!abaikanStok
+      });
+    }
+    if(!pdfImport.terunggah) await unggahPotongan();
+    return API.importSave({
+      sesi:    pdfImport.sesiKirim,
+      selesai: true,
+      header:  pdfImport.header || {},
+      fileName: pdfImport.fileName,
+      fileHash: pdfImport.fileHash,
+      tanggal:  pdfImport.tanggal || todayISO(),
+      abaikanDuplikat: !!pdfImport.duplikat,
+      abaikanStokKurang: !!abaikanStok
+    });
+  };
 
   const selesai = (res) => {
     setSaveStatus("ok");
@@ -1724,10 +1787,30 @@ async function confirmPdfReview(){
     // padahal pengujian dari luar menunjukkan endpoint ini terbuka. Jadi
     // aplikasi memeriksanya sendiri, di tempat kejadian, dengan permintaan
     // yang tidak menulis apa pun.
-    if(err.nonJson){ await diagnosaImpor(kirim); }
+    //
+    // Hasilnya ditulis ke halaman, bukan sekadar toast: toast hilang sendiri
+    // dalam beberapa detik, dan selama ini justru itulah satu-satunya tempat
+    // bukti yang dibutuhkan sempat muncul.
+    if(err.nonJson){
+      tulisGalatImpor(err, "Menyiapkan uji…");
+      const ringkas = await diagnosaImpor(kirim);
+      tulisGalatImpor(err, ringkas);
+    }
   }finally{
     if(tombol) tombol.disabled = false;
   }
+}
+
+/** Tulis jawaban mentah server ke halaman, supaya tidak ikut hilang. */
+function tulisGalatImpor(err, ringkas){
+  const el = $("pdfGalatImpor");
+  if(!el) return;
+  el.innerHTML = '<div class="warn-box">'
+    + '<b>Penyimpanan ditolak sebelum sampai ke aplikasi.</b><br>'
+    + 'Jawaban server: <span class="mono">' + esc(err.mentah || "(kosong)") + '</span><br>'
+    + 'Hasil uji: ' + esc(ringkas) + '<br>'
+    + 'Tangkap layar bagian ini; isinya yang menerangkan sebabnya.'
+    + '</div>';
 }
 
 /**
@@ -1763,16 +1846,15 @@ async function diagnosaImpor(kirim){
   const satu  = await coba(kirim.slice(0, 1));
   const penuh = satu.ok ? await coba(kirim) : { ok: false };
 
+  const lapor = (teks) => { toast("Uji: " + teks, "err"); return teks; };
+
   if(!satu.ok){
-    toast("Uji: permintaan sekecil apa pun ke endpoint ini juga tidak terjawab. "
-      + "Jadi bukan soal banyaknya baris — yang menghalangi berlaku untuk "
-      + "seluruh penyimpanan barang keluar dari akun ini.", "err");
-    return;
+    return lapor("permintaan sekecil apa pun ke endpoint ini juga tidak terjawab, "
+      + "jadi bukan soal banyaknya baris.");
   }
   if(penuh.ok){
-    toast("Uji: permintaan yang sama persis kini terjawab normal. "
-      + "Gangguannya sesaat — coba simpan lagi.", "err");
-    return;
+    return lapor("permintaan yang sama persis kini terjawab normal. "
+      + "Gangguannya sesaat — coba simpan lagi.");
   }
 
   // Satu baris lolos, semuanya tidak: cari batasnya dengan membelah dua.
@@ -1782,9 +1864,16 @@ async function diagnosaImpor(kirim){
     const r = await coba(kirim.slice(0, tengah));
     if(r.ok) lolos = tengah; else gagal = tengah;
   }
-  toast("Uji: " + lolos + " baris pertama masih terjawab, " + gagal + " baris tidak. "
-    + "Jadi yang menghalangi muncul pada baris ke-" + gagal
-    + " — entah isinya, entah ukuran permintaannya. Tunjukkan angka ini.", "err");
+
+  // Batas yang sama diuji ulang dengan baris LAIN. Kalau yang menghalangi
+  // isinya, potongan lain seukuran itu tetap lolos; kalau batasnya soal
+  // banyaknya, potongan mana pun seukuran itu ikut tertahan.
+  const lain = await coba(kirim.slice(-gagal));
+  const sebab = lain.ok
+    ? "isi salah satu baris di antara baris " + (lolos + 1) + "–" + gagal
+    : "banyaknya baris dalam satu permintaan (batasnya " + lolos + ")";
+
+  return lapor(lolos + " baris lolos, " + gagal + " tidak. Yang menghalangi: " + sebab + ".");
 }
 
 /* ---------------------------------------------------------------- */
@@ -2455,6 +2544,15 @@ async function refreshRetur(){
                    kaki:"pcs masih menunggu diselesaikan" });
     ringkas.querySelectorAll(".stat-value[data-nilai]").forEach(n =>
       Grafik.angkaNaik(n, Number(n.getAttribute("data-nilai"))));
+  }
+
+  const catatan = $("rtCatatanSaring");
+  if(catatan){
+    catatan.innerHTML = penyaringAktif.length
+      ? '<div class="warn-box">Angka di atas hanya menghitung retur yang lolos penyaring '
+        + esc(penyaringAktif.join(" + ")) + '. '
+        + '<a href="#" onclick="resetRetur(); return false;">Tampilkan semua retur</a>.</div>'
+      : "";
   }
 
   let baris = d.rows.map(r => {
@@ -3639,8 +3737,10 @@ function renderKeterangan(jenis){
         + '" required></div>'
       + '<div class="span2"><label class="field-label" for="ketCatatan">Catatan</label>'
         + '<input type="text" id="ketCatatan" maxlength="120" placeholder="Kapan pilihan ini dipakai"></div>'
-      + '<div><label class="field-label" for="ketUrutan">Urutan</label>'
-        + '<input type="number" id="ketUrutan" min="0" step="10" value="0"></div>'
+      + '<div><label class="field-label" for="ketUrutan">Urutan tampil</label>'
+        + '<input type="number" id="ketUrutan" min="0" step="10" value="0">'
+        + '<div class="field-hint">Angka kecil muncul lebih dulu di dropdown. '
+          + 'Biarkan saja bila tidak penting.</div></div>'
       + '<div><label class="field-label" for="ketAktif">Status</label>'
         + '<select id="ketAktif"><option value="1">Aktif</option><option value="0">Nonaktif</option></select></div>'
       + '</div>'
@@ -3668,7 +3768,7 @@ async function refreshKeterangan(){
   const bolehUbah = sayaAdmin() && bolehTulis();
   const arah = KET_ARAH[ketJenis].menu;
 
-  let baris = d.rows.map(k => {
+  let baris = d.rows.map((k, i) => {
     // Baris terkunci dipakai sistem; tombolnya dimatikan sekalian, bukan
     // hanya ditolak server, supaya alasannya terbaca.
     const kunci = k.terkunci === 1;
@@ -3678,7 +3778,14 @@ async function refreshKeterangan(){
         + (k.catatan ? '<div class="item-sub" style="font-family:Inter">' + esc(k.catatan) + '</div>' : '')
         + '</td>'
       + '<td class="num">' + fmtNum(k.dipakai) + '</td>'
-      + '<td class="num mono" style="color:var(--slateLo)">' + k.urutan + '</td>'
+      + '<td class="num" style="white-space:nowrap">'
+        + (bolehUbah
+            ? '<button class="icon-btn" onclick="geserKeterangan(' + k.id + ',-1)" aria-label="Naikkan ' + esc(k.nama) + '"'
+              + (i === 0 ? ' disabled' : '') + '>' + svgIcon("naik") + '</button>'
+              + '<button class="icon-btn" onclick="geserKeterangan(' + k.id + ',1)" aria-label="Turunkan ' + esc(k.nama) + '"'
+              + (i === d.rows.length - 1 ? ' disabled' : '') + '>' + svgIcon("turun") + '</button>'
+            : '<span class="mono" style="color:var(--slateLo)">' + (i + 1) + '</span>')
+        + '</td>'
       + '<td>' + (k.aktif
           ? '<span class="badge aman">' + svgIcon("check") + 'Aktif</span>'
           : '<span class="badge belum_diatur">Nonaktif</span>') + '</td>'
@@ -3698,7 +3805,7 @@ async function refreshKeterangan(){
     baris = '<tr class="empty-row"><td colspan="' + (bolehUbah?5:4) + '">Belum ada pilihan keterangan.</td></tr>';
   }
 
-  const kolom = ["Keterangan","Dipakai","Urutan","Status"].concat(bolehUbah?[""]:[]);
+  const kolom = ["Keterangan","Dipakai","Urutan tampil","Status"].concat(bolehUbah?[""]:[]);
 
   wadah.innerHTML =
     '<div class="info-box">Daftar ini mengisi dropdown <b>Keterangan</b> di menu <b>' + esc(arah) + '</b>. '
@@ -3718,6 +3825,38 @@ async function refreshKeterangan(){
     + '</tr></thead><tbody>' + baris + '</tbody></table>'
     + '<div class="pagination"><span>' + fmtNum(d.total) + ' pilihan</span></div>'
     + '</div>';
+}
+
+/**
+ * Pindahkan satu pilihan naik atau turun satu langkah.
+ *
+ * Angka "urutan" hanya alat untuk mengurutkan dropdown, dan angka telanjang
+ * di layar tidak menerangkan apa pun — yang ingin dilakukan orang adalah
+ * "yang ini di atas". Jadi yang ditampilkan tombol, dan angkanya ditukar
+ * dengan tetangganya di belakang layar.
+ */
+async function geserKeterangan(id, arah){
+  const i = ketRows.findIndex(x => x.id === id);
+  const j = i + arah;
+  if(i < 0 || j < 0 || j >= ketRows.length) return;
+
+  const a = ketRows[i], b = ketRows[j];
+  // Urutan yang kembar membuat pertukaran tidak kelihatan; beri jarak dulu.
+  const urutA = a.urutan === b.urutan ? (i + 1) * 10 : b.urutan;
+  const urutB = a.urutan === b.urutan ? (j + 1) * 10 : a.urutan;
+
+  setSaveStatus("saving");
+  try{
+    for(const [k, urut] of [[a, urutA], [b, urutB]]){
+      await API.post("keterangan/save.php", {
+        id: k.id, jenis: ketJenis, nama: k.nama, catatan: k.catatan || "",
+        urutan: urut, aktif: !!k.aktif
+      });
+    }
+    setSaveStatus("ok");
+    refreshKeterangan();
+    segarkanDaftarKeterangan();
+  }catch(e){ tampilGalat(e); }
 }
 
 function editKeterangan(id){

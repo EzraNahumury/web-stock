@@ -10,8 +10,24 @@
  * sisi klien saja tidak pernah cukup, karena permintaan bisa dikirim langsung
  * tanpa melewati antarmuka.
  *
+ * DUA CARA MENGIRIM
+ * Picking list pendek dikirim sekaligus: { ..., rows[] }.
+ *
+ * Yang panjang dikirim sedikit-sedikit, karena di server produksi permintaan
+ * berisi lebih dari sekitar sepuluh baris ditolak sebelum sampai ke PHP, dan
+ * jawabannya bukan JSON sehingga alasannya tidak pernah terbaca. Barisnya
+ * ditampung dulu di import_antrian:
+ *
+ *   { sesi, potong: true, mulai?: true, rows[] }   -> titipkan sepotong
+ *   { sesi, selesai: true, ...header dsb }         -> simpan semuanya
+ *
+ * Tidak ada satu baris pun masuk ke barang_keluar sampai perintah terakhir
+ * datang, dan penulisannya tetap satu transaksi. Pengunggahan yang terputus
+ * hanya meninggalkan isi import_antrian, bukan stok yang separuh berkurang.
+ *
  * Body: { header, fileName, fileHash, tanggal, abaikanDuplikat,
  *          abaikanStokKurang, rows[] }
+ *     atau { sesi, potong|selesai, ... } seperti di atas.
  */
 
 declare(strict_types=1);
@@ -34,6 +50,108 @@ $fileHash = ambilStr($in, 'fileHash', 64);
 $tanggal  = ambilTanggal($in, 'tanggal');
 $abaikan  = !empty($in['abaikanDuplikat']);
 $abaikanStok = !empty($in['abaikanStokKurang']);
+
+/* --- Pengiriman bertahap -------------------------------------------------
+ * Sesi dibuat klien dan hanya berlaku untuk akun yang membuatnya, supaya
+ * potongan milik satu orang tidak mungkin ikut tersimpan oleh orang lain.
+ * ------------------------------------------------------------------------ */
+$sesi    = ambilStr($in, 'sesi', 32);
+$potong  = !empty($in['potong']);
+$selesai = !empty($in['selesai']);
+
+if (($potong || $selesai) && !preg_match('/^[a-f0-9]{8,32}$/', $sesi)) {
+    jsonError('Sesi pengiriman tidak valid.');
+}
+
+// Sisa sesi yang ditinggalkan — ditutup browser di tengah jalan, misalnya —
+// dibuang sendiri. Tidak ada gunanya menyimpannya lebih lama dari sehari.
+if ($potong || $selesai) {
+    dbExec('DELETE FROM import_antrian WHERE created_at < (NOW() - INTERVAL 1 DAY)');
+}
+
+if ($potong) {
+    if (!$rows) {
+        jsonError('Potongan tidak berisi baris apa pun.');
+    }
+    // Potongan pertama menghapus sisa percobaan sebelumnya pada sesi yang
+    // sama, supaya mengulang impor tidak menumpuk baris ganda.
+    if (!empty($in['mulai'])) {
+        dbExec('DELETE FROM import_antrian WHERE sesi = ?', [$sesi]);
+    }
+
+    $mulaiUrut = (int)dbValue(
+        'SELECT COALESCE(MAX(urut), -1) + 1 FROM import_antrian WHERE sesi = ?',
+        [$sesi]
+    );
+    $disimpan = 0;
+    dbTransaksi(static function (PDO $pdo) use ($rows, $sesi, $mulaiUrut, &$disimpan) {
+        $st = $pdo->prepare(
+            'INSERT INTO import_antrian
+                (sesi, user_id, urut, barcode, nama, sku, qty, keterangan, no_pesanan,
+                 asli_barcode, asli_sku, asli_nama)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
+        );
+        foreach ($rows as $i => $r) {
+            if (!is_array($r)) {
+                continue;
+            }
+            $asli = is_array($r['asli'] ?? null) ? $r['asli'] : [];
+            $st->execute([
+                $sesi,
+                userId(),
+                $mulaiUrut + $i,
+                mb_substr(trim((string)($r['barcode'] ?? '')), 0, 50),
+                mb_substr(trim((string)($r['nama'] ?? '')), 0, 255),
+                mb_substr(trim((string)($r['sku'] ?? '')), 0, 50),
+                (int)($r['qty'] ?? 0),
+                mb_substr(trim((string)($r['keterangan'] ?? '')), 0, 50),
+                mb_substr(trim((string)($r['noPesanan'] ?? '')), 0, 100),
+                mb_substr(trim((string)($asli['barcode'] ?? '')), 0, 50),
+                mb_substr(trim((string)($asli['sku'] ?? '')), 0, 50),
+                mb_substr(trim((string)($asli['nama'] ?? '')), 0, 255),
+            ]);
+            $disimpan++;
+        }
+    });
+
+    jsonOk([
+        'potong'    => true,
+        'diterima'  => $disimpan,
+        'tertampung' => (int)dbValue('SELECT COUNT(*) FROM import_antrian WHERE sesi = ?', [$sesi]),
+    ]);
+}
+
+if ($selesai) {
+    // Hanya potongan milik akun ini. Sesi dibuat acak di browser, tapi
+    // menyandarkan kepemilikan pada tebakan itu saja tidak cukup.
+    $antri = dbAll(
+        'SELECT barcode, nama, sku, qty, keterangan, no_pesanan,
+                asli_barcode, asli_sku, asli_nama
+           FROM import_antrian
+          WHERE sesi = ? AND user_id <=> ?
+          ORDER BY urut, id',
+        [$sesi, userId()]
+    );
+    if (!$antri) {
+        jsonError('Potongan impor tidak ditemukan atau sudah kedaluwarsa. Ulangi impornya.', 409);
+    }
+    $rows = [];
+    foreach ($antri as $a) {
+        $rows[] = [
+            'barcode'    => $a['barcode'],
+            'nama'       => $a['nama'],
+            'sku'        => $a['sku'],
+            'qty'        => (int)$a['qty'],
+            'keterangan' => $a['keterangan'],
+            'noPesanan'  => $a['no_pesanan'],
+            'asli'       => [
+                'barcode' => $a['asli_barcode'],
+                'sku'     => $a['asli_sku'],
+                'nama'    => $a['asli_nama'],
+            ],
+        ];
+    }
+}
 
 if (!$rows) {
     jsonError('Tidak ada data untuk disimpan.');
@@ -330,6 +448,13 @@ $hasil = dbTransaksi(static function (PDO $pdo) use (
 
     return $batchId;
 });
+
+// Antrian dibuang setelah tersimpan, bukan sebelumnya: kalau penyimpanan
+// gagal, potongannya masih ada dan impornya bisa diulang tanpa mengunggah
+// seluruh picking list sekali lagi.
+if ($selesai) {
+    dbExec('DELETE FROM import_antrian WHERE sesi = ? AND user_id <=> ?', [$sesi, userId()]);
+}
 
 catatAktivitas('import', 'batch', $hasil, [
     'no_picking' => $noPicking,

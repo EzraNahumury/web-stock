@@ -1222,6 +1222,37 @@ dan `master_id`-nya tidak pernah menunjuk barang berbeda. SKU kembar tidak
 ditebak: menebaknya berarti memotong stok barang yang salah, jadi barisnya
 dibiarkan untuk diisi tangan.
 
+#### Picking list panjang dikirim sedikit-sedikit
+
+Di server produksi, permintaan penyimpanan impor ditolak sebelum sampai ke PHP
+begitu isinya lewat dari sekitar sepuluh baris. Jawabannya bukan JSON, jadi
+aplikasi tidak pernah tahu alasannya — dan pengujian dari luar tidak pernah
+bisa menirunya: badan sampai 744 KB, seluruh 1.435 nama katalog dalam satu
+permintaan, header browser lengkap, HTTP/1.1 maupun /2, semuanya sampai dan
+dijawab JSON yang bersih. Yang membedakannya hanya satu: permintaan itu datang
+dari sesi yang sudah masuk, di jaringan mereka.
+
+Karena itu impor yang lebih panjang dari satu potongan tidak lagi dikirim
+sekaligus. Barisnya dititipkan lima-lima ke `import_antrian`, lalu satu
+permintaan terakhir memerintahkan penyimpanannya:
+
+```
+POST api/import/commit.php { sesi, potong:true, mulai:true, rows:[5 baris] }
+POST api/import/commit.php { sesi, potong:true,             rows:[5 baris] }   ...
+POST api/import/commit.php { sesi, selesai:true, header, fileName, ... }
+```
+
+Ukuran tiap permintaan jadi tetap kecil, berapa pun panjang picking listnya.
+Yang penting: **tidak ada satu baris pun masuk ke `barang_keluar` sampai
+perintah terakhir datang**, dan penulisannya tetap satu transaksi seperti
+sebelumnya. Pengunggahan yang terputus hanya meninggalkan isi `import_antrian`
+— tidak ada stok yang telanjur berkurang — dan sisanya dibuang sendiri setelah
+sehari. Antriannya baru dihapus setelah penyimpanan berhasil, jadi impor yang
+ditolak karena stok kurang bisa diteruskan tanpa mengunggah ulang.
+
+Sesinya dibuat di browser dan hanya bisa diselesaikan oleh akun yang
+menitipkannya; akun lain yang menebak nomor sesi tetap ditolak.
+
 #### Stok tercatat kurang
 
 Picking list adalah catatan barang yang SUDAH diambil dan dikirim. Menolaknya
