@@ -9,6 +9,58 @@ berubah**, dan **bagaimana memastikannya jalan**.
 
 ---
 
+## 7 Oktober 2026 — Dashboard dipercepat, dan galat server bisa dibaca
+
+### 1. "Terjadi kesalahan di server" saat menyaring atau mencari
+
+**Yang dicari.** Query Dashboard diuji ulang di **MySQL 8 asli** — mesin yang
+dipakai server, bukan MariaDB yang dipakai komputer kerja — atas katalog
+lengkap 1.435 barang. Lebih dari 60 kombinasi penyaring, kategori, dan kata
+pencarian: semuanya lolos, tidak satu pun galat. Jadi bentuk SQL-nya bukan
+penyebabnya.
+
+**Yang ditemukan justru biayanya.** Setelah 200.000 baris barang keluar dan
+50.000 barang masuk dimasukkan, tiap query Dashboard memakan ~250 ms — dan
+satu permintaan Dashboard menjalankan penjumlahan itu **tiga kali**. Di
+hosting bersama, query yang lama memperbesar peluang permintaan ditutup di
+tengah jalan oleh batas waktu atau batas koneksi, dan itulah yang terbaca
+sebagai galat yang datang sesekali.
+
+**Yang berubah.**
+
+| Perubahan | Hasil ukur |
+|---|---|
+| Indeks penutup `(master_id, deleted_at, jumlah)` di barang masuk & keluar | satu query ~250 ms → **~78 ms** |
+| Ringkasan dan penghitung baris digabung jadi satu query | tiga lintasan → **dua** |
+
+Totalnya: satu permintaan Dashboard turun dari sekitar 750 ms menjadi sekitar
+160 ms pada volume itu. Angkanya sendiri tidak berubah — diuji dengan
+membandingkan hasil cara lama, cara baru, dan hitungan mandiri lewat PHP, di
+MySQL 8 maupun MariaDB, untuk tiap kombinasi penyaring.
+
+### 2. Galat server sekarang bisa dibaca dari dalam aplikasi
+
+**Masalahnya.** Saat gagal, layar hanya berbunyi "Terjadi kesalahan di
+server." Pesan aslinya masuk ke error log PHP milik hosting, yang tidak bisa
+dibuka dari aplikasi. Jadi tiap kali ada galat di produksi, penelusurannya
+dimulai dari menebak — dan tebakannya pernah salah.
+
+**Yang berubah.** Tiap galat kini diberi **kode enam karakter** yang disebut
+di layar, dan dicatat lengkap dengan pesan, endpoint, berkas, nomor baris, dan
+kode SQL-nya. Admin membukanya di menu **Log aktivitas**, di panel paling atas.
+Jadi tangkapan layar dari gudang cukup memuat kodenya, dan barisnya bisa
+langsung dicocokkan.
+
+Isinya teknis, jadi khusus admin — operator yang punya menu Log aktivitas pun
+tetap ditolak. Catatan yang lebih tua dari sebulan dibuang sendiri.
+
+**Satu bug ikut tertangkap di sini.** Kolom catatan itu semula diberi nama
+`sqlstate`, yang ternyata kata tercadang di MySQL dan MariaDB: migrasinya gagal
+dengan galat sintaks, dan seluruh aplikasi tidak bisa dibuka. Ketahuan saat
+diuji di komputer kerja, sebelum sampai ke server.
+
+---
+
 ## 6 Oktober 2026 — impor panjang, kolom Urutan, angka di halaman Retur
 
 Commit `e7354d5`.
@@ -190,6 +242,9 @@ dijalankan sekali.
 |---|---|
 | `sql/013_keterangan_retur.sql` | daftar Keterangan retur + penguncian `Lengkap` |
 | `sql/014_import_antrian.sql` | penampung baris picking list sebelum disimpan |
+| `sql/015_indeks_agregat_keluar.sql` | indeks penutup barang keluar |
+| `sql/016_indeks_agregat_masuk.sql` | indeks penutup barang masuk |
+| `sql/017_galat_sistem.sql` | catatan galat server |
 
 ---
 

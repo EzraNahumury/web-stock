@@ -77,10 +77,79 @@ function wajibMetode(string $metode): void
 function pasangPenangananGalatApi(): void
 {
     set_exception_handler(static function (Throwable $e): void {
-        error_log('API error: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
+        $kode = catatGalatSistem($e);
+        error_log('API error [' . $kode . '] ' . $e->getMessage()
+            . ' @ ' . $e->getFile() . ':' . $e->getLine());
+
+        // Kode galat ikut disebut ke layar. Pesan aslinya tetap disembunyikan —
+        // isinya bisa memuat struktur basis data — tapi kodenya membuat
+        // tangkapan layar dari gudang bisa dicocokkan dengan barisnya di menu
+        // Log aktivitas, tanpa perlu membuka error log hosting.
+        // Kodenya disebut di kedua keadaan, supaya pesan di layar sama
+        // bentuknya saat dikembangkan maupun di produksi.
         jsonError(
-            APP_DEBUG ? $e->getMessage() : 'Terjadi kesalahan di server.',
-            500
+            (APP_DEBUG ? $e->getMessage() : 'Terjadi kesalahan di server.')
+                . ' Kode galat: ' . $kode,
+            500,
+            ['kode_galat' => $kode]
         );
     });
+}
+
+/**
+ * Catat satu galat ke tabel galat_sistem, kembalikan kode pendeknya.
+ *
+ * Pencatatannya sendiri tidak boleh ikut menggagalkan permintaan: kalau
+ * basis datanya justru yang sedang bermasalah, penyimpanan ini akan gagal
+ * juga, dan yang penting tetap jawaban JSON untuk klien. Karena itu seluruh
+ * isinya dibungkus try/catch dan kegagalannya diabaikan — error log PHP
+ * sudah menerima salinannya lewat pemanggil.
+ */
+function catatGalatSistem(Throwable $e): string
+{
+    try {
+        $kode = strtoupper(substr(bin2hex(random_bytes(3)), 0, 6));
+    } catch (Throwable $acak) {
+        $kode = strtoupper(substr(md5((string)microtime(true)), 0, 6));
+    }
+
+    try {
+        require_once __DIR__ . '/db.php';
+
+        // Endpoint cukup bagian setelah /api/, supaya tidak memuat jalur
+        // berkas di server.
+        $uri  = (string)($_SERVER['REQUEST_URI'] ?? '');
+        $jalur = parse_url($uri, PHP_URL_PATH) ?: $uri;
+        $pos  = strpos($jalur, '/api/');
+        $endpoint = $pos === false ? $jalur : substr($jalur, $pos + 5);
+
+        $sqlstate = '';
+        if ($e instanceof PDOException && isset($e->errorInfo[0])) {
+            $sqlstate = (string)$e->errorInfo[0];
+        }
+
+        dbExec(
+            'INSERT INTO galat_sistem (kode, endpoint, pesan, kode_sql, berkas, baris, user_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [
+                $kode,
+                mb_substr($endpoint, 0, 100),
+                mb_substr($e->getMessage(), 0, 500),
+                mb_substr($sqlstate, 0, 10),
+                mb_substr(basename($e->getFile()), 0, 200),
+                $e->getLine(),
+                function_exists('userId') ? userId() : null,
+            ]
+        );
+
+        // Yang lama dibuang sendiri, sekali-sekali saja supaya tidak menambah
+        // kerja pada tiap galat.
+        if (random_int(1, 20) === 1) {
+            dbExec('DELETE FROM galat_sistem WHERE created_at < (NOW() - INTERVAL 30 DAY)');
+        }
+    } catch (Throwable $abai) {
+        // Diabaikan dengan sengaja; lihat penjelasan di atas.
+    }
+
+    return $kode;
 }

@@ -276,6 +276,7 @@ function petaEndpoint(): array
         'keterangan/delete.php'   => ['@keterangan', true, true],
 
         'aktivitas/list.php'      => ['aktivitas',  false],
+        'sistem/galat.php'        => ['aktivitas',  false],
 
         'pengguna/list.php'       => ['pengguna',   false],
         'pengguna/save.php'       => ['pengguna',   true],

@@ -3383,11 +3383,53 @@ function renderAktivitas(){
     + '<a class="btn ghost" id="lgUnduh" href="api/export/pdf.php?jenis=aktivitas">' + svgIcon("download") + 'Unduh PDF</a>'
     + '</div>'
     + '<div class="stat-row" id="lgRingkas"></div>'
+    + '<div id="lgGalat"></div>'
     + '<div id="lgHasil"></div>';
   $("lgCari").value   = logFilter.q;
   $("lgDari").value   = logFilter.dari;
   $("lgSampai").value = logFilter.sampai;
   refreshLog();
+  refreshGalatSistem();
+}
+
+/**
+ * Galat server terakhir.
+ *
+ * Saat sebuah permintaan gagal, layar hanya menyebutkan kode galatnya —
+ * pesan aslinya bisa memuat struktur basis data, jadi tidak ditampilkan di
+ * sana. Di sinilah kode itu dicocokkan dengan pesannya, tanpa perlu membuka
+ * error log hosting yang memang tidak bisa diakses dari aplikasi.
+ */
+async function refreshGalatSistem(){
+  const wadah = $("lgGalat");
+  if(!wadah) return;
+
+  let d;
+  try{ d = await API.get("sistem/galat.php", { limit: 10 }); }
+  catch(e){ wadah.innerHTML = ""; return; }   // bukan galat yang perlu diteriakkan
+
+  if(d.catatan){ wadah.innerHTML = '<div class="info-box">' + esc(d.catatan) + '</div>'; return; }
+  if(!d.rows.length){ wadah.innerHTML = ""; return; }
+
+  const baris = d.rows.map(g =>
+    '<tr>'
+    + '<td class="mono" style="white-space:nowrap">' + esc(g.kode) + '</td>'
+    + '<td style="white-space:nowrap">' + esc(pecahWaktu(g.created_at).tgl)
+      + ' <span style="color:var(--slateLo)">' + esc(pecahWaktu(g.created_at).jam) + '</span></td>'
+    + '<td class="mono" style="font-size:11px">' + esc(g.endpoint || "-") + '</td>'
+    + '<td style="font-size:11.5px">' + esc(g.pesan)
+      + '<div class="item-sub" style="font-family:Inter">' + esc(g.berkas) + ':' + g.baris
+      + (g.kode_sql ? ' · SQLSTATE ' + esc(g.kode_sql) : '')
+      + (g.oleh ? ' · ' + esc(g.oleh) : '') + '</div></td>'
+    + '</tr>').join("");
+
+  wadah.innerHTML =
+    '<div class="warn-box">' + fmtNum(d.total) + ' galat server tercatat. '
+    + 'Kode di bawah sama dengan yang disebut layar saat gagal, jadi laporan '
+    + 'dari gudang bisa langsung dicocokkan.</div>'
+    + '<div class="table-card"><table style="min-width:760px"><thead><tr>'
+    + ['Kode','Waktu','Endpoint','Pesan'].map(h=>'<th>'+h+'</th>').join("")
+    + '</tr></thead><tbody>' + baris + '</tbody></table></div>';
 }
 
 const onLogCari = debounce(function(){
