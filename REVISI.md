@@ -9,6 +9,79 @@ berubah**, dan **bagaimana memastikannya jalan**.
 
 ---
 
+## 8 Oktober 2026 — penanda Accurate pada retur, dan pertukaran pada input manual
+
+### 1. Tanda "sudah diinput ke Accurate" pada retur
+
+**Masalahnya.** Retur yang sudah dicatat di gudang masih harus dimasukkan satu
+per satu ke Accurate, dan tidak ada tempat untuk menandai mana yang sudah.
+Pengecekannya jadi mengandalkan ingatan — baris yang sama bisa terinput dua
+kali, atau terlewat sama sekali.
+
+**Yang berubah.** Ada kolom **Accurate** di tabel retur, berisi tombol:
+
+- **Belum** — klik bila retur itu sudah diinput ke Accurate
+- **Sudah** — klik lagi bila ternyata keliru
+
+Di bawah tandanya tertulis tanggal dan nama orang yang menandai, supaya nanti
+bisa ditelusuri kalau angkanya ternyata berbeda dengan yang ada di Accurate.
+
+Tambahannya:
+
+- Kartu **Belum ke Accurate** di deretan kartu atas.
+- Penyaring **Accurate: semua / belum / sudah** di toolbar.
+- Tombol **Tandai Accurate** untuk menandai sekaligus seluruh baris yang
+  sedang tampil di halaman itu.
+- Kolomnya ikut di PDF retur, beserta penyaringnya, jadi laporan yang diunduh
+  memuat persis yang sedang dilihat.
+
+**Tandanya tidak menyentuh stok sama sekali.** Yang menambah stok tetap
+keterangan returnya (`Lengkap`). Ini murni catatan pembukuan. Operator boleh
+menandainya — memang dia yang menginput ke Accurate — dan setiap penandaan
+tercatat di Log aktivitas.
+
+### 2. Pertukaran barang pada input barang keluar manual
+
+**Masalahnya.** Impor picking list sudah mencatat pertukaran sejak dulu: kalau
+petugas mengganti produk sebuah baris sebelum menyimpan, penggantiannya masuk
+ke menu Pertukaran barang. Pencatatan manual belum punya itu, padahal
+kejadiannya sama — yang dipesan satu barang, yang dikirim barang lain karena
+yang asli kosong.
+
+**Yang berubah.** Di form Barang keluar ada centang **"Barang ini menggantikan
+barang lain"**. Begitu dicentang, muncul isian barang yang *diminta*, lengkap
+dengan pencarian nama/barcode seperti isian utamanya.
+
+Yang dicatat:
+
+| | |
+|---|---|
+| Barang yang diminta | yang diisi di bagian pertukaran |
+| Barang yang dikirim | isian utama form |
+| Stok berkurang untuk | hanya barang yang benar-benar dikirim |
+| Muncul di | menu Pertukaran barang, bertanda "Dicatat manual" |
+
+Transaksinya dan catatan pertukarannya ditulis bersama dalam satu transaksi
+basis data: tidak mungkin stok berkurang tanpa keterangan penggantinya, atau
+sebaliknya. Kalau stoknya ternyata kurang dan pencatatannya ditolak, tidak ada
+baris pertukaran yang tertinggal.
+
+Pengisian yang separuh ditolak dengan pesan jelas: barang pengganti yang sama
+dengan yang diminta, atau nama terisi tapi barcodenya kosong.
+
+### 3. Satu bug saya sendiri, dari revisi kemarin
+
+Pada revisi 6 Oktober, perubahan di halaman Retur gagal tersimpan separuh:
+variabel `penyaringAktif` dipakai tapi tidak pernah dideklarasikan. Akibatnya
+halaman Retur menampilkan kartu lalu berhenti — tabelnya tidak muncul.
+
+Sudah diperbaiki. Supaya tidak terulang, ditambahkan `node tools/uji_layar.js`:
+setiap layar digambar sekali di luar browser dan dipastikan tidak melempar
+galat. Penjaganya diuji dengan menghapus kembali deklarasi itu — `node --check`
+tetap meloloskannya, uji layar langsung menangkapnya.
+
+---
+
 ## 7 Oktober 2026 — Dashboard dipercepat, dan galat server bisa dibaca
 
 ### 1. "Terjadi kesalahan di server" saat menyaring atau mencari
@@ -245,6 +318,7 @@ dijalankan sekali.
 | `sql/015_indeks_agregat_keluar.sql` | indeks penutup barang keluar |
 | `sql/016_indeks_agregat_masuk.sql` | indeks penutup barang masuk |
 | `sql/017_galat_sistem.sql` | catatan galat server |
+| `sql/018_retur_accurate.sql` | penanda Accurate pada retur |
 
 ---
 

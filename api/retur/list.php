@@ -2,7 +2,7 @@
 /**
  * GET api/retur/list.php — daftar retur barang.
  *
- * Parameter: q, dari, sampai, status, page
+ * Parameter: q, dari, sampai, status, accurate (sudah|belum), page
  */
 
 declare(strict_types=1);
@@ -44,6 +44,16 @@ if ($status !== '' && in_array($status, $pilihanStatus, true)) {
     $where[] = 'r.status = ?';
     $params[] = $status;
 }
+
+// Penanda pembukuan Accurate. Bukan nilai bebas, jadi cukup dua pilihan.
+$accurate = ambilStr($_GET, 'accurate', 10);
+if ($accurate === 'sudah') {
+    $where[] = 'r.accurate = 1';
+} elseif ($accurate === 'belum') {
+    $where[] = 'r.accurate = 0';
+} else {
+    $accurate = '';
+}
 $sqlWhere = 'WHERE ' . implode(' AND ', $where);
 
 $total  = (int)dbValue("SELECT COUNT(*) FROM retur r $sqlWhere", $params);
@@ -53,9 +63,12 @@ $offset = ($meta['page'] - 1) * PAGE_SIZE;
 $rows = dbAll(
     "SELECT r.id, r.tanggal, r.no_pesanan, r.master_id, r.barcode, r.sku, r.nama,
             r.jumlah, r.status, r.keterangan, r.masuk_id, r.created_at,
-            u.nama_lengkap AS oleh
+            r.accurate, r.accurate_at,
+            u.nama_lengkap  AS oleh,
+            ua.nama_lengkap AS accurate_oleh
        FROM retur r
-       LEFT JOIN users u ON u.id = r.user_id
+       LEFT JOIN users u  ON u.id  = r.user_id
+       LEFT JOIN users ua ON ua.id = r.accurate_user
      $sqlWhere
      ORDER BY r.tanggal DESC, r.id DESC
      LIMIT " . PAGE_SIZE . " OFFSET $offset",
@@ -67,6 +80,7 @@ foreach ($rows as &$r) {
     $r['jumlah']    = (int)$r['jumlah'];
     $r['master_id'] = $r['master_id'] === null ? null : (int)$r['master_id'];
     $r['masuk_id']  = $r['masuk_id']  === null ? null : (int)$r['masuk_id'];
+    $r['accurate']  = (int)$r['accurate'];
 }
 unset($r);
 
@@ -77,12 +91,21 @@ $masukStok = (int)dbValue(
     array_merge($params, [STATUS_RETUR_MASUK])
 );
 
+// Berapa baris yang belum diinput ke Accurate — dihitung atas hasil penyaring
+// yang sama, supaya angkanya sejalan dengan yang terlihat di tabel.
+$belumAccurate = (int)dbValue(
+    "SELECT COUNT(*) FROM retur r $sqlWhere AND r.accurate = 0",
+    $params
+);
+
 jsonOk([
     'rows'           => $rows,
     'total_unit'     => $totalUnit,
     'unit_ke_stok'   => $masukStok,
     'unit_tertahan'  => $totalUnit - $masukStok,
     'status_options' => $pilihanStatus,
+    'accurate'       => $accurate,
+    'belum_accurate' => $belumAccurate,
     // Status mana yang berarti "sudah masuk stok" ditentukan server, supaya
     // layar tidak perlu menebaknya dari teks yang bisa berubah.
     'status_masuk'   => STATUS_RETUR_MASUK,

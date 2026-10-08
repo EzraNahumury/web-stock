@@ -153,23 +153,99 @@ function buatTransaksi(string $jenis): void
         }
     }
 
-    if ($cfg['keluar']) {
-        $noPesanan = ambilStr($in, 'no_pesanan', 100);
-        dbExec(
-            "INSERT INTO $tabel (tanggal, master_id, barcode, nama, jumlah, keterangan, no_pesanan, user_id)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            [$tanggal, $masterId, $barcode, $nama, $jumlah, $ket, $noPesanan, userId()]
-        );
-    } else {
-        dbExec(
-            "INSERT INTO $tabel (tanggal, master_id, barcode, nama, jumlah, keterangan, user_id)
-             VALUES (?, ?, ?, ?, ?, ?, ?)",
-            [$tanggal, $masterId, $barcode, $nama, $jumlah, $ket, userId()]
-        );
+    /* --- Pertukaran barang pada pencatatan manual -------------------------
+     *
+     * Impor picking list sudah mencatat pertukaran sejak dulu: kalau petugas
+     * mengganti produk sebuah baris sebelum menyimpan, baris penggantinya
+     * tercatat di menu Pertukaran barang. Pencatatan manual belum punya itu,
+     * padahal kejadiannya sama — yang dipesan satu barang, yang dikirim barang
+     * lain karena yang asli kosong.
+     *
+     * Yang dicatat di sini: barang yang DIMINTA (lama) dan barang yang
+     * BENAR-BENAR KELUAR (baru, yaitu isian utama form). Stok hanya berkurang
+     * untuk yang benar-benar keluar; baris pertukaran murni catatan, sama
+     * seperti pada impor.
+     */
+    $tukar       = is_array($in['tukar'] ?? null) ? $in['tukar'] : [];
+    $tukarBarcode = $cfg['keluar'] ? ambilStr($tukar, 'barcode', 50) : '';
+    $tukarNama    = $cfg['keluar'] ? ambilStr($tukar, 'nama', 255) : '';
+    $tukarSku     = $cfg['keluar'] ? ambilStr($tukar, 'sku', 50) : '';
+
+    if ($tukarBarcode !== '' && $tukarBarcode === $barcode) {
+        jsonError('Barang pengganti sama dengan barang yang diminta. '
+            . 'Kosongkan bagian pertukaran bila memang tidak ada penggantian.');
+    }
+    if ($tukarBarcode === '' && ($tukarNama !== '' || $tukarSku !== '')) {
+        jsonError('Isi barcode barang yang diminta, atau kosongkan seluruh bagian pertukaran.');
     }
 
-    $id = dbLastId();
-    catatAktivitas('create', $jenis, $id, ['barcode' => $barcode, 'nama' => $nama, 'jumlah' => $jumlah]);
+    $noPesanan = $cfg['keluar'] ? ambilStr($in, 'no_pesanan', 100) : '';
+    $adaTukar  = $cfg['keluar'] && $tukarBarcode !== '';
+
+    // Transaksi dan catatan pertukarannya ditulis bersama: yang satu tanpa
+    // yang lain menyesatkan — stok berkurang tanpa keterangan penggantinya,
+    // atau sebaliknya.
+    $skuBaru = (string)($master['sku'] ?? '');
+    $id = dbTransaksi(static function (PDO $pdo) use (
+        $cfg, $tabel, $tanggal, $masterId, $barcode, $nama, $jumlah, $ket,
+        $noPesanan, $adaTukar, $tukarBarcode, $tukarNama, $tukarSku, $skuBaru
+    ) {
+        if ($cfg['keluar']) {
+            $st = $pdo->prepare(
+                "INSERT INTO $tabel (tanggal, master_id, barcode, nama, jumlah, keterangan, no_pesanan, user_id)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+            );
+            $st->execute([$tanggal, $masterId, $barcode, $nama, $jumlah, $ket, $noPesanan, userId()]);
+        } else {
+            $st = $pdo->prepare(
+                "INSERT INTO $tabel (tanggal, master_id, barcode, nama, jumlah, keterangan, user_id)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)"
+            );
+            $st->execute([$tanggal, $masterId, $barcode, $nama, $jumlah, $ket, userId()]);
+        }
+        $idBaru = (int)$pdo->lastInsertId();
+
+        if ($adaTukar) {
+            // Nama barang yang diminta diambil dari master bila dikenal,
+            // supaya catatannya tidak bergantung pada ketikan.
+            $lama = cariMasterByBarcode($tukarBarcode);
+            $pdo->prepare(
+                'INSERT INTO pertukaran_barang
+                    (tanggal, barcode_lama, nama_lama, sku_lama,
+                     master_id_baru, barcode_baru, nama_baru, sku_baru,
+                     jumlah, no_pesanan, alasan, keluar_id, user_id)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+            )->execute([
+                $tanggal,
+                $tukarBarcode,
+                $tukarNama !== '' ? $tukarNama : ($lama['nama'] ?? ''),
+                $tukarSku !== ''  ? $tukarSku  : ($lama['sku']  ?? ''),
+                $masterId,
+                $barcode,
+                $nama,
+                $skuBaru,
+                $jumlah,
+                $noPesanan,
+                'manual',
+                $idBaru,
+                userId(),
+            ]);
+        }
+
+        return $idBaru;
+    });
+
+    catatAktivitas('create', $jenis, $id, array_filter([
+        'barcode' => $barcode,
+        'nama'    => $nama,
+        'jumlah'  => $jumlah,
+        'tukar_dari' => $adaTukar ? $tukarBarcode : null,
+    ], static function ($v) { return $v !== null; }));
+
+    if ($adaTukar) {
+        $peringatan[] = 'Pertukaran dicatat: diminta "' . $tukarBarcode
+            . '", dikirim "' . $barcode . '". Lihat menu Pertukaran barang.';
+    }
 
     jsonOk([
         'id'         => $id,

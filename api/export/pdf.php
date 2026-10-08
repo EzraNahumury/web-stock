@@ -493,6 +493,16 @@ switch ($jenis) {
             $where[] = 'r.status = ?';
             $params[] = $status;
         }
+        // Penanda pembukuan Accurate — penyaringnya sama dengan di layar,
+        // supaya laporan yang diunduh memuat persis yang sedang dilihat.
+        $accurate = ambilStr($_GET, 'accurate', 10);
+        if ($accurate === 'sudah') {
+            $where[] = 'r.accurate = 1';
+        } elseif ($accurate === 'belum') {
+            $where[] = 'r.accurate = 0';
+        } else {
+            $accurate = '';
+        }
 
         $data = dbAll(
             'SELECT r.*, u.nama_lengkap AS oleh
@@ -510,6 +520,7 @@ switch ($jenis) {
                 ? (($dari !== '' ? $dari : 'awal') . ' s/d ' . ($sampai !== '' ? $sampai : 'kini'))
                 : 'Semua',
             'Status'  => $status !== '' ? $status : 'Semua',
+            'Accurate' => $accurate !== '' ? $accurate : 'Semua',
             'Baris'   => count($data),
         ], [
             ['label' => 'Tanggal',          'lebar' => 9],
@@ -518,8 +529,9 @@ switch ($jenis) {
             ['label' => 'Nama produk',      'lebar' => 28],
             ['label' => 'Qty',              'lebar' => 5, 'rata' => 'kanan'],
             ['label' => 'Keterangan retur', 'lebar' => 14],
-            ['label' => 'Ket.',             'lebar' => 12],
-            ['label' => 'Dicatat oleh',     'lebar' => 11],
+            ['label' => 'Ket.',             'lebar' => 10],
+            ['label' => 'Accurate',         'lebar' => 8],
+            ['label' => 'Dicatat oleh',     'lebar' => 10],
         ]);
 
         $totalQty = 0;
@@ -538,13 +550,23 @@ switch ($jenis) {
                 number_format((int)$r['jumlah'], 0, ',', '.'),
                 [$r['status'], $masukStok ? [14, 128, 96] : [178, 58, 46]],
                 $r['keterangan'],
+                (int)$r['accurate'] === 1
+                    ? ['Sudah', [14, 128, 96]]
+                    : ['Belum', [139, 155, 163]],
                 (string)($r['oleh'] ?? '-'),
             ]);
+        }
+        $belumAccurate = 0;
+        foreach ($data as $r) {
+            if ((int)$r['accurate'] !== 1) {
+                $belumAccurate++;
+            }
         }
         $pdf->ringkasan(count($data) . ' retur  ·  total '
             . number_format($totalQty, 0, ',', '.') . ' pcs  ·  sudah masuk stok '
             . number_format($qtyStok, 0, ',', '.') . ' pcs  ·  belum masuk stok '
-            . number_format($totalQty - $qtyStok, 0, ',', '.') . ' pcs');
+            . number_format($totalQty - $qtyStok, 0, ',', '.') . ' pcs  ·  belum ke Accurate '
+            . number_format($belumAccurate, 0, ',', '.') . ' baris');
         $pdf->kirim('laporan-retur-' . date('Ymd-His') . '.pdf');
         break;
 

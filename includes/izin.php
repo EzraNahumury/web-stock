@@ -246,6 +246,7 @@ function petaEndpoint(): array
 
         'retur/list.php'          => ['retur',      false],
         'retur/save.php'          => ['retur',      true],
+        'retur/accurate.php'      => ['retur',      true],
         'retur/delete.php'        => ['retur',      true, true],
 
         'opname/list.php'         => ['opname',     false],

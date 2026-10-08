@@ -941,6 +941,32 @@ function renderTransaksiTab(kind){
   }
   html += '<div><label class="field-label">Keterangan</label><select id="'+kind+'Ket">' + ketOptions.map(k=>'<option>'+esc(k)+'</option>').join("") + '</select></div>';
   html += '</div>';
+
+  /* Pertukaran barang pada pencatatan manual.
+   *
+   * Impor picking list sudah mencatat pertukaran sejak dulu; pencatatan
+   * manual belum, padahal kejadiannya sama — yang dipesan satu barang, yang
+   * dikirim barang lain karena yang asli kosong. Bagiannya disembunyikan
+   * sampai dicentang, supaya form sehari-hari tidak jadi panjang. */
+  if(kind === "keluar"){
+    html += '<label class="pilih-baris" style="margin:2px 0 10px; display:flex; gap:8px; align-items:flex-start;">'
+      + '<input type="checkbox" id="keluarAdaTukar" onchange="toggleTukarKeluar()" style="margin-top:3px">'
+      + '<span><b>Barang ini menggantikan barang lain</b>'
+      + '<div style="font-size:11.5px; color:var(--slate)">Yang dipesan kosong, jadi dikirim barang di atas. '
+      + 'Penggantiannya ikut tercatat di menu Pertukaran barang.</div></span></label>'
+      + '<div id="keluarTukarKotak" style="display:none">'
+      + '<div class="form-grid">'
+      + '<div class="span2 picker-wrap"><label class="field-label">Barang yang diminta</label>'
+        + '<input type="text" id="keluarTukarPicker" placeholder="Ketik nama atau barcode barang yang dipesan…" autocomplete="off"'
+        + ' oninput="onPickerTukar()" onfocus="onPickerTukar()">'
+        + '<div id="keluarTukarPickerList" class="picker-list" style="display:none"></div></div>'
+      + '<div><label class="field-label">Barcode yang diminta</label>'
+        + '<input type="text" id="keluarTukarBarcode" class="mono" placeholder="Contoh: 12132522"></div>'
+      + '<div><label class="field-label">Nama yang diminta</label>'
+        + '<input type="text" id="keluarTukarNama" placeholder="Terisi sendiri bila barangnya dikenal"></div>'
+      + '</div></div>';
+  }
+
   html += '<button type="submit" class="btn ' + accent + '" id="'+kind+'Submit">' + svgIcon("plus") + label + '</button>';
   html += '</form>';
   }
@@ -1025,6 +1051,58 @@ function pickMasterItem(kind, barcode, nama){
   $(kind+"PickerList").style.display = "none";
 }
 
+/* --- Pertukaran barang pada pencatatan manual ---------------------------- */
+
+/** Buka atau tutup bagian pertukaran, dan bersihkan isinya saat ditutup. */
+function toggleTukarKeluar(){
+  const kotak = $("keluarTukarKotak");
+  const cek   = $("keluarAdaTukar");
+  if(!kotak || !cek) return;
+
+  kotak.style.display = cek.checked ? "block" : "none";
+  if(!cek.checked){
+    // Dikosongkan supaya centang yang dibatalkan tidak meninggalkan isian
+    // yang ikut terkirim pada pencatatan berikutnya.
+    ["keluarTukarPicker", "keluarTukarBarcode", "keluarTukarNama"].forEach(id => {
+      if($(id)) $(id).value = "";
+    });
+    if($("keluarTukarPickerList")) $("keluarTukarPickerList").style.display = "none";
+  }
+}
+
+/** Pencarian barang untuk kolom "barang yang diminta". */
+const onPickerTukar = debounce(async function(){
+  const el = $("keluarTukarPicker");
+  const listEl = $("keluarTukarPickerList");
+  if(!el || !listEl) return;
+
+  const q = el.value.trim();
+  if(!q){ listEl.style.display = "none"; listEl.innerHTML = ""; return; }
+
+  let data;
+  try{ data = await API.masterPick(q); }
+  catch(e){ return; }
+  if(el.value.trim() !== q) return;          // ketikannya sudah berubah
+
+  if(!data.rows.length){
+    listEl.innerHTML = '<div class="picker-item">Tidak ditemukan — isi barcodenya manual.</div>';
+    listEl.style.display = "block";
+    return;
+  }
+  listEl.innerHTML = data.rows.map(m =>
+    '<div class="picker-item" onclick="pickTukarItem(\''+esc(m.barcode).replace(/'/g,"\\'")+'\',\''+esc(m.nama).replace(/'/g,"\\'")+'\')">'
+    + '<div>'+esc(m.nama)+'</div><div class="sub">'+esc(m.sku||"-")+' · '+esc(m.barcode)+'</div></div>'
+  ).join("");
+  listEl.style.display = "block";
+}, 250);
+
+function pickTukarItem(barcode, nama){
+  $("keluarTukarBarcode").value = barcode;
+  $("keluarTukarNama").value    = nama;
+  $("keluarTukarPicker").value  = nama;
+  $("keluarTukarPickerList").style.display = "none";
+}
+
 /* --- Simpan transaksi --- */
 async function submitTransaksi(e, kind){
   e.preventDefault();
@@ -1039,6 +1117,20 @@ async function submitTransaksi(e, kind){
   if(kind === "keluar"){
     const np = $("keluarNoPesanan");
     body.no_pesanan = np ? np.value.trim() : "";
+
+    const adaTukar = $("keluarAdaTukar");
+    if(adaTukar && adaTukar.checked){
+      const bc = ($("keluarTukarBarcode").value || "").trim();
+      if(!bc){
+        toast("Isi barcode barang yang diminta, atau hapus centang pertukaran.", "err");
+        return;
+      }
+      body.tukar = {
+        barcode: bc,
+        nama:    ($("keluarTukarNama").value || "").trim(),
+        sku:     ""
+      };
+    }
   }
   if(!body.barcode || !body.nama || !body.jumlah){
     toast("Lengkapi barcode, nama, dan jumlah dulu.", "err");
@@ -1057,6 +1149,10 @@ async function submitTransaksi(e, kind){
     $(kind+"Jumlah").value="";  $(kind+"Picker").value="";
     $(kind+"Ket").selectedIndex = 0;              // audit F5
     if(kind === "keluar" && $("keluarNoPesanan")) $("keluarNoPesanan").value = "";
+    if(kind === "keluar" && $("keluarAdaTukar")){
+      $("keluarAdaTukar").checked = false;
+      toggleTukarKeluar();
+    }
 
     trxFilters[kind].page = 1;
     renderTransaksiTable(kind);
@@ -2379,6 +2475,70 @@ let editReturId = null;
 let returStatusOptions = [];
 let returStatusMasuk = "Lengkap";   // ditimpa oleh jawaban server
 
+/**
+ * Sel penanda "sudah diinput ke Accurate".
+ *
+ * Accurate adalah pembukuan di luar aplikasi ini, dan returnya dimasukkan ke
+ * sana satu per satu. Tanpa penanda, yang sudah dan yang belum hanya dibedakan
+ * dari ingatan — jadi barisnya bisa terinput dua kali atau terlewat.
+ *
+ * Tandanya tidak menyentuh stok sama sekali. Yang menambah stok tetap
+ * keterangan returnya.
+ */
+function selAccurate(r){
+  const sudah = r.accurate === 1;
+  const jejak = sudah && r.accurate_at
+    ? '<div class="item-sub" style="font-family:Inter">' + esc(pecahWaktu(r.accurate_at).tgl)
+      + (r.accurate_oleh ? ' · ' + esc(r.accurate_oleh) : '') + '</div>'
+    : '';
+
+  if(!bolehTulis()){
+    return (sudah
+      ? '<span class="badge aman">' + svgIcon("check") + 'Sudah</span>'
+      : '<span class="badge belum_diatur">Belum</span>') + jejak;
+  }
+
+  return '<button type="button" class="badge '
+    + (sudah ? 'aman' : 'belum_diatur') + '" style="cursor:pointer; border:0"'
+    + ' onclick="tandaiAccurate(' + r.id + ',' + (sudah ? 'false' : 'true') + ')"'
+    + ' title="' + (sudah ? 'Klik untuk menandai belum masuk Accurate'
+                          : 'Klik bila retur ini sudah diinput ke Accurate') + '">'
+    + (sudah ? svgIcon("check") + 'Sudah' : 'Belum') + '</button>' + jejak;
+}
+
+/** Tandai satu retur sudah / belum masuk Accurate. */
+async function tandaiAccurate(id, sudah){
+  setSaveStatus("saving");
+  try{
+    const res = await API.post("retur/accurate.php", { id: id, sudah: sudah });
+    setSaveStatus("ok");
+    toast(res.pesan || "Tanda diperbarui.");
+    refreshRetur();
+  }catch(e){ tampilGalat(e); }
+}
+
+/** Tandai seluruh baris yang sedang tampil sudah masuk Accurate. */
+async function tandaiAccurateSemua(){
+  const belum = returRows.filter(r => r.accurate !== 1);
+  if(!belum.length){ toast("Semua baris di halaman ini sudah ditandai.", "err"); return; }
+
+  const ok = await konfirmasi(
+    "Tandai " + belum.length + " retur sudah masuk Accurate?",
+    "Yang ditandai hanya baris yang sedang tampil di halaman ini. "
+      + "Tandanya tidak mengubah stok sama sekali.",
+    "Ya, tandai"
+  );
+  if(!ok) return;
+
+  setSaveStatus("saving");
+  try{
+    const res = await API.post("retur/accurate.php", { ids: belum.map(r => r.id), sudah: true });
+    setSaveStatus("ok");
+    toast(res.pesan || "Tanda diperbarui.");
+    refreshRetur();
+  }catch(e){ tampilGalat(e); }
+}
+
 function renderRetur(){
   const bisaTulis = bolehTulis();
 
@@ -2428,6 +2588,11 @@ function renderRetur(){
     + '<div class="daterange">Dari <input type="date" id="rtDari" onchange="onReturFilter()">'
       + ' s/d <input type="date" id="rtSampai" onchange="onReturFilter()"></div>'
     + '<button type="button" class="btn ghost" onclick="resetRetur()">' + svgIcon("x") + 'Reset</button>'
+    + (bolehTulis()
+        ? '<button type="button" class="btn ghost" onclick="tandaiAccurateSemua()" '
+          + 'title="Tandai seluruh baris di halaman ini sudah diinput ke Accurate">'
+          + svgIcon("check") + 'Tandai Accurate</button>'
+        : '')
     + '<a class="btn ghost" id="rtUnduh" href="api/export/pdf.php?jenis=retur">' + svgIcon("download") + 'Unduh PDF</a>'
     + '</div>'
     + '<div class="stat-row" id="rtRingkas"></div>'
@@ -2533,15 +2698,31 @@ async function refreshRetur(){
       + "&sampai=" + encodeURIComponent(returFilter.sampai);
   }
 
+  /* Keempat angka ini dihitung atas hasil penyaring, bukan seluruh retur.
+   * Tanpa diberi tahu, "Sudah masuk stok 0" terbaca seolah tidak ada satu pun
+   * retur yang pernah menambah stok, padahal yang sedang tampil memang hanya
+   * yang belum selesai. */
+  const penyaringAktif = [];
+  if(returFilter.status)   penyaringAktif.push('keterangan "' + returFilter.status + '"');
+  if(returFilter.accurate) penyaringAktif.push(returFilter.accurate === "sudah"
+    ? "yang sudah masuk Accurate" : "yang belum masuk Accurate");
+  if(returFilter.q)        penyaringAktif.push('pencarian "' + returFilter.q + '"');
+  if(returFilter.dari || returFilter.sampai){
+    penyaringAktif.push("tanggal " + (returFilter.dari || "awal") + " s/d " + (returFilter.sampai || "akhir"));
+  }
+
   const ringkas = $("rtRingkas");
   if(ringkas){
     ringkas.innerHTML =
-        statCard({ label:"Retur", nilai:d.total, ikon:"tag", nada:"biru", kaki:"baris tercatat" })
+        statCard({ label:"Retur", nilai:d.total, ikon:"tag", nada:"biru",
+                   kaki: penyaringAktif.length ? "baris pada penyaring ini" : "baris tercatat" })
       + statCard({ label:"Unit diretur", nilai:d.total_unit, ikon:"unit", nada:"", kaki:"pcs dikembalikan" })
       + statCard({ label:"Sudah masuk stok", nilai:d.unit_ke_stok, ikon:"sku", nada:"safe", tone:"safe",
                    kaki:"pcs dari retur berketerangan " + returStatusMasuk })
       + statCard({ label:"Belum masuk stok", nilai:d.unit_tertahan, ikon:"alert", nada:"amber",
-                   kaki:"pcs masih menunggu diselesaikan" });
+                   kaki:"pcs masih menunggu diselesaikan" })
+      + statCard({ label:"Belum ke Accurate", nilai:d.belum_accurate, ikon:"kosong", nada:"",
+                   kaki:"baris belum diinput ke pembukuan" });
     ringkas.querySelectorAll(".stat-value[data-nilai]").forEach(n =>
       Grafik.angkaNaik(n, Number(n.getAttribute("data-nilai"))));
   }
@@ -2571,6 +2752,7 @@ async function refreshRetur(){
       + '<td><span class="badge ' + (masukStok ? 'aman' : 'kritis') + '">' + esc(r.status) + '</span>'
         + (masukStok ? '<div class="item-sub" style="font-family:Inter">stok bertambah</div>' : '') + '</td>'
       + '<td style="font-size:11.5px; color:var(--slate)">' + esc(r.keterangan || "-") + '</td>'
+      + '<td style="white-space:nowrap">' + selAccurate(r) + '</td>'
       + (adaKolomAksi()
           ? '<td class="num" style="white-space:nowrap">'
             + (bolehUbahCatatan()
@@ -2585,7 +2767,7 @@ async function refreshRetur(){
   }).join("");
 
   if(!d.rows.length){
-    baris = '<tr class="empty-row"><td colspan="' + (adaKolomAksi()?8:7) + '">Belum ada retur pada penyaring ini.</td></tr>';
+    baris = '<tr class="empty-row"><td colspan="' + (adaKolomAksi()?9:8) + '">Belum ada retur pada penyaring ini.</td></tr>';
   }
 
   returRows = d.rows;
@@ -2595,7 +2777,7 @@ async function refreshRetur(){
     + 'barang masuk "Retur Masuk". Yang belum selesai dicatat saja dan belum menyentuh stok, '
     + 'sampai keterangannya diubah.</div>'
     + '<div class="table-card"><table style="min-width:980px"><thead><tr>'
-    + ["Tanggal","No. pesanan","SKU","Nama produk","Qty","Keterangan retur","Ket."]
+    + ["Tanggal","No. pesanan","SKU","Nama produk","Qty","Keterangan retur","Ket.","Accurate"]
         .concat(adaKolomAksi()?[""]:[])
         .map((h,i)=>'<th'+(i===4?' class="num"':'')+'>'+esc(h)+'</th>').join("")
     + '</tr></thead><tbody>' + baris + '</tbody></table>'

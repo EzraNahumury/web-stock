@@ -1893,6 +1893,23 @@ Keduanya hanya membaca teks: tanpa Node, tanpa browser, tanpa paket
 tambahan, tanpa menyentuh database.
 
 ```
+node tools\uji_layar.js
+```
+
+Setiap layar digambar sekali di luar browser, dengan DOM dan jawaban server
+tiruan, lalu dipastikan tidak ada yang melempar galat. Ada karena satu
+penyuntingan pernah gagal tersimpan separuh: sebuah variabel dipakai di
+halaman Retur tapi tidak pernah dideklarasikan. `node --check` meloloskannya —
+secara tata bahasa memang sah — dan yang terjadi di gudang hanya kartu muncul
+tanpa tabel, dengan satu-satunya petunjuk berupa galat di konsol yang tak
+pernah dibuka.
+
+Endpoint yang dipanggil sebuah layar tapi belum punya jawaban tiruan
+menggagalkan uji ini. Itu disengaja: aplikasi menangkap galat pemuatannya
+sendiri, jadi tanpa aturan itu ujinya akan berbunyi "OK" padahal separuh kode
+render tidak pernah dijalankan.
+
+```
 node tools\uji_pdf_parser.js
 ```
 
