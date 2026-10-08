@@ -70,7 +70,11 @@ $dicek    = array_key_exists('dicek', $in) ? (!empty($in['dicek']) ? 1 : 0) : (i
 $catatan  = array_key_exists('catatan', $in) ? ambilStr($in, 'catatan', 255) : (string)$item['catatan'];
 $petugas  = array_key_exists('petugas', $in) ? ambilStr($in, 'petugas', 100) : (string)$item['petugas'];
 
-// Penyesuaian hanya mencatat keputusan; stok tidak ikut berubah dari sini.
+// Memilih "Stok Disesuaikan" BENAR-BENAR membetulkan stoknya, lewat satu baris
+// barang masuk/keluar berketerangan KET_PENYESUAIAN — lihat
+// sinkronPenyesuaianStok() di bawah. Komentar lama di sini menyebut sebaliknya
+// dan sempat ikut tersalin ke layar, membuat orang mengira harus membetulkan
+// stoknya sendiri secara manual.
 $penyesuaian = array_key_exists('penyesuaian', $in)
     ? pilihanValid(ambilStr($in, 'penyesuaian', 30), PENYESUAIAN_OPNAME)
     : (string)$item['penyesuaian'];

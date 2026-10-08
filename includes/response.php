@@ -123,6 +123,14 @@ function catatGalatSistem(Throwable $e): string
         $pos  = strpos($jalur, '/api/');
         $endpoint = $pos === false ? $jalur : substr($jalur, $pos + 5);
 
+        // Parameter penyaring ikut dicatat. Tanpa itu, laporan dari gudang
+        // hanya menyebut endpointnya, dan kombinasi yang membuatnya gagal —
+        // kategori mana, status apa — harus ditebak lagi.
+        $kueri = (string)(parse_url($uri, PHP_URL_QUERY) ?? '');
+        if ($kueri !== '') {
+            $endpoint .= '?' . $kueri;
+        }
+
         $sqlstate = '';
         if ($e instanceof PDOException && isset($e->errorInfo[0])) {
             $sqlstate = (string)$e->errorInfo[0];
@@ -133,7 +141,7 @@ function catatGalatSistem(Throwable $e): string
              VALUES (?, ?, ?, ?, ?, ?, ?)',
             [
                 $kode,
-                mb_substr($endpoint, 0, 100),
+                mb_substr($endpoint, 0, 255),
                 mb_substr($e->getMessage(), 0, 500),
                 mb_substr($sqlstate, 0, 10),
                 mb_substr(basename($e->getFile()), 0, 200),

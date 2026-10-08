@@ -24,7 +24,9 @@ $dari   = trim((string)($_GET['dari'] ?? ''));
 $sampai = trim((string)($_GET['sampai'] ?? ''));
 $page   = ambilHalaman();
 
-$where  = ['1=1'];
+// Pertukaran yang barang keluarnya sudah dihapus ikut disembunyikan — kalau
+// tidak, layar menyebutkan perpindahan stok yang sudah tidak ada lagi.
+$where  = ['t.deleted_at IS NULL'];
 $params = [];
 
 if ($q !== '') {

@@ -86,10 +86,22 @@ unset($r);
 
 // Ringkasan dihitung atas seluruh hasil penyaring, bukan halaman ini saja.
 $totalUnit = (int)dbValue("SELECT COALESCE(SUM(r.jumlah),0) FROM retur r $sqlWhere", $params);
-$masukStok = (int)dbValue(
-    "SELECT COALESCE(SUM(r.jumlah),0) FROM retur r $sqlWhere AND r.status = ?",
-    array_merge($params, [STATUS_RETUR_MASUK])
-);
+/* Unit yang benar-benar menambah stok.
+ *
+ * Keterangan mana yang menambah stok sekarang bisa lebih dari satu dan diatur
+ * dari menu Master, jadi yang dipakai daftarnya — bukan satu nama yang dipaku.
+ * Daftar kosong berarti tidak ada satu pun keterangan yang menambah stok;
+ * hasilnya nol, bukan galat SQL karena IN () kosong. */
+$ketMasuk = keteranganTambahStok();
+if ($ketMasuk) {
+    $tanda = implode(',', array_fill(0, count($ketMasuk), '?'));
+    $masukStok = (int)dbValue(
+        "SELECT COALESCE(SUM(r.jumlah),0) FROM retur r $sqlWhere AND r.status IN ($tanda)",
+        array_merge($params, $ketMasuk)
+    );
+} else {
+    $masukStok = 0;
+}
 
 // Berapa baris yang belum diinput ke Accurate — dihitung atas hasil penyaring
 // yang sama, supaya angkanya sejalan dengan yang terlihat di tabel.
@@ -106,7 +118,10 @@ jsonOk([
     'status_options' => $pilihanStatus,
     'accurate'       => $accurate,
     'belum_accurate' => $belumAccurate,
-    // Status mana yang berarti "sudah masuk stok" ditentukan server, supaya
-    // layar tidak perlu menebaknya dari teks yang bisa berubah.
-    'status_masuk'   => STATUS_RETUR_MASUK,
+    // Keterangan mana yang berarti "sudah masuk stok" ditentukan server, supaya
+    // layar tidak perlu menebaknya dari teks yang bisa berubah. Bentuknya
+    // daftar, karena sekarang bisa lebih dari satu.
+    'status_masuk_list' => $ketMasuk,
+    // Dipertahankan untuk layar versi lama yang masih membaca satu nilai.
+    'status_masuk'      => $ketMasuk[0] ?? '',
 ] + $meta);

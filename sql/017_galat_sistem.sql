@@ -28,7 +28,7 @@ SET NAMES utf8mb4;
 CREATE TABLE IF NOT EXISTS galat_sistem (
   id         BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   kode       CHAR(6)      NOT NULL,
-  endpoint   VARCHAR(100) NOT NULL DEFAULT '',
+  endpoint   VARCHAR(255) NOT NULL DEFAULT '',
   pesan      VARCHAR(500) NOT NULL DEFAULT '',
   -- Bukan bernama "sqlstate": itu kata tercadang di MySQL dan MariaDB, dan
   -- memakainya membuat CREATE TABLE ini gagal dengan galat sintaks.

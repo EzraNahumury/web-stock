@@ -88,9 +88,9 @@ if ($dipakai > 0 && $pindahKe !== '') {
      * pernah bertambah — selisih yang baru ketahuan saat stok opname.
      * Arah sebaliknya aman: nilai yang menambah stok itu terkunci, jadi tidak
      * pernah sampai ke sini sebagai yang dihapus. */
-    if ($jenis === 'retur' && $pindahKe === STATUS_RETUR_MASUK) {
+    if ($jenis === 'retur' && returMenambahStok($pindahKe)) {
         jsonError(
-            'Retur tidak bisa dipindahkan ke "' . STATUS_RETUR_MASUK . '" dari sini, '
+            'Retur tidak bisa dipindahkan ke "' . $pindahKe . '" dari sini, '
             . 'karena keterangan itu ikut menambah stok. Ubah returnya satu per satu '
             . 'di menu Retur, atau pindahkan ke keterangan lain.',
             409

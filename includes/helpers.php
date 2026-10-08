@@ -189,6 +189,50 @@ function arahKeterangan(): array
 }
 
 /**
+ * Keterangan retur mana yang mengembalikan barang ke stok.
+ *
+ * Dulu hanya satu nama yang menambah stok, dipaku di config sebagai
+ * STATUS_RETUR_MASUK. Begitu daftarnya bisa dikelola dari menu Master,
+ * keterangan yang baru ditambahkan diam-diam tidak pernah menambah stok —
+ * dan tidak ada yang memberi tahu. Sekarang sifat itu melekat pada
+ * keterangannya sendiri, lewat kolom `tambah_stok`.
+ *
+ * Bila tabelnya belum ada atau kolomnya belum sempat dibuat migrasi, yang
+ * dipakai kembali nilai lama: tepat satu nama, STATUS_RETUR_MASUK. Perilaku
+ * lama lebih baik daripada tidak ada perilaku sama sekali.
+ *
+ * @return string[] nama keterangan yang menambah stok
+ */
+function keteranganTambahStok(): array
+{
+    static $cache = null;
+    if ($cache !== null) {
+        return $cache;
+    }
+
+    try {
+        $rows = dbAll(
+            "SELECT nama FROM keterangan
+              WHERE jenis = 'retur' AND tambah_stok = 1
+                AND aktif = 1 AND deleted_at IS NULL
+              ORDER BY urutan, nama"
+        );
+        $cache = array_column($rows, 'nama');
+    } catch (Throwable $e) {
+        error_log('Kolom tambah_stok belum ada, memakai nilai lama: ' . $e->getMessage());
+        $cache = [STATUS_RETUR_MASUK];
+    }
+
+    return $cache;
+}
+
+/** Apakah retur berketerangan ini menambah stok? */
+function returMenambahStok(string $keterangan): bool
+{
+    return in_array($keterangan, keteranganTambahStok(), true);
+}
+
+/**
  * Daftar pilihan keterangan untuk satu arah transaksi.
  *
  * Dibaca dari tabel keterangan supaya bisa dikelola dari menu Master.

@@ -9,6 +9,90 @@ berubah**, dan **bagaimana memastikannya jalan**.
 
 ---
 
+## 9 Oktober 2026 — retur tidak masuk stok, pertukaran tertinggal, penyaring keterangan
+
+### 1. Retur Oktober tidak pernah masuk ke Barang masuk
+
+**Sebabnya.** Sejak awal hanya SATU keterangan yang menambah stok, namanya
+dipaku di kode: **"Lengkap"**. Begitu daftar keterangan retur bisa dikelola
+dari menu Master, gudang menambahkan "Pembatalan" dan "Pengiriman Gagal" — dan
+retur dengan keterangan itu diam-diam tidak pernah menambah stok, karena
+namanya bukan "Lengkap". Tidak ada pesan, tidak ada tanda. Itu sebabnya
+sepanjang Oktober tidak ada satu pun retur yang tercatat di Barang masuk.
+
+Ini kelalaian saya: waktu membuat daftar keterangan bisa diubah, saya tidak
+ikut memindahkan sifat "menambah stok" ke daftarnya.
+
+**Yang berubah.** Sifat itu sekarang melekat pada keterangannya sendiri, bukan
+pada namanya. Di **Master → Keterangan retur**, tiap keterangan punya kolom
+**Pengaruh ke stok**:
+
+- *Tidak menambah stok* — returnya dicatat saja
+- *Mengembalikan barang ke stok* — returnya langsung masuk ke Barang masuk
+  "Retur Masuk"
+
+Keterangan yang bertanda **Menambah stok** terlihat langsung di daftarnya.
+
+**Retur lama ikut disusulkan.** Begitu sebuah keterangan dicentang, seluruh
+retur yang sudah tercatat dengan keterangan itu langsung disusulkan ke Barang
+masuk — dalam satu transaksi. Jadi untuk membetulkan Oktober: buka Master →
+Keterangan retur, ubah "Pembatalan" dan "Pengiriman Gagal" menjadi
+*Mengembalikan barang ke stok*, dan returnya masuk semua sekaligus.
+
+Melepas centangnya menarik kembali, juga sekaligus. Barisnya tidak dibuang,
+hanya ditandai, jadi mencentang lagi tidak melahirkan baris ganda.
+
+Nilai awalnya sengaja sama dengan perilaku lama — hanya "Lengkap" yang
+dicentang. Mencentang yang lain adalah keputusan gudang, bukan keputusan
+migrasi.
+
+### 2. Pertukaran barang tertinggal setelah barang keluarnya dihapus
+
+Baris pertukaran lahir dari sebuah baris barang keluar. Ketika baris barang
+keluarnya dihapus, catatan pertukarannya tetap tinggal — menyebutkan
+perpindahan stok yang sudah tidak ada lagi.
+
+Sekarang keduanya terhapus bersama, dalam satu transaksi, dan pesannya
+menyebutkan berapa catatan pertukaran yang ikut. Penghapusannya lunak seperti
+transaksi: barisnya hanya ditandai, jejaknya tetap ada.
+
+### 3. Penyaring keterangan di Barang masuk dan Barang keluar
+
+Ditambahkan dropdown **Semua keterangan** di toolbar kedua halaman, dan ikut
+terbawa ke PDF yang diunduh.
+
+Pilihannya bukan hanya daftar yang berlaku sekarang, tapi juga keterangan yang
+benar-benar ada di data — termasuk yang sudah dihapus dari Master. Kalau tidak,
+catatan lama berketerangan itu tidak akan pernah bisa ditemukan lewat
+penyaring.
+
+### 4. Stok opname: ya, penyesuaian memang mengubah stok
+
+Pertanyaannya terjawab: **ya.** Memilih **"Stok Disesuaikan"** langsung
+membetulkan stoknya — stok akhir barang itu mengikuti stok hitung, lewat satu
+baris Barang masuk atau Barang keluar berketerangan "Penyesuaian Opname", jadi
+koreksinya ikut terbaca di Riwayat.
+
+Yang salah adalah keterangan di layarnya sendiri, yang berbunyi *"Penyesuaian
+hanya mencatat keputusan — memilih Stok Disesuaikan tidak mengubah stok
+sendiri"*. Itu kalimat lama dari sebelum fiturnya dibuat, dan tidak pernah
+ikut diperbarui. Sudah diganti.
+
+### 5. Galat Dashboard saat menyaring — belum ketemu
+
+Kode galat **9F9DF1** belum bisa saya reproduksi. Query Dashboard diuji ulang
+atas 55 kombinasi kategori, status, dan kata pencarian lewat HTTP: semuanya
+dijawab 200. Sebelumnya juga sudah diuji di MySQL 8 asli.
+
+Yang bisa dilakukan sekarang: catatan galat ikut menyimpan **parameter
+penyaringnya**, bukan hanya nama endpoint. Jadi laporan berikutnya langsung
+menyebutkan kombinasi mana yang gagal, bukan sekadar "dashboard/stats.php".
+
+Pesan galat untuk kode 9F9DF1 bisa dibuka admin di **Log aktivitas**, di panel
+paling atas.
+
+---
+
 ## 8 Oktober 2026 — penanda Accurate pada retur, dan pertukaran pada input manual
 
 ### 1. Tanda "sudah diinput ke Accurate" pada retur
@@ -319,6 +403,9 @@ dijalankan sekali.
 | `sql/016_indeks_agregat_masuk.sql` | indeks penutup barang masuk |
 | `sql/017_galat_sistem.sql` | catatan galat server |
 | `sql/018_retur_accurate.sql` | penanda Accurate pada retur |
+| `sql/019_pertukaran_hapus.sql` | pertukaran bisa ikut terhapus |
+| `sql/020_keterangan_tambah_stok.sql` | keterangan retur mana yang menambah stok |
+| `sql/021_galat_endpoint_panjang.sql` | parameter penyaring ikut di catatan galat |
 
 ---
 

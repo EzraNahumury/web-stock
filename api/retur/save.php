@@ -162,7 +162,7 @@ catatAktivitas('create', 'retur', $baruId, [
 // Hanya barang yang dikenal master yang benar-benar menambah stok; untuk
 // yang tidak dikenal peringatannya sudah dikirim di atas, dan menambahkan
 // "stok bertambah" di sini hanya akan bertentangan dengan peringatan itu.
-if ($status === STATUS_RETUR_MASUK && $master !== null) {
+if (returMenambahStok($status) && $master !== null) {
     $peringatan[] = 'Stok bertambah ' . $jumlah . ' pcs lewat barang masuk "' . KET_RETUR_MASUK . '".';
 }
 

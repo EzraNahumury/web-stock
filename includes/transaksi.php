@@ -63,6 +63,17 @@ function daftarTransaksi(string $jenis): void
         $params[] = $sampai;
     }
 
+    /* Penyaring keterangan.
+     *
+     * Dicocokkan apa adanya, bukan dibatasi daftar pilihan yang berlaku
+     * sekarang: catatan lama bisa memakai keterangan yang sejak itu dihapus
+     * dari Master, dan justru baris seperti itulah yang paling perlu dicari. */
+    $keterangan = ambilStr($_GET, 'keterangan', 50);
+    if ($keterangan !== '') {
+        $where[] = 't.keterangan = ?';
+        $params[] = $keterangan;
+    }
+
     $sqlWhere = 'WHERE ' . implode(' AND ', $where);
 
     $total  = (int)dbValue("SELECT COUNT(*) FROM $tabel t $sqlWhere", $params);
@@ -94,10 +105,25 @@ function daftarTransaksi(string $jenis): void
 
     $totalJumlah = (int)dbValue("SELECT COALESCE(SUM(t.jumlah),0) FROM $tabel t $sqlWhere", $params);
 
+    /* Pilihan untuk dropdown penyaring: gabungan daftar yang berlaku sekarang
+     * dan keterangan yang benar-benar ada di data. Yang sudah dihapus dari
+     * Master tetap bisa dipilih — kalau tidak, barisnya tidak akan pernah bisa
+     * ditemukan lewat penyaring. */
+    $terpakai = array_column(
+        dbAll("SELECT DISTINCT keterangan FROM $tabel
+                WHERE deleted_at IS NULL AND keterangan <> ''
+                ORDER BY keterangan"),
+        'keterangan'
+    );
+    $pilihanKet = array_values(array_unique(array_merge($cfg['ket'], $terpakai)));
+    sort($pilihanKet, SORT_NATURAL | SORT_FLAG_CASE);
+
     jsonOk([
         'rows'         => $rows,
         'total_jumlah' => $totalJumlah,
         'ket_options'  => $cfg['ket'],
+        'ket_filter'   => $pilihanKet,
+        'keterangan'   => $keterangan,
     ] + $meta);
 }
 
@@ -275,7 +301,28 @@ function hapusTransaksi(string $jenis): void
         jsonError('Transaksi tidak ditemukan.', 404);
     }
 
-    dbExec("UPDATE $tabel SET deleted_at = NOW() WHERE id = ?", [$id]);
+    /* Catatan pertukarannya ikut terhapus.
+     *
+     * Baris pertukaran lahir dari baris barang keluar ini: barang yang
+     * dipesan diganti barang yang benar-benar dikirim. Kalau transaksinya
+     * dihapus sementara catatan pertukarannya tinggal, menu Pertukaran barang
+     * menyebutkan perpindahan stok yang sudah tidak ada lagi.
+     *
+     * Keduanya dalam satu transaksi: tidak boleh ada keadaan di mana yang
+     * satu terhapus dan yang lain tidak. */
+    $tukarIkut = 0;
+    dbTransaksi(static function (PDO $pdo) use ($tabel, $id, $cfg, &$tukarIkut) {
+        $pdo->prepare("UPDATE $tabel SET deleted_at = NOW() WHERE id = ?")->execute([$id]);
+
+        if ($cfg['keluar']) {
+            $st = $pdo->prepare(
+                'UPDATE pertukaran_barang SET deleted_at = NOW()
+                  WHERE keluar_id = ? AND deleted_at IS NULL'
+            );
+            $st->execute([$id]);
+            $tukarIkut = $st->rowCount();
+        }
+    });
 
     catatAktivitas('delete', $jenis, $id, [
         'barcode' => $t['barcode'],
@@ -284,5 +331,10 @@ function hapusTransaksi(string $jenis): void
         'tanggal' => $t['tanggal'],
     ]);
 
-    jsonOk(['pesan' => 'Catatan dihapus.']);
+    jsonOk([
+        'pesan' => $tukarIkut > 0
+            ? 'Catatan dihapus, beserta ' . $tukarIkut . ' catatan pertukarannya.'
+            : 'Catatan dihapus.',
+        'pertukaran_ikut' => $tukarIkut,
+    ]);
 }

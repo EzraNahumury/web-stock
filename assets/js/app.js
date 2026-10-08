@@ -17,8 +17,8 @@ let tab = "dashboard";   // diselaraskan dengan hak akses saat init()
 
 let dashFilters   = { q:"", kategori:"Semua", status:"semua", page:1 };
 let masterFilters = { q:"", page:1 };
-let trxFilters    = { masuk:{ q:"", dari:"", sampai:"", page:1 },
-                      keluar:{ q:"", dari:"", sampai:"", page:1 } };
+let trxFilters    = { masuk:{ q:"", dari:"", sampai:"", keterangan:"", page:1 },
+                      keluar:{ q:"", dari:"", sampai:"", keterangan:"", page:1 } };
 
 let kategoriOptions = [];
 let editingMasterId = null;
@@ -973,6 +973,8 @@ function renderTransaksiTab(kind){
 
   html += '<div class="toolbar">'
     + '<div class="search-wrap">' + svgIcon("search") + '<input type="text" id="'+kind+'Cari" placeholder="Cari nama, barcode' + (kind==="keluar"?", no. pesanan":"") + '…" oninput="onTrxSearchInput(\''+kind+'\')"></div>'
+    + '<select id="'+kind+'FKet" onchange="onTrxFilterChange(\''+kind+'\')">'
+      + '<option value="">Semua keterangan</option></select>'
     + '<div class="daterange">Dari <input type="date" id="'+kind+'Dari" onchange="onTrxFilterChange(\''+kind+'\')">'
     + ' s/d <input type="date" id="'+kind+'Sampai" onchange="onTrxFilterChange(\''+kind+'\')"></div>'
     + (sayaAdmin() && bisaTulis
@@ -1007,9 +1009,11 @@ function onTrxFilterChange(kind){
   f.q      = $(kind+"Cari").value;
   f.dari   = $(kind+"Dari").value;
   f.sampai = $(kind+"Sampai").value;
+  f.keterangan = $(kind+"FKet") ? $(kind+"FKet").value : "";
   f.page   = 1;
   const ex = $(kind+"Export");
   if(ex) ex.href = "api/export/pdf.php?jenis="+kind+"&q="+encodeURIComponent(f.q)
+      + "&keterangan="+encodeURIComponent(f.keterangan)
       + "&dari="+encodeURIComponent(f.dari)+"&sampai="+encodeURIComponent(f.sampai);
   renderTransaksiTable(kind);
 }
@@ -1170,8 +1174,26 @@ async function renderTransaksiTable(kind){
 
   let data;
   try{
-    data = await API.trxList(kind, { q:f.q, dari:f.dari, sampai:f.sampai, page:f.page });
+    data = await API.trxList(kind, { q:f.q, dari:f.dari, sampai:f.sampai,
+                                     keterangan:f.keterangan, page:f.page });
   }catch(e){ tampilGalat(e); return; }
+
+  /* Isi dropdown penyaring keterangan.
+   *
+   * Pilihannya datang dari server: gabungan daftar yang berlaku sekarang dan
+   * keterangan yang benar-benar ada di data, supaya catatan lama berketerangan
+   * yang sudah dihapus dari Master tetap bisa ditemukan.
+   *
+   * Dibandingkan dengan isi elemennya sendiri, bukan dengan salinan di
+   * memori: tabel digambar ulang tiap kali tabnya dibuka, dan dropdown yang
+   * baru lahir selalu kosong. */
+  const selKet = $(kind+"FKet");
+  if(selKet && (data.ket_filter || []).length){
+    const mau = '<option value="">Semua keterangan</option>'
+      + data.ket_filter.map(k => '<option value="'+esc(k)+'">'+esc(k)+'</option>').join("");
+    if(selKet.innerHTML !== mau) selKet.innerHTML = mau;
+    selKet.value = f.keterangan || "";
+  }
 
   const jumlahLabel = kind==="masuk" ? "Masuk" : "Keluar";
   const showPesanan = kind === "keluar";
@@ -3239,9 +3261,10 @@ async function refreshOpnameDetail(){
         + 'Buka kembali statusnya bila memang perlu diubah.</div>'
       : '<div class="info-box">Isi <b>stok hitung</b> dari hasil hitungan fisik dan <b>stok accurate</b> '
         + 'dari catatan Accurate. Angkanya tersimpan begitu kamu pindah dari kolomnya. '
-        + '<b>Penyesuaian</b> hanya mencatat keputusan — memilih "Stok Disesuaikan" tidak '
-        + 'mengubah stok sendiri; pembetulannya tetap lewat Barang masuk atau Barang keluar '
-        + 'supaya terbaca di Riwayat.</div>')
+        + 'Memilih <b>"Stok Disesuaikan"</b> langsung membetulkan stoknya: stok akhir '
+        + 'barang itu mengikuti stok hitung, lewat satu baris Barang masuk atau Barang '
+        + 'keluar berketerangan "Penyesuaian Opname" — jadi koreksinya ikut terbaca di '
+        + 'Riwayat, bukan berubah diam-diam.</div>')
     + '<div class="table-card"><table style="min-width:1320px"><thead><tr>'
     + ["SKU","Nama barang","Stok akhir","Stok hitung","Stok accurate","Dicek","Petugas",
        "Kategori","Selisih barang","Penyesuaian","Ket."]
@@ -3967,6 +3990,16 @@ function renderKeterangan(jenis){
           + 'Biarkan saja bila tidak penting.</div></div>'
       + '<div><label class="field-label" for="ketAktif">Status</label>'
         + '<select id="ketAktif"><option value="1">Aktif</option><option value="0">Nonaktif</option></select></div>'
+      + (ketJenis === "retur"
+          ? '<div class="span2"><label class="field-label" for="ketTambahStok">Pengaruh ke stok</label>'
+            + '<select id="ketTambahStok">'
+              + '<option value="0">Tidak menambah stok</option>'
+              + '<option value="1">Mengembalikan barang ke stok</option>'
+            + '</select>'
+            + '<div class="field-hint">Retur dengan keterangan ini akan menambah stok lewat '
+              + 'Barang masuk "Retur Masuk". Mengubahnya ikut menyusulkan retur yang sudah '
+              + 'tercatat dengan keterangan ini.</div></div>'
+          : '')
       + '</div>'
       + '<div style="display:flex; gap:8px;">'
         + '<button type="submit" class="btn" id="ketSubmit">' + svgIcon("plus") + 'Tambah keterangan</button>'
@@ -3998,7 +4031,9 @@ async function refreshKeterangan(){
     const kunci = k.terkunci === 1;
     return '<tr>'
       + '<td><div class="item-name">' + esc(k.nama)
-        + (kunci ? '<span class="flag-gen">DIPAKAI SISTEM</span>' : '') + '</div>'
+        + (kunci ? '<span class="flag-gen">DIPAKAI SISTEM</span>' : '')
+        + (k.tambah_stok === 1 ? '<span class="badge aman" style="margin-left:6px">'
+            + svgIcon("check") + 'Menambah stok</span>' : '') + '</div>'
         + (k.catatan ? '<div class="item-sub" style="font-family:Inter">' + esc(k.catatan) + '</div>' : '')
         + '</td>'
       + '<td class="num">' + fmtNum(k.dipakai) + '</td>'
@@ -4035,9 +4070,10 @@ async function refreshKeterangan(){
     '<div class="info-box">Daftar ini mengisi dropdown <b>Keterangan</b> di menu <b>' + esc(arah) + '</b>. '
     + 'Mengganti nama pilihan ikut memperbarui catatan yang sudah memakainya, '
     + 'jadi riwayat lama tidak kehilangan artinya.'
-    + (ketJenis === "retur" && d.nilai_sistem
-        ? ' Pilihan <b>' + esc(d.nilai_sistem) + '</b> dikunci: retur berketerangan itulah '
-          + 'yang menambah stok, jadi namanya tidak bisa diubah dan barisnya tidak bisa dihapus.'
+    + (ketJenis === "retur"
+        ? ' Keterangan bertanda <b>Menambah stok</b> membuat returnya langsung masuk ke '
+          + 'Barang masuk "Retur Masuk". Yang tidak bertanda hanya dicatat dan belum '
+          + 'menyentuh stok. Ubah lewat tombol pensil, di kolom <b>Pengaruh ke stok</b>.'
         : '')
     + '</div>'
     + (d.tanpa_keterangan > 0
@@ -4091,6 +4127,7 @@ function editKeterangan(id){
   $("ketCatatan").value = k.catatan || "";
   $("ketUrutan").value  = k.urutan;
   $("ketAktif").value   = String(k.aktif);
+  if($("ketTambahStok")) $("ketTambahStok").value = String(k.tambah_stok || 0);
   $("ketSubmit").innerHTML = svgIcon("check") + "Simpan perubahan";
   $("ketBatal").style.display = "inline-flex";
   $("ketForm").scrollIntoView({ behavior:"smooth", block:"start" });
@@ -4101,6 +4138,7 @@ function batalEditKeterangan(){
   if($("ketForm")) $("ketForm").reset();
   if($("ketUrutan")) $("ketUrutan").value = 0;
   if($("ketAktif")) $("ketAktif").value = "1";
+  if($("ketTambahStok")) $("ketTambahStok").value = "0";
   if($("ketSubmit")) $("ketSubmit").innerHTML = svgIcon("plus") + "Tambah keterangan";
   if($("ketBatal")) $("ketBatal").style.display = "none";
 }
@@ -4115,6 +4153,9 @@ async function submitKeterangan(e){
     urutan:  Number($("ketUrutan").value) || 0,
     aktif:   $("ketAktif").value === "1"
   };
+  if(ketJenis === "retur" && $("ketTambahStok")){
+    body.tambah_stok = $("ketTambahStok").value === "1";
+  }
   if(!body.nama){ toast("Nama keterangan wajib diisi.", "err"); return; }
 
   const tbl = $("ketSubmit");

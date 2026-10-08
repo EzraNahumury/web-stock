@@ -37,11 +37,19 @@ require_once __DIR__ . '/helpers.php';
  * @param  PDO   $pdo
  * @param  array $r        data retur yang sudah bersih
  * @param  ?int  $masukId  baris barang masuk yang sudah ada, bila ada
+ * @param  ?bool $paksaMasuk keputusan yang diberikan pemanggil; null berarti
+ *                           dibaca dari daftar keterangan. Dipakai saat
+ *                           centang "menambah stok" baru saja diubah dan
+ *                           daftarnya masih tersimpan di cache permintaan ini.
  * @return ?int  id barang masuk setelah disamakan (null bila tidak ada)
  */
-function sinkronMasukRetur(PDO $pdo, array $r, ?int $masukId): ?int
+function sinkronMasukRetur(PDO $pdo, array $r, ?int $masukId, ?bool $paksaMasuk = null): ?int
 {
-    $perluMasuk = $r['status'] === STATUS_RETUR_MASUK;
+    // Keterangan mana yang menambah stok diatur dari menu Master, bukan dipaku
+    // pada satu nama. Lihat keteranganTambahStok() di includes/helpers.php.
+    $perluMasuk = $paksaMasuk === null
+        ? returMenambahStok((string)$r['status'])
+        : $paksaMasuk;
 
     if (!$perluMasuk) {
         if ($masukId !== null) {

@@ -178,6 +178,13 @@ switch ($jenis) {
             $where[] = 't.tanggal <= ?';
             $params[] = $sampai;
         }
+        // Penyaring keterangan — sama dengan di layar, supaya laporan yang
+        // diunduh memuat persis yang sedang dilihat.
+        $ketSaring = ambilStr($_GET, 'keterangan', 50);
+        if ($ketSaring !== '') {
+            $where[] = 't.keterangan = ?';
+            $params[] = $ketSaring;
+        }
         $sqlWhere = 'WHERE ' . implode(' AND ', $where);
         $extra = $isKel ? ', t.no_pesanan' : '';
 
@@ -208,6 +215,7 @@ switch ($jenis) {
             'Periode' => ($dari !== '' || $sampai !== '')
                 ? (($dari !== '' ? $dari : 'awal') . ' s/d ' . ($sampai !== '' ? $sampai : 'kini'))
                 : 'Semua',
+            'Keterangan' => $ketSaring !== '' ? $ketSaring : 'Semua',
             'Baris'   => count($data),
         ], $kolom);
 
@@ -281,7 +289,8 @@ switch ($jenis) {
 
     /* ------------------------------------------------------------------ */
     case 'pertukaran':
-        $where  = ['1=1'];
+        // Sama dengan layarnya: yang barang keluarnya sudah dihapus tidak ikut.
+        $where  = ['t.deleted_at IS NULL'];
         $params = [];
         if ($q !== '') {
             $where[] = '(t.barcode_lama LIKE ? OR t.nama_lama LIKE ? OR t.barcode_baru LIKE ?
@@ -538,7 +547,7 @@ switch ($jenis) {
         $qtyStok  = 0;
         foreach ($data as $r) {
             $totalQty += (int)$r['jumlah'];
-            $masukStok = $r['status'] === STATUS_RETUR_MASUK;
+            $masukStok = returMenambahStok((string)$r['status']);
             if ($masukStok) {
                 $qtyStok += (int)$r['jumlah'];
             }

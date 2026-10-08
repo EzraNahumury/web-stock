@@ -26,6 +26,7 @@ $kolom = $arah[$jenis]['kolom'];
 
 $rows = dbAll(
     "SELECT k.id, k.jenis, k.nama, k.catatan, k.urutan, k.aktif, k.terkunci,
+            k.tambah_stok,
             (SELECT COUNT(*) FROM $tabel t
               WHERE t.`$kolom` = k.nama AND t.deleted_at IS NULL) AS dipakai
        FROM keterangan k
@@ -39,6 +40,7 @@ foreach ($rows as &$r) {
     $r['urutan']   = (int)$r['urutan'];
     $r['aktif']    = (int)$r['aktif'];
     $r['terkunci'] = (int)$r['terkunci'];
+    $r['tambah_stok'] = (int)$r['tambah_stok'];
     $r['dipakai']  = (int)$r['dipakai'];
 }
 unset($r);
@@ -54,8 +56,10 @@ jsonOk([
     'label'            => $arah[$jenis]['label'],
     // Nilai yang menggerakkan stok, supaya layar bisa menerangkan kenapa
     // barisnya terkunci tanpa menebak namanya sendiri.
-    'nilai_sistem'     => $jenis === 'retur' ? STATUS_RETUR_MASUK
-                        : ($jenis === 'masuk' ? KET_RETUR_MASUK : ''),
+    'nilai_sistem'     => $jenis === 'masuk' ? KET_RETUR_MASUK : '',
+    // Keterangan retur yang mengembalikan barang ke stok — dipakai layar untuk
+    // menerangkan kolom centangnya.
+    'tambah_stok_aktif' => $jenis === 'retur' ? keteranganTambahStok() : [],
     'tanpa_keterangan' => $tanpaKeterangan,
     'total'            => count($rows),
 ]);
