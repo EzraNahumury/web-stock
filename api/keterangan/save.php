@@ -38,9 +38,16 @@ $catatan = ambilStr($in, 'catatan', 120);
 $urutan  = ambilInt($in, 'urutan', 0);
 $aktif   = array_key_exists('aktif', $in) ? (!empty($in['aktif']) ? 1 : 0) : 1;
 
-// Hanya berarti untuk keterangan retur: apakah retur dengan keterangan ini
-// mengembalikan barangnya ke stok. Arah stok barang masuk dan barang keluar
-// sudah ditentukan oleh tabelnya sendiri.
+/* Hanya berarti untuk keterangan retur: apakah retur dengan keterangan ini
+ * mengembalikan barangnya ke stok. Arah stok barang masuk dan barang keluar
+ * sudah ditentukan oleh tabelnya sendiri.
+ *
+ * Bawaannya MENAMBAH STOK untuk keterangan baru. Sebaliknya pernah dicoba dan
+ * salah: keterangan yang baru ditambahkan gudang diam-diam tidak menambah
+ * stok, dan sepanjang satu bulan tidak ada retur yang masuk tanpa ada yang
+ * memberi tahu. Yang lebih jarang terjadi adalah retur yang memang tidak
+ * boleh menambah stok — dan itu kelihatan, karena harus dipilih sendiri. */
+$tambahStokDikirim = array_key_exists('tambah_stok', $in);
 $tambahStok = $jenis === 'retur' && !empty($in['tambah_stok']) ? 1 : 0;
 
 if ($nama === '') {
@@ -73,6 +80,16 @@ if ($id > 0) {
     }
 
     $gantiNama = ($lama['nama'] !== $nama);
+
+    /* Tidak dikirim berarti TIDAK DIUBAH, bukan kembali ke bawaan.
+     *
+     * Bawaan "menambah stok" hanya berlaku untuk keterangan baru. Kalau
+     * dipakai juga di sini, sekadar mengganti nama atau urutan sebuah
+     * keterangan akan diam-diam menghidupkan pengaruh stoknya — dan retur
+     * lama ikut disusulkan tanpa ada yang meminta. */
+    if (!$tambahStokDikirim) {
+        $tambahStok = (int)$lama['tambah_stok'];
+    }
 
     if ((int)$lama['terkunci'] === 1) {
         if ($gantiNama) {
@@ -167,7 +184,16 @@ if ($id > 0) {
     ]);
 }
 
-/* --- Tambah -------------------------------------------------------------- */
+/* --- Tambah --------------------------------------------------------------
+ *
+ * Keterangan retur yang baru dibuat bawaannya MENAMBAH STOK. Sebaliknya
+ * pernah dicoba dan salah: keterangan yang baru ditambahkan gudang diam-diam
+ * tidak menambah stok, dan sepanjang satu bulan tidak ada retur yang masuk
+ * tanpa ada yang memberi tahu. */
+if ($jenis === 'retur' && !$tambahStokDikirim) {
+    $tambahStok = 1;
+}
+
 dbExec(
     'INSERT INTO keterangan (jenis, nama, catatan, urutan, aktif, tambah_stok)
      VALUES (?, ?, ?, ?, ?, ?)',

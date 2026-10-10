@@ -9,6 +9,55 @@ berubah**, dan **bagaimana memastikannya jalan**.
 
 ---
 
+## 10 Oktober 2026 (sore) — retur langsung masuk stok, dan galat yang menyebut dirinya
+
+### 1. Semua retur langsung masuk stok, tanpa menunggu siapa pun
+
+Sebelumnya keterangan retur yang baru dibuat bawaannya **tidak** menambah
+stok, dan harus diubah dulu agar returnya masuk. Itu terbalik: yang jarang
+terjadi justru retur yang memang tidak boleh menambah stok.
+
+Sekarang:
+
+- Keterangan retur yang **baru dibuat** bawaannya **mengembalikan barang ke
+  stok**. Tidak ada yang perlu diatur lagi setelah membuatnya.
+- Migrasi `022` menandai **seluruh keterangan retur yang aktif** sekali jalan,
+  jadi retur baru langsung masuk stok sejak deploy.
+- Yang memang tidak boleh menambah stok tetap bisa dibuat — pilih *Tidak
+  menambah stok* di kolom Pengaruh ke stok.
+
+Untuk retur yang **sudah tercatat**, tekan sekali tombol **Masukkan semua ke
+stok** di halaman Retur.
+
+**Satu bug ikut tertangkap.** Dengan bawaan baru itu, mengganti nama atau
+urutan sebuah keterangan diam-diam ikut menghidupkan pengaruh stoknya — dan
+retur lama tersusul tanpa diminta. Uji lama yang menangkapnya. Sekarang
+"tidak dikirim" berarti *tidak diubah*, dan bawaan hanya berlaku untuk
+keterangan yang benar-benar baru.
+
+### 2. Dashboard: tabel tidak lagi menampilkan hasil penyaring yang lama
+
+Ketika pemuatan gagal, barisnya dibiarkan apa adanya. Yang terlihat: penyaring
+sudah berganti ke "Menipis", tapi tabel masih memuat isi penyaring sebelumnya
+— dan itu terbaca sebagai "penyaringnya salah", padahal permintaannya yang
+gagal. Toast galatnya sendiri hilang dalam beberapa detik.
+
+Sekarang tabelnya dikosongkan dan diganti kotak yang menyebutkan apa yang
+terjadi, lengkap dengan kode galatnya.
+
+### 3. Admin melihat pesan galat yang sebenarnya
+
+Selama ini pesan teknis disembunyikan dari semua orang. Terdengar aman, dan
+justru itulah yang membuat galat di produksi tidak pernah bisa ditelusuri:
+yang sampai ke layar hanya "Terjadi kesalahan di server", sementara pesan
+aslinya terkubur di error log hosting yang tidak bisa dibuka.
+
+Sekarang pesan teknisnya ikut ditampilkan — **hanya untuk admin**. Operator
+tetap melihat pesan umum beserta kodenya. Galat `9F9DF1` berikutnya akan
+menyebutkan sendiri sebabnya di layar.
+
+---
+
 ## 10 Oktober 2026 — tombol sekali klik, penanda versi, dan penjaga yang ternyata buta
 
 ### Ketiga keluhan hari ini sudah diperbaiki kemarin — tapi belum sampai ke server
@@ -456,6 +505,7 @@ dijalankan sekali.
 | `sql/019_pertukaran_hapus.sql` | pertukaran bisa ikut terhapus |
 | `sql/020_keterangan_tambah_stok.sql` | keterangan retur mana yang menambah stok |
 | `sql/021_galat_endpoint_panjang.sql` | parameter penyaring ikut di catatan galat |
+| `sql/022_retur_semua_tambah_stok.sql` | semua keterangan retur menambah stok |
 
 ---
 

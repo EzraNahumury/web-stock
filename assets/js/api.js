@@ -69,6 +69,10 @@ const API = (function(){
       err.status = res.status;
       err.detail = data.detail || null;
       err.data   = data;
+      // Kode galat dan pesan teknisnya dipisah, supaya layar bisa
+      // menampilkannya tanpa membedah isi jawaban sendiri.
+      err.kodeGalat = data.kode_galat || null;
+      err.teknis    = data.teknis || null;
       throw err;
     }
     return data;

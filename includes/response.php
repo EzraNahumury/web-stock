@@ -85,13 +85,34 @@ function pasangPenangananGalatApi(): void
         // isinya bisa memuat struktur basis data — tapi kodenya membuat
         // tangkapan layar dari gudang bisa dicocokkan dengan barisnya di menu
         // Log aktivitas, tanpa perlu membuka error log hosting.
+        /* Pesan teknisnya ikut dikirim — tapi hanya untuk admin.
+         *
+         * Menyembunyikannya dari semua orang terdengar aman, dan selama
+         * berminggu-minggu itulah yang membuat galat di produksi tidak pernah
+         * bisa ditelusuri: yang sampai ke layar cuma "Terjadi kesalahan di
+         * server", dan pesan aslinya hanya ada di error log hosting yang tak
+         * bisa dibuka. Admin adalah orang yang berhak melihat struktur
+         * basis datanya sendiri; operator tidak, dan bagi mereka tidak ada
+         * yang berubah. */
+        $teknis = null;
+        if (function_exists('adalahAdmin')) {
+            try {
+                $teknis = adalahAdmin() ? $e->getMessage() : null;
+            } catch (Throwable $abai) {
+                $teknis = null;
+            }
+        }
+
         // Kodenya disebut di kedua keadaan, supaya pesan di layar sama
         // bentuknya saat dikembangkan maupun di produksi.
         jsonError(
             (APP_DEBUG ? $e->getMessage() : 'Terjadi kesalahan di server.')
                 . ' Kode galat: ' . $kode,
             500,
-            ['kode_galat' => $kode]
+            array_filter([
+                'kode_galat' => $kode,
+                'teknis'     => $teknis,
+            ], static function ($v) { return $v !== null; })
         );
     });
 }

@@ -791,7 +791,31 @@ async function refreshDashboard(){
       q: dashFilters.q, kategori: dashFilters.kategori,
       status: dashFilters.status, page: dashFilters.page
     });
-  }catch(e){ tampilGalat(e); return; }
+  }catch(e){
+    /* Pemuatan gagal: tabelnya DIKOSONGKAN, bukan dibiarkan memuat hasil
+     * penyaring sebelumnya.
+     *
+     * Dulu barisnya dibiarkan apa adanya. Yang terlihat di layar: penyaring
+     * sudah berganti ke "Menipis", tapi tabel masih menampilkan isi penyaring
+     * yang lama — dan itu terbaca sebagai "penyaringnya salah", padahal
+     * permintaannya yang gagal. Toast galatnya sendiri hilang dalam beberapa
+     * detik, jadi yang tertinggal hanya kesan tabel yang ngawur. */
+    tampilGalat(e);
+    if(hasil){
+      hasil.innerHTML = '<div class="warn-box"><b>Data tidak bisa dimuat, '
+        + 'jadi tabel di bawah dikosongkan</b> — yang tadi tampil bukan hasil '
+        + 'penyaring ini.<br>' + esc(e.message || 'Galat tidak diketahui')
+        + (e.kodeGalat
+            ? '<br>Kode galat <span class="mono">' + esc(e.kodeGalat) + '</span>.'
+            : '')
+        + (e.teknis
+            ? '<br><br><b>Pesan server:</b> <span class="mono" style="font-size:11px">'
+              + esc(e.teknis) + '</span><br>Tangkap layar bagian ini.'
+            : '')
+        + '</div>';
+    }
+    return;
+  }
 
   const r = data.ringkasan;
 
@@ -4029,8 +4053,8 @@ function renderKeterangan(jenis){
       + (ketJenis === "retur"
           ? '<div class="span2"><label class="field-label" for="ketTambahStok">Pengaruh ke stok</label>'
             + '<select id="ketTambahStok">'
-              + '<option value="0">Tidak menambah stok</option>'
               + '<option value="1">Mengembalikan barang ke stok</option>'
+              + '<option value="0">Tidak menambah stok</option>'
             + '</select>'
             + '<div class="field-hint">Retur dengan keterangan ini akan menambah stok lewat '
               + 'Barang masuk "Retur Masuk". Mengubahnya ikut menyusulkan retur yang sudah '
@@ -4174,7 +4198,7 @@ function batalEditKeterangan(){
   if($("ketForm")) $("ketForm").reset();
   if($("ketUrutan")) $("ketUrutan").value = 0;
   if($("ketAktif")) $("ketAktif").value = "1";
-  if($("ketTambahStok")) $("ketTambahStok").value = "0";
+  if($("ketTambahStok")) $("ketTambahStok").value = "1";   // bawaan: menambah stok
   if($("ketSubmit")) $("ketSubmit").innerHTML = svgIcon("plus") + "Tambah keterangan";
   if($("ketBatal")) $("ketBatal").style.display = "none";
 }
