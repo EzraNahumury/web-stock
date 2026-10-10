@@ -9,6 +9,56 @@ berubah**, dan **bagaimana memastikannya jalan**.
 
 ---
 
+## 10 Oktober 2026 — tombol sekali klik, penanda versi, dan penjaga yang ternyata buta
+
+### Ketiga keluhan hari ini sudah diperbaiki kemarin — tapi belum sampai ke server
+
+Penyaring keterangan di Barang masuk, pertukaran yang ikut terhapus, dan retur
+yang bisa masuk stok: ketiganya ada di revisi **9 Oktober**. Saya periksa ulang
+hari ini dengan menguji HTML yang benar-benar digambar tiap layar — semuanya
+ada. Jadi yang perlu dilakukan adalah menarik revisi itu ke server.
+
+Supaya pertanyaan ini tidak terulang, di bawah tombol **Keluar** pada sidebar
+kini tertulis **versi** beserta tanggal dan jamnya, diambil dari waktu ubah
+berkas aplikasi di server. Kalau tanggalnya lebih tua dari revisi yang dicari,
+deploynya memang belum sampai.
+
+### Tombol "Masukkan semua ke stok"
+
+Kemarin, membuat seluruh retur masuk stok berarti membuka Master → Keterangan
+retur dan mengubah tiap keterangan satu per satu. Sekarang ada tombol
+**Masukkan semua ke stok** di halaman Retur (khusus admin):
+
+- seluruh keterangan retur yang aktif ditandai mengembalikan barang ke stok
+- retur yang sudah tercatat langsung disusulkan ke Barang masuk
+
+Aman diulang: yang sudah benar tidak disentuh, jadi menekannya dua kali tidak
+melahirkan baris ganda. Masih bisa dibatalkan per keterangan lewat Master →
+Keterangan retur, dan returnya ditarik kembali dari stok.
+
+Diuji dengan 12 retur bercampur empat keterangan: 3 sudah masuk, 9 disusulkan,
+pengulangan tidak mengubah apa pun, pembatalan satu keterangan menarik 3 retur
+kembali, dan operator ditolak.
+
+### Penjaga layar yang ternyata hampir tidak menguji apa-apa
+
+`tools/uji_layar.js` yang dibuat 8 Oktober memanggil `renderContent(id)` untuk
+setiap menu. Fungsi itu **tidak menerima argumen** — ia menggambar tab yang
+sedang aktif. Jadi keempat belas "layar" yang diuji sebenarnya dashboard yang
+sama, empat belas kali, dan ujinya berbunyi OK tanpa pernah melihat layar lain.
+Akun tiruannya juga tidak diberi akses menu, sehingga yang tergambar hanya
+pesan "tidak punya akses".
+
+Keduanya sudah dibetulkan: tabnya dipindah lewat `switchTab()` seperti saat
+menunya diklik, dan akunnya diberi akses penuh.
+
+Ditambah `tools/uji_html.js`, yang memeriksa **isi** layarnya, bukan hanya
+bahwa ia tergambar tanpa galat — penyaringnya ada, kolomnya ada, kalimatnya
+sudah yang benar. Sebuah penyaring bisa hilang sama sekali tanpa melempar
+galat apa pun, dan hanya uji semacam ini yang menangkapnya.
+
+---
+
 ## 9 Oktober 2026 — retur tidak masuk stok, pertukaran tertinggal, penyaring keterangan
 
 ### 1. Retur Oktober tidak pernah masuk ke Barang masuk

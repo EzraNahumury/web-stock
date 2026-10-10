@@ -1910,6 +1910,21 @@ sendiri, jadi tanpa aturan itu ujinya akan berbunyi "OK" padahal separuh kode
 render tidak pernah dijalankan.
 
 ```
+node tools\uji_html.js
+```
+
+Memeriksa isi layarnya, bukan hanya bahwa ia tergambar: penyaringnya ada,
+kolomnya ada, kalimatnya sudah yang benar. `uji_layar.js` saja tidak cukup —
+sebuah penyaring bisa hilang sama sekali tanpa melempar galat apa pun.
+
+Keduanya pernah gagal menangkap hal yang sama. Versi pertama memanggil
+`renderContent(id)`, padahal fungsi itu tidak menerima argumen dan menggambar
+tab yang sedang aktif: keempat belas "layar" yang diuji ternyata dashboard yang
+sama, empat belas kali. Sekarang tabnya dipindah lewat `switchTab()`, dan akun
+tiruannya diberi akses penuh — tanpa itu yang tergambar hanya pesan "tidak
+punya akses".
+
+```
 node tools\uji_pdf_parser.js
 ```
 

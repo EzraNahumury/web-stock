@@ -2539,6 +2539,36 @@ async function tandaiAccurate(id, sudah){
   }catch(e){ tampilGalat(e); }
 }
 
+/**
+ * Jadikan seluruh retur mengembalikan barang ke stok.
+ *
+ * Seluruh keterangan retur yang aktif ditandai menambah stok, lalu retur yang
+ * sudah tercatat disusulkan ke Barang masuk. Dipakai ketika gudang memang
+ * ingin semuanya masuk, tanpa membuka Master dan mencentangnya satu per satu.
+ *
+ * Aman diulang: yang sudah benar tidak disentuh, jadi menekannya dua kali
+ * tidak melahirkan baris ganda.
+ */
+async function masukkanSemuaReturKeStok(){
+  const ok = await konfirmasi(
+    "Masukkan semua retur ke stok?",
+    "Semua keterangan retur akan ditandai mengembalikan barang ke stok, dan "
+      + "retur yang sudah tercatat disusulkan ke Barang masuk. "
+      + "Bisa dibatalkan per keterangan lewat Master → Keterangan retur.",
+    "Ya, masukkan semua"
+  );
+  if(!ok) return;
+
+  setSaveStatus("saving");
+  try{
+    const res = await API.post("retur/sinkron_stok.php", { semua_keterangan: true });
+    setSaveStatus("ok");
+    toast(res.pesan || "Selesai.");
+    refreshRetur();
+    segarkanDaftarKeterangan();
+  }catch(e){ tampilGalat(e); }
+}
+
 /** Tandai seluruh baris yang sedang tampil sudah masuk Accurate. */
 async function tandaiAccurateSemua(){
   const belum = returRows.filter(r => r.accurate !== 1);
@@ -2614,6 +2644,12 @@ function renderRetur(){
         ? '<button type="button" class="btn ghost" onclick="tandaiAccurateSemua()" '
           + 'title="Tandai seluruh baris di halaman ini sudah diinput ke Accurate">'
           + svgIcon("check") + 'Tandai Accurate</button>'
+        : '')
+    + (sayaAdmin() && bolehTulis()
+        ? '<button type="button" class="btn ghost" onclick="masukkanSemuaReturKeStok()" '
+          + 'title="Jadikan semua keterangan retur mengembalikan barang ke stok, '
+          + 'lalu susulkan retur yang sudah tercatat">'
+          + svgIcon("download") + 'Masukkan semua ke stok</button>'
         : '')
     + '<a class="btn ghost" id="rtUnduh" href="api/export/pdf.php?jenis=retur">' + svgIcon("download") + 'Unduh PDF</a>'
     + '</div>'

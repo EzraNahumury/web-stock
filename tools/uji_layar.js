@@ -74,46 +74,10 @@ const dokumen = {
 /* --- Jawaban API tiruan ---------------------------------------------------
  * Bentuknya mengikuti yang betul-betul dikirim endpoint: kalau sebuah layar
  * membaca field yang tidak pernah ada, uji ini yang kena duluan. */
-const JAWABAN = {
-    'dashboard/stats.php': {
-        rows: [{ id: 1, sku: 'FI-0001', barcode: '12132528', nama: 'FINGERTAPE PUTIH',
-                 kategori: 'FISIO', stok_awal: 10, stok_minimal: 5, barcode_asli: 1,
-                 masuk_total: 2, keluar_total: 1, stok_akhir: 11, status: 'aman' }],
-        ringkasan: { total_sku: 1, total_stok: 11, kritis: 0, rendah: 0, perlu_order: 0,
-                     belum_diatur: 0, jml_kategori: 1 },
-        kategori: ['FISIO'], total: 1, page: 1, per_page: 50, total_pages: 1,
-    },
-    'dashboard/ringkas.php': {
-        status: { kritis: 0, rendah: 0, aman: 1, belum_diatur: 0 },
-        kategori: [{ kategori: 'FISIO', sku: 1, unit: 11, kritis: 0 }],
-        pergerakan: [{ tanggal: '2026-10-08', masuk: 2, keluar: 1 }],
-        perlu_order: [], hari: 30,
-    },
-    'masuk/list.php': { rows: [], total: 0, page: 1, per_page: 50, total_pages: 1 },
-    'keluar/list.php': { rows: [], total: 0, page: 1, per_page: 50, total_pages: 1 },
-    'riwayat/list.php': { rows: [], kategori: ['FISIO'], total: 0, page: 1, per_page: 50,
-                          total_pages: 1, dari: '2026-10-01', sampai: '2026-10-08' },
-    'pertukaran/list.php': { rows: [], total: 0, page: 1, per_page: 50, total_pages: 1 },
-    'retur/list.php': {
-        rows: [{ id: 1, tanggal: '2026-10-08', no_pesanan: 'ORD-1', master_id: 1,
-                 barcode: '12132528', sku: 'FI-0001', nama: 'FINGERTAPE PUTIH', jumlah: 2,
-                 status: 'Lengkap', keterangan: '', masuk_id: 9, created_at: '2026-10-08 09:00:00',
-                 accurate: 0, accurate_at: null, oleh: 'Admin', accurate_oleh: null }],
-        total: 1, total_unit: 2, unit_ke_stok: 2, unit_tertahan: 0,
-        status_options: ['Lengkap', 'Sistem Belum Selesai'], status_masuk: 'Lengkap',
-        accurate: '', belum_accurate: 1, page: 1, per_page: 50, total_pages: 1,
-    },
-    'opname/list.php': { rows: [], total: 0, page: 1, per_page: 50, total_pages: 1 },
-    'opname/item.php': { rows: [], sesi: null, total: 0, page: 1, per_page: 50, total_pages: 1 },
-    'master/list.php': { rows: [], total: 0, page: 1, per_page: 50, total_pages: 1 },
-    'kategori/list.php': { rows: [], total: 0 },
-    'keterangan/list.php': { rows: [], jenis: 'masuk', label: 'Barang masuk',
-                             nilai_sistem: '', tanpa_keterangan: 0, total: 0 },
-    'pengguna/list.php': { rows: [], menu: {}, menu_grup: {}, menu_bawaan: [], peran: {}, total: 0 },
-    'aktivitas/list.php': { rows: [], opsi: { aksi: [], entitas: [], user: [] },
-                            ringkas: {}, total: 0, page: 1, per_page: 50, total_pages: 1 },
-    'sistem/galat.php': { rows: [], total: 0 },
-};
+/* Bentuk jawaban server, dipakai bersama dengan tools/uji_html.js supaya
+ * keduanya tidak pernah menguji bentuk data yang berbeda. */
+const JAWABAN = JSON.parse(
+    fs.readFileSync(path.join(__dirname, 'fixtur/jawaban-layar.json'), 'utf8'));
 
 /* Endpoint yang dipanggil tapi belum punya jawaban tiruan. Dikumpulkan, lalu
  * menggagalkan uji di akhir.
@@ -165,8 +129,14 @@ ctx.window = ctx;
 ctx.globalThis = ctx;
 vm.createContext(ctx);
 
-ctx.window.APP_USER = { id: 1, username: 'admin', nama_lengkap: 'Admin',
-                        role: 'admin', akses: [], boleh_tulis: true };
+/* Akses penuh. Dengan akses kosong, switchTab() menolak berpindah dan setiap
+ * layar yang diuji sebenarnya tetap dashboard. */
+ctx.window.APP_USER = {
+    id: 1, username: 'admin', nama_lengkap: 'Admin', role: 'admin', boleh_tulis: true,
+    akses: ['dashboard', 'masuk', 'keluar', 'riwayat', 'pertukaran', 'retur', 'opname',
+            'master', 'kategori', 'ket_masuk', 'ket_keluar', 'ket_retur', 'pengguna',
+            'aktivitas'],
+};
 ctx.window.CSRF_TOKEN = 'uji';
 ctx.window.KATEGORI_OPTIONS = ['FISIO'];
 ctx.window.KET_MASUK = ['Restock'];
@@ -181,7 +151,7 @@ vm.runInContext(
 
 /* `const` dan `function` di puncak skrip tidak menempel ke objek konteks, jadi
  * yang dibutuhkan disalin sendiri dari dalam sandbox. */
-const DIPAKAI = ['TABS', 'renderContent', 'refreshDashboard', 'refreshRetur',
+const DIPAKAI = ['TABS', 'switchTab', 'renderContent', 'refreshDashboard', 'refreshRetur',
                  'refreshMasterTable', 'refreshKategori', 'refreshKeterangan',
                  'refreshLog', 'refreshGalatSistem', 'renderTransaksiTable'];
 
@@ -189,7 +159,8 @@ vm.runInContext(
     fs.readFileSync(path.join(akar, 'assets/js/app.js'), 'utf8')
     + ';(function(){ globalThis.__uji = {}; '
     + JSON.stringify(DIPAKAI) + '.forEach(function(n){'
-    + ' try { globalThis.__uji[n] = eval(n); } catch(e) {} }); })();',
+    + ' try { globalThis.__uji[n] = eval(n); } catch(e) {} });'
+    + ' globalThis.__tabAktif = function(){ return tab; }; })();',
     ctx, { filename: 'app.js' });
 
 const uji = ctx.__uji || {};
@@ -211,8 +182,19 @@ async function coba(label, fn) {
     const tabs = uji.TABS.map((t) => t.id);
     console.log('menu yang diuji: ' + tabs.length + '\n');
 
+    /* renderContent() TIDAK menerima argumen — ia menggambar tab yang sedang
+     * aktif. Versi pertama uji ini memanggilnya dengan id sebagai argumen,
+     * yang diabaikan diam-diam: keempat belas "layar" yang diuji ternyata
+     * dashboard yang sama, empat belas kali. Jadi tabnya dipindah lewat
+     * switchTab(), persis seperti saat menunya diklik. */
     for (const id of tabs) {
-        await coba('render ' + id, () => uji.renderContent(id));
+        await coba('render ' + id, () => {
+            uji.switchTab(id);
+            if (ctx.__tabAktif && ctx.__tabAktif() !== id) {
+                throw new Error('tab tidak berpindah ke ' + id
+                    + ' (sekarang ' + ctx.__tabAktif() + ')');
+            }
+        });
     }
 
     // Refresh dipanggil terpisah: sebagian baru berjalan setelah jawaban server

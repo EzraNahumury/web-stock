@@ -89,6 +89,14 @@ if ($inisial === '') {
         </svg>
         Keluar
       </a>
+      <?php
+      /* Versi berkas aplikasi, supaya "sudah ter-deploy atau belum" bisa
+         dijawab dari layar, bukan ditebak. */
+      $vBerkas = @filemtime(__DIR__ . '/assets/js/app.js') ?: 0;
+      ?>
+      <div class="sisi-versi" title="Waktu ubah terakhir berkas aplikasi di server">
+        versi <?= e($vBerkas > 0 ? date('d M Y H:i', $vBerkas) : '-') ?>
+      </div>
     </div>
   </aside>
   <div class="sisi-tirai" id="sisiTirai" hidden></div>
@@ -126,6 +134,16 @@ if ($inisial === '') {
   window.CSRF_TOKEN = <?= json_encode($csrf) ?>;
   window.APP_USER   = <?= json_encode($user, JSON_UNESCAPED_UNICODE) ?>;
   window.APP_NAMA   = <?= json_encode(APP_NAMA, JSON_UNESCAPED_UNICODE) ?>;
+  <?php
+  /* Penanda versi berkas aplikasi.
+   *
+   * Berulang kali muncul pertanyaan "fiturnya sudah ada atau belum" ketika
+   * yang sebenarnya terjadi adalah server masih menjalankan versi lama.
+   * Waktu ubah terakhir assets/js/app.js cukup untuk menjawabnya: kalau
+   * tanggalnya lebih tua dari revisi yang dicari, deploynya belum sampai. */
+  $versiBerkas = @filemtime(__DIR__ . '/assets/js/app.js') ?: 0;
+  ?>
+  window.APP_VERSI  = <?= json_encode($versiBerkas > 0 ? date('d M Y H:i', $versiBerkas) : '-') ?>;
   // Kategori dibaca dari tabel `kategori` (dikelola lewat menu Master).
   // Keterangan masuk/keluar tetap dari config/config.php.
   window.KATEGORI_OPTIONS = <?= json_encode(daftarKategori(), JSON_UNESCAPED_UNICODE) ?>;

@@ -247,6 +247,9 @@ function petaEndpoint(): array
         'retur/list.php'          => ['retur',      false],
         'retur/save.php'          => ['retur',      true],
         'retur/accurate.php'      => ['retur',      true],
+        // Khusus admin lewat wajibAdminApi() di endpointnya sendiri — bukan
+        // lewat bendera hapus, yang disediakan untuk berkas delete.php.
+        'retur/sinkron_stok.php'  => ['retur',      true],
         'retur/delete.php'        => ['retur',      true, true],
 
         'opname/list.php'         => ['opname',     false],

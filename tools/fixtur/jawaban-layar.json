@@ -1,0 +1,227 @@
+{
+ "dashboard/stats.php": {
+  "rows": [
+   {
+    "id": 1,
+    "sku": "FI-0001",
+    "barcode": "12132528",
+    "nama": "FINGERTAPE PUTIH",
+    "kategori": "FISIO",
+    "stok_awal": 10,
+    "stok_minimal": 5,
+    "barcode_asli": 1,
+    "masuk_total": 2,
+    "keluar_total": 1,
+    "stok_akhir": 11,
+    "status": "aman"
+   }
+  ],
+  "ringkasan": {
+   "total_sku": 1,
+   "total_stok": 11,
+   "kritis": 0,
+   "rendah": 0,
+   "perlu_order": 0,
+   "belum_diatur": 0,
+   "jml_kategori": 1
+  },
+  "kategori": [
+   "FISIO"
+  ],
+  "total": 1,
+  "page": 1,
+  "per_page": 50,
+  "total_pages": 1
+ },
+ "dashboard/ringkas.php": {
+  "status": {
+   "kritis": 0,
+   "rendah": 0,
+   "aman": 1,
+   "belum_diatur": 0
+  },
+  "kategori": [
+   {
+    "kategori": "FISIO",
+    "sku": 1,
+    "unit": 11,
+    "kritis": 0
+   }
+  ],
+  "pergerakan": [
+   {
+    "tanggal": "2026-10-08",
+    "masuk": 2,
+    "keluar": 1
+   }
+  ],
+  "perlu_order": [],
+  "hari": 30
+ },
+ "masuk/list.php": {
+  "rows": [],
+  "total": 0,
+  "page": 1,
+  "per_page": 50,
+  "total_pages": 1,
+  "ket_filter": [
+   "Barang Baru",
+   "Restock",
+   "Retur Masuk"
+  ]
+ },
+ "keluar/list.php": {
+  "rows": [],
+  "total": 0,
+  "page": 1,
+  "per_page": 50,
+  "total_pages": 1,
+  "ket_filter": [
+   "Pesanan MP",
+   "Retur"
+  ]
+ },
+ "riwayat/list.php": {
+  "rows": [],
+  "kategori": [
+   "FISIO"
+  ],
+  "total": 0,
+  "page": 1,
+  "per_page": 50,
+  "total_pages": 1,
+  "dari": "2026-10-01",
+  "sampai": "2026-10-08"
+ },
+ "pertukaran/list.php": {
+  "rows": [],
+  "total": 0,
+  "page": 1,
+  "per_page": 50,
+  "total_pages": 1
+ },
+ "retur/list.php": {
+  "rows": [
+   {
+    "id": 1,
+    "tanggal": "2026-10-08",
+    "no_pesanan": "ORD-1",
+    "master_id": 1,
+    "barcode": "12132528",
+    "sku": "FI-0001",
+    "nama": "FINGERTAPE PUTIH",
+    "jumlah": 2,
+    "status": "Lengkap",
+    "keterangan": "",
+    "masuk_id": 9,
+    "created_at": "2026-10-08 09:00:00",
+    "accurate": 0,
+    "accurate_at": null,
+    "oleh": "Admin",
+    "accurate_oleh": null
+   }
+  ],
+  "total": 1,
+  "total_unit": 2,
+  "unit_ke_stok": 2,
+  "unit_tertahan": 0,
+  "status_options": [
+   "Lengkap",
+   "Sistem Belum Selesai"
+  ],
+  "status_masuk": "Lengkap",
+  "accurate": "",
+  "belum_accurate": 1,
+  "page": 1,
+  "per_page": 50,
+  "total_pages": 1,
+  "status_masuk_list": [
+   "Lengkap"
+  ]
+ },
+ "opname/list.php": {
+  "rows": [],
+  "total": 0,
+  "page": 1,
+  "per_page": 50,
+  "total_pages": 1
+ },
+ "opname/item.php": {
+  "rows": [],
+  "sesi": null,
+  "total": 0,
+  "page": 1,
+  "per_page": 50,
+  "total_pages": 1
+ },
+ "master/list.php": {
+  "rows": [],
+  "total": 0,
+  "page": 1,
+  "per_page": 50,
+  "total_pages": 1
+ },
+ "kategori/list.php": {
+  "rows": [],
+  "total": 0
+ },
+ "keterangan/list.php": {
+  "rows": [
+   {
+    "id": 1,
+    "jenis": "retur",
+    "nama": "Lengkap",
+    "catatan": "",
+    "urutan": 10,
+    "aktif": 1,
+    "terkunci": 1,
+    "tambah_stok": 1,
+    "dipakai": 3
+   },
+   {
+    "id": 2,
+    "jenis": "retur",
+    "nama": "Pembatalan",
+    "catatan": "",
+    "urutan": 20,
+    "aktif": 1,
+    "terkunci": 0,
+    "tambah_stok": 0,
+    "dipakai": 5
+   }
+  ],
+  "jenis": "masuk",
+  "label": "Retur",
+  "nilai_sistem": "",
+  "tanpa_keterangan": 0,
+  "total": 0,
+  "tambah_stok_aktif": [
+   "Lengkap"
+  ]
+ },
+ "pengguna/list.php": {
+  "rows": [],
+  "menu": {},
+  "menu_grup": {},
+  "menu_bawaan": [],
+  "peran": {},
+  "total": 0
+ },
+ "aktivitas/list.php": {
+  "rows": [],
+  "opsi": {
+   "aksi": [],
+   "entitas": [],
+   "user": []
+  },
+  "ringkas": {},
+  "total": 0,
+  "page": 1,
+  "per_page": 50,
+  "total_pages": 1
+ },
+ "sistem/galat.php": {
+  "rows": [],
+  "total": 0
+ }
+}
