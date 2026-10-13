@@ -9,6 +9,46 @@ berubah**, dan **bagaimana memastikannya jalan**.
 
 ---
 
+## 14 Oktober 2026 — catatan pertukaran bisa dihapus, dan kode galat untuk semua
+
+### 1. Catatan pertukaran bisa dihapus sendiri
+
+Baris pertukaran hanya ikut terhapus bila baris **Barang keluar**-nya dihapus.
+Catatan yang memang salah dicatat — misalnya percobaan pertukaran manual yang
+tidak pernah benar-benar terjadi — tidak ada cara membuangnya.
+
+Sekarang ada tombol hapus di tiap baris halaman **Pertukaran barang**, khusus
+admin. Penghapusannya lunak: barisnya ditandai, bukan dibuang.
+
+**Stok tidak berubah sama sekali.** Yang memotong stok adalah baris Barang
+keluarnya, dan baris itu tidak disentuh — dialog konfirmasinya menyebutkan itu,
+dan ujinya membuktikannya.
+
+### 2. Kode galat basis data kini disebutkan ke siapa pun yang login
+
+Pesan teknis sebelumnya hanya dikirim kepada admin. Masuk akal, tapi yang
+melaporkan galat dari gudang adalah operator — jadi laporannya tidak pernah
+memuat keterangan apa pun, dan penelusurannya berhenti di situ.
+
+Sekarang **kode basis datanya** ikut ditampilkan untuk semua yang login,
+misalnya `42S02/1146` atau `HY000/3024`. Kode itu sudah cukup mengenali jenis
+kegagalannya dan tidak menyebutkan satu pun nama tabel, kolom, atau isi data.
+Pesan lengkapnya tetap hanya untuk admin.
+
+Juga dirapikan: kotak galat di Dashboard sempat menulis "Kode galat" dua kali.
+
+### 3. Galat Dashboard — masih belum tereproduksi
+
+Kode `CDE00B` pada kombinasi AOLIKES + Perlu order. Seluruh kombinasi kategori
+dan status sudah diuji lewat HTTP di MariaDB dan di MySQL 8 asli dengan 250.000
+baris transaksi; semuanya dijawab 200. Jadi bentuk querynya bukan penyebabnya.
+
+Dengan perubahan nomor 2 di atas, kejadian berikutnya akan menyebutkan kode
+basis datanya sendiri di layar — dan dari situ sebabnya bisa dipastikan, bukan
+ditebak.
+
+---
+
 ## 10 Oktober 2026 (sore) — retur langsung masuk stok, dan galat yang menyebut dirinya
 
 ### 1. Semua retur langsung masuk stok, tanpa menunggu siapa pun

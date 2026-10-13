@@ -98,6 +98,42 @@ function setSaveStatus(state, pesan){
 }
 
 /** Tampilkan galat API secara seragam, termasuk daftar detailnya. */
+/**
+ * Pesan galat tanpa kode yang menempel di belakangnya.
+ *
+ * Server menambahkan "Kode galat: XXXXXX" ke pesannya, dan layar menampilkan
+ * kodenya lagi di baris tersendiri — jadi tertulis dua kali.
+ */
+function rapikanPesanGalat(e){
+  return String(e.message || "Galat tidak diketahui").replace(/\s*Kode galat:\s*\w+\.?$/, "");
+}
+
+/**
+ * Keterangan teknis sebuah galat, sebanyak yang boleh dilihat pemakainya.
+ *
+ * Kode basis datanya ditampilkan untuk siapa pun yang login: "42S02" atau
+ * "3024" sudah cukup mengenali jenis kegagalannya, dan tidak menyebutkan nama
+ * tabel, kolom, atau isi data. Pesan lengkapnya hanya dikirim server kepada
+ * admin.
+ */
+function rincianGalat(e){
+  let h = "";
+  if(e.kodeGalat){
+    h += '<br>Kode galat <span class="mono">' + esc(e.kodeGalat) + '</span>';
+  }
+  if(e.kodeSql || e.kodeDriver){
+    h += ' · basis data <span class="mono">' + esc(e.kodeSql || "-")
+       + (e.kodeDriver ? "/" + esc(e.kodeDriver) : "") + '</span>';
+  }
+  if(h) h += '.';
+  if(e.teknis){
+    h += '<br><br><b>Pesan server:</b> <span class="mono" style="font-size:11px">'
+       + esc(e.teknis) + '</span>';
+  }
+  if(h) h += '<br>Tangkap layar bagian ini.';
+  return h;
+}
+
 function tampilGalat(e){
   console.error(e);
   let pesan = e && e.message ? e.message : "Terjadi kesalahan.";
@@ -804,14 +840,7 @@ async function refreshDashboard(){
     if(hasil){
       hasil.innerHTML = '<div class="warn-box"><b>Data tidak bisa dimuat, '
         + 'jadi tabel di bawah dikosongkan</b> — yang tadi tampil bukan hasil '
-        + 'penyaring ini.<br>' + esc(e.message || 'Galat tidak diketahui')
-        + (e.kodeGalat
-            ? '<br>Kode galat <span class="mono">' + esc(e.kodeGalat) + '</span>.'
-            : '')
-        + (e.teknis
-            ? '<br><br><b>Pesan server:</b> <span class="mono" style="font-size:11px">'
-              + esc(e.teknis) + '</span><br>Tangkap layar bagian ini.'
-            : '')
+        + 'penyaring ini.<br>' + esc(rapikanPesanGalat(e)) + rincianGalat(e)
         + '</div>';
     }
     return;
@@ -2405,6 +2434,7 @@ async function refreshRiwayat(){
 /* ================================================================== */
 /* Pertukaran barang                                                  */
 /* ================================================================== */
+let tukarRows = [];
 let tukarFilter = { q:"", dari:"", sampai:"", page:1 };
 
 function renderPertukaran(){
@@ -2445,6 +2475,32 @@ function resetTukar(){
   refreshPertukaran();
 }
 
+/**
+ * Hapus satu catatan pertukaran.
+ *
+ * Catatan saja: yang menggeser stok adalah baris barang keluarnya, dan itu
+ * tidak disentuh. Dipakai membersihkan pertukaran yang memang salah dicatat.
+ */
+async function hapusPertukaran(id){
+  const r = (tukarRows || []).find(x => x.id === id);
+  const ok = await konfirmasi(
+    "Hapus catatan pertukaran ini?",
+    (r ? '"' + (r.nama_lama || "-") + '" → "' + (r.nama_baru || "-") + '". ' : "")
+      + "Stok tidak berubah: yang memotong stok adalah baris Barang keluarnya, "
+      + "dan baris itu tetap utuh.",
+    "Hapus"
+  );
+  if(!ok) return;
+
+  setSaveStatus("saving");
+  try{
+    const res = await API.post("pertukaran/delete.php", { id: id });
+    setSaveStatus("ok");
+    toast(res.pesan || "Catatan pertukaran dihapus.");
+    refreshPertukaran();
+  }catch(e){ tampilGalat(e); }
+}
+
 function tukarGoPage(p){ tukarFilter.page = p; refreshPertukaran(); }
 
 async function refreshPertukaran(){
@@ -2458,6 +2514,9 @@ async function refreshPertukaran(){
       sampai: tukarFilter.sampai, page: tukarFilter.page
     });
   }catch(e){ tampilGalat(e); return; }
+
+  // Disimpan supaya dialog konfirmasi penghapusan bisa menyebut produknya.
+  tukarRows = d.rows;
 
   const unduh = $("tkUnduh");
   if(unduh){
@@ -2494,11 +2553,16 @@ async function refreshPertukaran(){
     + '<td><span class="badge rendah">' + esc(labelAlasan[r.alasan] || r.alasan) + '</span></td>'
     + '<td class="mono" style="font-size:11px; color:var(--slateLo)">' + esc(r.no_pesanan || "-") + '</td>'
     + '<td style="font-size:11.5px; color:var(--slateLo)">' + esc(r.oleh || "-") + '</td>'
+    + (bolehHapus()
+        ? '<td class="num" style="white-space:nowrap">'
+          + '<button class="icon-btn bahaya" onclick="hapusPertukaran(' + r.id + ')"'
+          + ' aria-label="Hapus catatan pertukaran">' + svgIcon("trash") + '</button></td>'
+        : '')
     + '</tr>'
   ).join("");
 
   if(!d.rows.length){
-    baris = '<tr class="empty-row"><td colspan="8">'
+    baris = '<tr class="empty-row"><td colspan="' + (bolehHapus() ? 9 : 8) + '">'
       + 'Belum ada pertukaran produk pada rentang ini.</td></tr>';
   }
 
@@ -2507,6 +2571,7 @@ async function refreshPertukaran(){
     + 'saat meninjau impor PDF, sehingga stok yang dipotong berpindah ke produk lain.</div>'
     + '<div class="table-card"><table style="min-width:940px"><thead><tr>'
     + ["Tanggal","Produk dari PDF","","Produk pengganti","Qty","Yang diubah","No. Pesanan","Oleh"]
+        .concat(bolehHapus()?[""]:[])
         .map((h,i)=>'<th'+(i===4?' class="num"':'')+'>'+esc(h)+'</th>').join("")
     + '</tr></thead><tbody>' + baris + '</tbody></table>'
     + paginationBar(d.total, d.page, d.total_pages, "tukarGoPage")

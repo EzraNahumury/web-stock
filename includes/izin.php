@@ -243,6 +243,7 @@ function petaEndpoint(): array
 
         'riwayat/list.php'        => ['riwayat',    false],
         'pertukaran/list.php'     => ['pertukaran', false],
+        'pertukaran/delete.php'   => ['pertukaran', true, true],
 
         'retur/list.php'          => ['retur',      false],
         'retur/save.php'          => ['retur',      true],

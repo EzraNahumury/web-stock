@@ -71,8 +71,11 @@ const API = (function(){
       err.data   = data;
       // Kode galat dan pesan teknisnya dipisah, supaya layar bisa
       // menampilkannya tanpa membedah isi jawaban sendiri.
-      err.kodeGalat = data.kode_galat || null;
-      err.teknis    = data.teknis || null;
+      err.kodeGalat  = data.kode_galat || null;
+      err.teknis     = data.teknis || null;
+      err.kodeSql    = data.kode_sql || null;
+      err.kodeDriver = data.kode_driver || null;
+      err.jenisGalat = data.jenis_galat || null;
       throw err;
     }
     return data;

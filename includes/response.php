@@ -103,6 +103,21 @@ function pasangPenangananGalatApi(): void
             }
         }
 
+        /* Kode galat basis data dikirim ke SIAPA PUN yang login, bukan hanya
+         * admin.
+         *
+         * Yang melaporkan galat dari gudang adalah operator, dan selama pesan
+         * teknisnya hanya untuk admin, laporannya tidak pernah memuat
+         * keterangan apa pun — penelusurannya berhenti di situ. Kode seperti
+         * "42S02" atau "3024" sudah cukup untuk mengenali jenis kegagalannya,
+         * dan tidak menyebutkan satu pun nama tabel, kolom, atau isi data. */
+        $kodeSql    = null;
+        $kodeDriver = null;
+        if ($e instanceof PDOException) {
+            $kodeSql    = isset($e->errorInfo[0]) ? (string)$e->errorInfo[0] : null;
+            $kodeDriver = isset($e->errorInfo[1]) ? (string)$e->errorInfo[1] : null;
+        }
+
         // Kodenya disebut di kedua keadaan, supaya pesan di layar sama
         // bentuknya saat dikembangkan maupun di produksi.
         jsonError(
@@ -112,6 +127,9 @@ function pasangPenangananGalatApi(): void
             array_filter([
                 'kode_galat' => $kode,
                 'teknis'     => $teknis,
+                'kode_sql'   => $kodeSql,
+                'kode_driver' => $kodeDriver,
+                'jenis_galat' => get_class($e),
             ], static function ($v) { return $v !== null; })
         );
     });
