@@ -96,23 +96,21 @@ switch ($jenis) {
             $params[] = $kategori;
         }
 
-        // Disaring lewat tabel turunan, bukan HAVING tanpa GROUP BY: yang
-        // terakhir ditolak MySQL saat sql_mode memuat ONLY_FULL_GROUP_BY.
-        // Lihat catatan panjangnya di api/dashboard/stats.php.
-        $saring = '';
-        if (in_array($status, ['kritis', 'rendah', 'aman', 'belum_diatur'], true)) {
-            $saring = 'WHERE t.status = ?';
-            $params[] = $status;
+        // Penyaring status ditulis sebagai syarat angka, bukan perbandingan
+        // teks — lihat sqlKondisiStatus() di includes/helpers.php. Yang lama
+        // membandingkan hasil CASE dengan parameter dan gagal di server
+        // dengan "1267 Illegal mix of collations".
+        if (in_array($status, statusStokSah(), true)) {
+            $where[] = '(' . sqlKondisiStatus($status, $akhir) . ')';
         }
 
-        $pilih = "
+        $data = dbAll("
             SELECT m.sku, m.barcode, m.nama, m.kategori, m.stok_awal, m.stok_minimal,
                    COALESCE(i.total,0) AS masuk, COALESCE(o.total,0) AS keluar,
                    $akhir AS akhir, $ekspr AS status
               FROM master_barang m " . sqlJoinAgregat() . '
-             WHERE ' . implode(' AND ', $where);
-
-        $data = dbAll("SELECT * FROM ($pilih) t $saring ORDER BY t.nama", $params);
+             WHERE ' . implode(' AND ', $where) . '
+             ORDER BY m.nama', $params);
 
         $pdf = new PdfTabel('lanskap');
         $pdf->siapkan('Laporan Stok Barang', [

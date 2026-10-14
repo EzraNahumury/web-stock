@@ -1910,6 +1910,31 @@ sendiri, jadi tanpa aturan itu ujinya akan berbunyi "OK" padahal separuh kode
 render tidak pernah dijalankan.
 
 ```
+WMS_DB_COLLATION=utf8mb4_unicode_ci php -S 127.0.0.1:8100 -t .
+node tools\uji_collation.js
+```
+
+Menghantam seluruh endpoint lewat server yang collation koneksinya sengaja
+dibuat berbeda dari bawaan, lalu menolak setiap jawaban yang gagal karena
+collation.
+
+Ada karena satu bug yang makan berminggu-minggu: memilih status di Dashboard
+selalu gagal 500 di server produksi dan tidak pernah bisa ditiru di sini.
+Bentuk querynya diuji berulang kali — di MariaDB, lalu di MySQL 8 asli dengan
+250.000 baris transaksi — dan selalu lolos. Yang berbeda bukan mesinnya,
+melainkan collationnya:
+
+```
+1267 Illegal mix of collations (utf8mb4_unicode_ci,COERCIBLE)
+                            and (utf8mb4_general_ci,COERCIBLE)
+```
+
+Penyebabnya membandingkan hasil `CASE` berisi teks dengan parameter. Keduanya
+COERCIBLE, jadi bila collation koneksi berbeda dari collation bawaan charset
+parameter, MySQL tidak punya dasar memilih dan menolak. Penyaring statusnya
+kini ditulis sebagai syarat angka — lihat `sqlKondisiStatus()`.
+
+```
 node tools\uji_html.js
 ```
 

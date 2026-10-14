@@ -55,6 +55,27 @@ function db(): PDO
     // Samakan zona waktu MySQL dengan PHP agar NOW() dan date() tidak berbeda.
     $pdo->exec("SET time_zone = '+07:00'");
 
+    /* Collation koneksi bisa dipaksa lewat variabel lingkungan.
+     *
+     * BUKAN untuk produksi — ini alat uji. Server produksi memakai
+     * collation_connection yang berbeda dari mesin pengembangan, dan
+     * perbedaan itu pernah menjatuhkan Dashboard dengan galat "1267 Illegal
+     * mix of collations" yang tidak bisa ditiru di sini selama berminggu-
+     * minggu. Dengan ini keadaannya bisa ditiru persis:
+     *
+     *   WMS_DB_COLLATION=utf8mb4_unicode_ci php -S 127.0.0.1:8100 -t .
+     *
+     * Hanya nama collation yang berisi huruf, angka, dan garis bawah yang
+     * diterima, dan hanya bila variabelnya memang diisi. */
+    $collation = (string)getenv('WMS_DB_COLLATION');
+    if ($collation !== '' && preg_match('/^[A-Za-z0-9_]+$/', $collation)) {
+        try {
+            $pdo->exec("SET collation_connection = '" . $collation . "'");
+        } catch (Throwable $e) {
+            error_log('Collation uji tidak dikenal: ' . $collation);
+        }
+    }
+
     return $pdo;
 }
 

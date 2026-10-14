@@ -40,47 +40,54 @@ if ($kategori !== '' && $kategori !== 'Semua') {
     $params[] = $kategori;
 }
 
-$sqlWhere = 'WHERE ' . implode(' AND ', $where);
+/* --- Penyaring status ---------------------------------------------------
+ *
+ * Ditulis sebagai syarat ANGKA, bukan perbandingan teks.
+ *
+ * Dulu statusnya dihitung jadi teks lewat CASE, lalu dibandingkan dengan
+ * parameter. Di server produksi itu gagal:
+ *
+ *   1267 Illegal mix of collations (utf8mb4_unicode_ci,COERCIBLE)
+ *                               and (utf8mb4_general_ci,COERCIBLE)
+ *
+ * collation_connection di sana utf8mb4_unicode_ci, sementara parameter
+ * prepared statement memakai collation bawaan charsetnya, utf8mb4_general_ci.
+ * Keduanya sama-sama COERCIBLE, jadi MySQL tidak punya dasar memilih dan
+ * menolak. Di mesin pengembangan keduanya kebetulan sama, jadi tidak pernah
+ * terlihat — yang diuji berulang kali selalu bentuk querynya, bukan
+ * collationnya. Lihat sqlKondisiStatus() di includes/helpers.php.
+ *
+ * Karena penyaringnya kini syarat biasa, ia langsung ikut WHERE: seluruh
+ * pilihan tidak perlu lagi dibungkus tabel turunan, dan pencariannya lebih
+ * ringan.
+ */
+$statusSah = in_array($status, statusStokSah(), true);
+$kondisiStatus = $statusSah ? '(' . sqlKondisiStatus($status, $akhir) . ')' : '';
 
-// Status barang dihitung dari agregat masuk/keluar, jadi tidak bisa
-// disaring di WHERE bersama kolom biasa.
-//
-// Dulu memakai "HAVING status = ?" tanpa GROUP BY. MariaDB menerimanya,
-// tapi MySQL menganggap HAVING tanpa GROUP BY sebagai satu grup tunggal
-// dan menolak kolom non-agregat di dalamnya bila sql_mode memuat
-// ONLY_FULL_GROUP_BY — yang berlaku secara bawaan di MySQL 8. Akibatnya
-// memilih status apa pun di Dashboard gagal 500 di server, sementara di
-// mesin pengembangan berjalan mulus.
-//
-// Sekarang seluruh pilihannya dibungkus tabel turunan dan disaring dengan
-// WHERE biasa: sama hasilnya, dan tidak bergantung pada sql_mode.
-$statusSah = in_array($status, ['kritis', 'rendah', 'aman', 'belum_diatur'], true);
+// Dua bentuk WHERE: kartu ringkasan menghitung SELURUH hasil penyaring
+// pencarian dan kategori — tanpa status — sedangkan tabelnya ikut status.
+$sqlWhere  = 'WHERE ' . implode(' AND ', $where);
+$sqlWhereS = 'WHERE ' . implode(' AND ', $kondisiStatus === ''
+    ? $where
+    : array_merge($where, [$kondisiStatus]));
 
-$sqlDasar = "
-    FROM master_barang m
-    " . sqlJoinAgregat() . "
-    $sqlWhere";
+$sqlDasar  = ' FROM master_barang m ' . sqlJoinAgregat() . ' ' . $sqlWhere;
+$sqlDasarS = ' FROM master_barang m ' . sqlJoinAgregat() . ' ' . $sqlWhereS;
 
-/* --- Ringkasan kartu statistik + jumlah baris hasil penyaring ------------
+/* --- Ringkasan kartu + jumlah baris hasil penyaring ----------------------
  *
  * Keduanya dulu dua query terpisah, padahal menjumlahkan hal yang sama atas
  * baris yang sama. Satu permintaan Dashboard berarti tiga kali menjumlahkan
  * ulang SELURUH barang masuk dan barang keluar; sekarang dua. Diukur di
- * MySQL 8 atas 250.000 baris transaksi, satu lintasan ~78 ms — jadi yang
- * dihemat nyata, dan di hosting bersama itu juga memperkecil peluang
- * permintaan ditutup di tengah jalan oleh batas waktu.
+ * MySQL 8 atas 250.000 baris transaksi, satu lintasan ~78 ms.
  *
- * Penghitung hasil penyaring ikut di sini sebagai SUM berkondisi. Parameternya
- * berada di daftar SELECT, jadi urutannya HARUS di depan parameter WHERE —
- * placeholder dibaca dari kiri ke kanan sesuai kemunculannya di SQL.
+ * Penghitung hasil penyaring ikut di sini sebagai SUM berkondisi — tanpa
+ * parameter, jadi tidak ada teks yang dibandingkan sama sekali.
  */
-$kolomSaring = '';
-$paramRingkas = $params;
-if ($statusSah) {
-    $kolomSaring  = ",
-      COALESCE(SUM(CASE WHEN $statusExpr = ? THEN 1 ELSE 0 END), 0) AS total_saring";
-    $paramRingkas = array_merge([$status], $params);
-}
+$kolomSaring = $statusSah
+    ? ",
+      COALESCE(SUM(CASE WHEN $kondisiStatus THEN 1 ELSE 0 END), 0) AS total_saring"
+    : '';
 
 $ringkasan = dbOne("
     SELECT
@@ -91,7 +98,7 @@ $ringkasan = dbOne("
                         AND $akhir <= m.stok_minimal * " . AMBANG_RENDAH . " THEN 1 ELSE 0 END), 0) AS rendah,
       COALESCE(SUM(CASE WHEN m.stok_minimal = 0 THEN 1 ELSE 0 END), 0) AS belum_diatur,
       COUNT(DISTINCT NULLIF(m.kategori, ''))                          AS jml_kategori$kolomSaring
-    $sqlDasar", $paramRingkas);
+    $sqlDasar", $params);
 
 // Query agregat tanpa GROUP BY selalu mengembalikan satu baris. Tapi kalau
 // suatu saat tidak, lebih baik nol daripada galat tak berujung sebab.
@@ -101,21 +108,6 @@ if ($ringkasan === null) {
                   'total_saring' => 0];
 }
 
-// Satu bentuk pilihan dipakai baik untuk menghitung maupun mengambil baris,
-// supaya jumlah halaman tidak mungkin menyimpang dari isinya.
-$sqlPilih = "
-    SELECT m.id, m.sku, m.barcode, m.nama, m.kategori,
-           m.stok_awal, m.stok_minimal, m.barcode_asli,
-           COALESCE(i.total, 0) AS masuk_total,
-           COALESCE(o.total, 0) AS keluar_total,
-           $akhir                AS stok_akhir,
-           $statusExpr           AS status
-    $sqlDasar";
-
-$saring       = $statusSah ? 'WHERE t.status = ?' : '';
-$paramsHitung = $statusSah ? array_merge($params, [$status]) : $params;
-
-// Jumlah baris hasil penyaring sudah dihitung bersama ringkasan di atas.
 $total = $statusSah
     ? (int)($ringkasan['total_saring'] ?? 0)
     : (int)$ringkasan['total_sku'];
@@ -124,10 +116,16 @@ $meta   = metaPaginasi($total, $page);
 $offset = ($meta['page'] - 1) * PAGE_SIZE;
 
 // --- Ambil baris halaman ini ----------------------------------------------
-$rows = dbAll(
-    "SELECT * FROM ($sqlPilih) t $saring ORDER BY t.nama LIMIT " . PAGE_SIZE . " OFFSET $offset",
-    $paramsHitung
-);
+$rows = dbAll("
+    SELECT m.id, m.sku, m.barcode, m.nama, m.kategori,
+           m.stok_awal, m.stok_minimal, m.barcode_asli,
+           COALESCE(i.total, 0) AS masuk_total,
+           COALESCE(o.total, 0) AS keluar_total,
+           $akhir                AS stok_akhir,
+           $statusExpr           AS status
+    $sqlDasarS
+    ORDER BY m.nama
+    LIMIT " . PAGE_SIZE . " OFFSET $offset", $params);
 
 // Samakan tipe agar JavaScript tidak menerima angka sebagai string.
 foreach ($rows as &$r) {

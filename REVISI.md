@@ -9,6 +9,60 @@ berubah**, dan **bagaimana memastikannya jalan**.
 
 ---
 
+## 15 Oktober 2026 — galat Dashboard ketemu dan diperbaiki
+
+### Sebabnya: collation, bukan bentuk querynya
+
+Pesan servernya akhirnya terbaca:
+
+```
+1267 Illegal mix of collations (utf8mb4_unicode_ci,COERCIBLE)
+                            and (utf8mb4_general_ci,COERCIBLE) for operation '='
+```
+
+Penyaring status bekerja dengan menghitung status tiap barang menjadi **teks**
+lewat `CASE`, lalu membandingkannya dengan parameter. Keduanya dianggap
+*COERCIBLE* oleh MySQL — artinya tidak ada yang lebih berhak menentukan
+collation. Di server produksi collation koneksinya `utf8mb4_unicode_ci`,
+sementara parameter prepared statement memakai collation bawaan charsetnya,
+`utf8mb4_general_ci`. Berbeda, sama-sama COERCIBLE, jadi MySQL menolak.
+
+Di mesin pengembangan keduanya kebetulan sama, jadi tidak pernah terlihat.
+Itu sebabnya berminggu-minggu tidak ketemu: yang diuji selalu **bentuk
+querynya** — di MariaDB, lalu di MySQL 8 asli dengan 250.000 baris transaksi,
+puluhan kombinasi penyaring — dan semuanya memang lolos. Yang tidak pernah
+diuji adalah collationnya.
+
+### Yang berubah
+
+Perbandingan teksnya dihapus sama sekali. Statusnya kini disaring sebagai
+**syarat angka**:
+
+| Status | Syarat |
+|---|---|
+| Belum diatur | `stok_minimal = 0` |
+| Perlu order | `stok_minimal > 0 AND akhir <= stok_minimal` |
+| Menipis | `akhir > stok_minimal AND akhir <= stok_minimal × 1,3` |
+| Aman | `akhir > stok_minimal × 1,3` |
+
+Tidak ada teks, tidak ada collation, tidak ada yang bisa bertabrakan. Lebih
+cepat juga: penyaringnya langsung ikut `WHERE`, jadi seluruh pilihan tidak
+perlu lagi dibungkus tabel turunan. Ekspor PDF Dashboard ikut diperbaiki.
+
+Angkanya tidak berubah — dibandingkan dengan hitungan mandiri lewat PHP untuk
+tiap status dan tiap kategori, di collation bawaan maupun collation produksi,
+dan hasilnya sama persis. Kartu ringkasan juga tetap menghitung seluruh hasil
+pencarian, tidak ikut tersaring status.
+
+### Supaya tidak terulang
+
+`node tools/uji_collation.js` menghantam **seluruh endpoint** lewat server yang
+collationnya sengaja dibuat berbeda, lalu menolak setiap jawaban yang gagal
+karena collation. Penjaganya diuji dengan mengembalikan kode lama: empat
+alamat Dashboard langsung tertangkap, dan nol setelah diperbaiki.
+
+---
+
 ## 14 Oktober 2026 — catatan pertukaran bisa dihapus, dan kode galat untuk semua
 
 ### 1. Catatan pertukaran bisa dihapus sendiri

@@ -103,6 +103,57 @@ function sqlStatusStok(string $ekspresiAkhir = 'stok_akhir', string $kolomMin = 
     END";
 }
 
+/**
+ * Ekspresi SQL untuk MENYARING satu status stok — tanpa membandingkan teks.
+ *
+ * KENAPA BUKAN "status = ?"
+ * sqlStatusStok() menghasilkan CASE yang isinya literal teks. Membandingkannya
+ * dengan parameter berarti mengadu dua nilai yang sama-sama COERCIBLE, dan
+ * MySQL menolak itu bila collationnya berbeda:
+ *
+ *   1267 Illegal mix of collations (utf8mb4_unicode_ci,COERCIBLE)
+ *                               and (utf8mb4_general_ci,COERCIBLE)
+ *
+ * Di server produksi collation_connection-nya utf8mb4_unicode_ci, sedangkan
+ * parameter prepared statement memakai collation bawaan charsetnya,
+ * utf8mb4_general_ci. Jadi memilih status apa pun di Dashboard gagal 500 di
+ * sana, sementara di mesin pengembangan — yang keduanya kebetulan sama —
+ * berjalan mulus. Berminggu-minggu tidak ketemu karena yang diuji selalu
+ * bentuk querynya, bukan collationnya.
+ *
+ * Perbandingan teksnya dihapus sama sekali: statusnya dihitung ulang sebagai
+ * syarat angka. Tidak ada teks, tidak ada collation, tidak ada yang bisa
+ * bertabrakan. Lebih cepat juga — penyaringnya bisa langsung di WHERE, tanpa
+ * perlu membungkus seluruh pilihan dalam tabel turunan.
+ *
+ * @param  string $status  salah satu dari daftar statusStokSah()
+ * @return string ekspresi boolean SQL, atau '' bila statusnya tidak dikenal
+ */
+function sqlKondisiStatus(string $status, string $ekspresiAkhir, string $kolomMin = 'm.stok_minimal'): string
+{
+    $ambang = AMBANG_RENDAH;
+
+    switch ($status) {
+        case 'belum_diatur':
+            return "$kolomMin = 0";
+        case 'kritis':
+            return "$kolomMin > 0 AND $ekspresiAkhir <= $kolomMin";
+        case 'rendah':
+            return "$kolomMin > 0 AND $ekspresiAkhir > $kolomMin"
+                 . " AND $ekspresiAkhir <= $kolomMin * $ambang";
+        case 'aman':
+            return "$kolomMin > 0 AND $ekspresiAkhir > $kolomMin * $ambang";
+        default:
+            return '';
+    }
+}
+
+/** Status stok yang dikenal — satu daftar, dipakai bersama. */
+function statusStokSah(): array
+{
+    return ['kritis', 'rendah', 'aman', 'belum_diatur'];
+}
+
 /** Ekspresi SQL stok akhir = stok awal + masuk - keluar. */
 function sqlStokAkhir(): string
 {
