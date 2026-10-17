@@ -9,6 +9,54 @@ berubah**, dan **bagaimana memastikannya jalan**.
 
 ---
 
+## 17 Oktober 2026 — sub menu Stok minimal
+
+### Master → Stok minimal
+
+Ambang "perlu order" sebelumnya hanya bisa diubah lewat form **Master → Barang**,
+satu barang per satu kali buka — dan khusus admin, karena form itu mengubah
+seluruh data barangnya. Padahal yang paling tahu angkanya orang gudang, dan
+**1.095 barang masih berambang 0**, sehingga statusnya tidak pernah bisa
+dinilai.
+
+Sekarang ada sub menu tersendiri. Satu tabel, satu kolom yang bisa diketik:
+
+| Kolom | Gunanya |
+|---|---|
+| Stok akhir | keadaan sekarang |
+| **Keluar/bln** | rata-rata barang keluar 90 hari terakhir dibagi tiga |
+| **Stok minimal** | diketik langsung, tersimpan begitu kolomnya ditinggalkan |
+| Status | ikut berubah begitu ambangnya berubah |
+
+Kolom *Keluar/bln* itu pembantu memutuskan — kalau sebuah barang keluar 33 pcs
+sebulan, ambang 12 berarti kehabisan sebelum restock datang. Angkanya tidak
+dipaksakan; yang menentukan tetap orang gudang.
+
+Penyaringnya: pencarian, kategori, status, dan **"Ambangnya masih 0"** — yang
+terakhir itu untuk mengerjakan sisa 1.095 barang tadi tanpa mencarinya satu per
+satu.
+
+**Setel massal** memasang satu angka ke SELURUH barang yang lolos penyaring,
+bukan hanya yang terlihat di halaman. Menyetel 1.095 barang tidak perlu membuka
+22 halaman.
+
+### Boleh dipakai operator
+
+Berbeda dengan mengubah data barang, menyetel ambang **tidak menyentuh stok
+sama sekali** — ia hanya menentukan kapan sebuah barang disebut perlu order.
+Jadi operator boleh, dan setiap perubahan tercatat di Log aktivitas berikut
+nilai lamanya supaya bisa dikembalikan bila keliru. Akun hanya-baca tetap
+hanya bisa melihat.
+
+### Catatan pertukaran "manual"
+
+Tombol hapusnya sudah ada sejak revisi 14 Oktober, tapi **khusus admin** —
+akun operator tidak melihatnya. Catatan pertukaran menerangkan perpindahan
+stok yang nyata, jadi menghapusnya keputusan audit, bukan operasional. Masuk
+sebagai admin, lalu tekan ikon tong sampah di baris itu.
+
+---
+
 ## 15 Oktober 2026 — galat Dashboard ketemu dan diperbaiki
 
 ### Sebabnya: collation, bukan bentuk querynya

@@ -223,5 +223,32 @@
  "sistem/galat.php": {
   "rows": [],
   "total": 0
+ },
+ "minimal/list.php": {
+  "rows": [
+   {
+    "id": 1,
+    "sku": "AV-0002",
+    "barcode": "8190888987240",
+    "nama": "AVO ANKLE ANTI SLIP L",
+    "kategori": "AVO",
+    "stok_awal": 50,
+    "stok_minimal": 12,
+    "masuk_total": 96,
+    "keluar_total": 100,
+    "stok_akhir": 46,
+    "status": "aman",
+    "keluar_per_bulan": 33
+   }
+  ],
+  "kategori": [
+   "AVO"
+  ],
+  "belum_diatur": 0,
+  "hanya": "semua",
+  "total": 1,
+  "page": 1,
+  "per_page": 50,
+  "total_pages": 1
  }
 }

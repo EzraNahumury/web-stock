@@ -406,6 +406,8 @@ const TABS = [
     ikon:'<path d="M20.6 13.4L12 22l-9-9V4a1 1 0 0 1 1-1h9l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.2"/>' },
   { id:"kategori", label:"Kategori", sub:"Kelola daftar kategori barang", grup:"Master",
     ikon:'<path d="M3 6h18M3 12h18M3 18h18"/><circle cx="7" cy="6" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="17" cy="18" r="1.6" fill="currentColor" stroke="none"/>' },
+  { id:"minimal", label:"Stok minimal", sub:"Setel ambang perlu order tiap barang", grup:"Master",
+    ikon:'<path d="M3 17l6-6 4 4 7-7"/><path d="M3 21h18"/><circle cx="9" cy="11" r="1.4" fill="currentColor" stroke="none"/>' },
   { id:"ket_masuk", label:"Keterangan barang masuk", sub:"Isi dropdown Keterangan di menu Barang masuk", grup:"Master",
     ikon:'<path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><path d="M3 17v2a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-2"/>' },
   { id:"ket_keluar", label:"Keterangan barang keluar", sub:"Isi dropdown Keterangan di menu Barang keluar", grup:"Master",
@@ -4384,6 +4386,239 @@ async function segarkanDaftarKeterangan(){
 }
 
 /* ================================================================== */
+/* Master: Stok minimal                                               */
+/* ================================================================== */
+
+let minFilter = { q:"", kategori:"Semua", status:"", hanya:"semua", page:1 };
+let minRows   = [];
+
+/**
+ * Setel ambang "perlu order" tiap barang.
+ *
+ * Sebelumnya ambang ini hanya bisa diubah lewat form Master barang — satu
+ * barang per satu kali buka, dan khusus admin, karena form itu mengubah
+ * seluruh data barangnya. Padahal yang paling tahu angkanya orang gudang, dan
+ * lebih dari seribu barang masih berambang 0 sehingga statusnya tidak pernah
+ * bisa dinilai.
+ *
+ * Layar ini hanya menyentuh satu kolom dan tidak menggeser stok sama sekali,
+ * jadi boleh dipakai operator; tiap perubahan tercatat di Log aktivitas
+ * berikut nilai lamanya.
+ */
+function renderMinimal(){
+  const bisaUbah = bolehTulis();
+
+  let html = "";
+  if(!bisaUbah){
+    html += '<div class="info-box">Akun ini hanya bisa melihat ambang stok minimal.</div>';
+  }
+
+  html += '<div class="toolbar">'
+    + '<div class="search-wrap">' + svgIcon("search")
+      + '<input type="text" id="mnCari" placeholder="Cari nama, SKU, atau barcode&hellip;" oninput="onMinCari()"></div>'
+    + '<select id="mnKategori" onchange="onMinFilter()"><option value="Semua">Semua kategori</option></select>'
+    + '<select id="mnStatus" onchange="onMinFilter()">'
+      + '<option value="">Semua status</option>'
+      + '<option value="kritis">Perlu order</option>'
+      + '<option value="rendah">Menipis</option>'
+      + '<option value="aman">Aman</option>'
+      + '<option value="belum_diatur">Belum diatur</option>'
+      + '</select>'
+    + '<select id="mnHanya" onchange="onMinFilter()">'
+      + '<option value="semua">Semua barang</option>'
+      + '<option value="belum">Ambangnya masih 0</option>'
+      + '<option value="sudah">Ambangnya sudah diisi</option>'
+      + '</select>'
+    + '<button type="button" class="btn ghost" onclick="resetMinimal()">' + svgIcon("x") + 'Reset</button>'
+    + (bisaUbah
+        ? '<button type="button" class="btn ghost" onclick="setelMinimalMassal()" '
+          + 'title="Setel satu angka untuk SELURUH barang yang lolos penyaring ini">'
+          + svgIcon("edit") + 'Setel massal</button>'
+        : '')
+    + '</div>'
+    + '<div class="stat-row" id="mnRingkas"></div>'
+    + '<div id="mnHasil"></div>';
+
+  wadahIsi().innerHTML = html;
+  $("mnCari").value   = minFilter.q;
+  $("mnStatus").value = minFilter.status;
+  $("mnHanya").value  = minFilter.hanya;
+  refreshMinimal();
+}
+
+const onMinCari = debounce(function(){
+  minFilter.q = $("mnCari").value;
+  minFilter.page = 1;
+  refreshMinimal();
+}, 300);
+
+function onMinFilter(){
+  minFilter.q        = $("mnCari").value;
+  minFilter.kategori = $("mnKategori").value;
+  minFilter.status   = $("mnStatus").value;
+  minFilter.hanya    = $("mnHanya").value;
+  minFilter.page     = 1;
+  refreshMinimal();
+}
+
+function resetMinimal(){
+  minFilter = { q:"", kategori:"Semua", status:"", hanya:"semua", page:1 };
+  if($("mnCari")) $("mnCari").value = "";
+  if($("mnKategori")) $("mnKategori").value = "Semua";
+  if($("mnStatus")) $("mnStatus").value = "";
+  if($("mnHanya")) $("mnHanya").value = "semua";
+  refreshMinimal();
+}
+
+function minGoPage(p){ minFilter.page = p; refreshMinimal(); }
+
+async function refreshMinimal(){
+  const wadah = $("mnHasil");
+  if(!wadah) return;
+
+  let d;
+  try{
+    d = await API.get("minimal/list.php", {
+      q: minFilter.q, kategori: minFilter.kategori,
+      status: minFilter.status, hanya: minFilter.hanya, page: minFilter.page
+    });
+  }catch(e){
+    tampilGalat(e);
+    wadah.innerHTML = '<div class="warn-box"><b>Data tidak bisa dimuat.</b><br>'
+      + esc(rapikanPesanGalat(e)) + rincianGalat(e) + '</div>';
+    return;
+  }
+
+  minRows = d.rows;
+  const bisaUbah = bolehTulis();
+
+  // Dropdown kategori diisi dari server; dibandingkan dengan isi elemennya
+  // sendiri, karena pindah tab menggambar ulang toolbar dari nol.
+  const selKat = $("mnKategori");
+  if(selKat && Array.isArray(d.kategori)){
+    const isi = '<option value="Semua">Semua kategori</option>'
+      + d.kategori.map(k => '<option value="' + esc(k) + '">' + esc(k) + '</option>').join("");
+    if(selKat.innerHTML !== isi){
+      selKat.innerHTML = isi;
+      selKat.value = minFilter.kategori || "Semua";
+    }
+  }
+
+  const ringkas = $("mnRingkas");
+  if(ringkas){
+    ringkas.innerHTML =
+        statCard({ label:"Barang", nilai:d.total, ikon:"sku", nada:"biru",
+                   kaki:"pada penyaring ini" })
+      + statCard({ label:"Ambang masih 0", nilai:d.belum_diatur, ikon:"kosong", nada:"",
+                   tone:"muted", kaki:"statusnya belum bisa dinilai" });
+    ringkas.querySelectorAll(".stat-value[data-nilai]").forEach(n =>
+      Grafik.angkaNaik(n, Number(n.getAttribute("data-nilai"))));
+  }
+
+  const labelStatus = { kritis:"Perlu order", rendah:"Menipis", aman:"Aman", belum_diatur:"Belum diatur" };
+
+  let baris = d.rows.map(r =>
+    '<tr>'
+    + '<td class="mono" style="font-size:11px; color:var(--slateLo)">' + esc(r.sku || "-") + '</td>'
+    + '<td><div class="item-name">' + esc(r.nama) + '</div>'
+      + '<div class="item-sub">' + esc(r.barcode || "-") + '</div></td>'
+    + '<td style="color:var(--slate)">' + esc(r.kategori || "-") + '</td>'
+    + '<td class="num" style="font-weight:700">' + fmtNum(r.stok_akhir) + '</td>'
+    + '<td class="num" style="color:var(--slateLo)">' + fmtNum(r.keluar_per_bulan) + '</td>'
+    + '<td class="num">'
+      + (bisaUbah
+          ? '<input type="number" min="0" style="width:90px; text-align:right" value="' + r.stok_minimal + '"'
+            + ' onchange="simpanMinimal(' + r.id + ', this)"'
+            + ' aria-label="Stok minimal ' + esc(r.nama) + '">'
+          : fmtNum(r.stok_minimal))
+      + '</td>'
+    + '<td><span class="badge ' + esc(r.status) + '">' + esc(labelStatus[r.status] || r.status) + '</span></td>'
+    + '</tr>').join("");
+
+  if(!d.rows.length){
+    baris = '<tr class="empty-row"><td colspan="7">Tidak ada barang pada penyaring ini.</td></tr>';
+  }
+
+  wadah.innerHTML =
+    '<div class="info-box">Ambang ini yang menentukan kapan sebuah barang disebut '
+    + '<b>Perlu order</b>. Selama ambangnya masih 0, statusnya tidak pernah bisa dinilai. '
+    + 'Angkanya tersimpan begitu kamu pindah dari kolomnya. Kolom <b>keluar/bln</b> adalah '
+    + 'rata-rata barang keluar 90 hari terakhir dibagi tiga — pembantu memutuskan, bukan '
+    + 'angka yang dipaksakan.</div>'
+    + '<div class="table-card"><table style="min-width:860px"><thead><tr>'
+    + ["SKU","Barang","Kategori","Stok akhir","Keluar/bln","Stok minimal","Status"]
+        .map((h,i)=>'<th'+(i>=3&&i<=5?' class="num"':'')+'>'+esc(h)+'</th>').join("")
+    + '</tr></thead><tbody>' + baris + '</tbody></table>'
+    + paginationBar(d.total, d.page, d.total_pages, "minGoPage")
+    + '</div>';
+}
+
+/** Simpan ambang satu barang; dipanggil saat kolomnya ditinggalkan. */
+async function simpanMinimal(id, el){
+  const nilai = Number(el.value);
+  const semula = minRows.find(x => x.id === id);
+
+  if(!Number.isFinite(nilai) || nilai < 0){
+    toast("Stok minimal tidak boleh negatif.", "err");
+    if(semula) el.value = semula.stok_minimal;
+    return;
+  }
+  if(semula && Number(semula.stok_minimal) === nilai) return;   // tidak berubah
+
+  setSaveStatus("saving");
+  try{
+    const res = await API.post("minimal/save.php", { id: id, stok_minimal: nilai });
+    setSaveStatus("ok");
+    if(semula) semula.stok_minimal = nilai;
+    if(res.diubah > 0) toast(res.pesan);
+    // Statusnya ikut berubah begitu ambangnya berubah, jadi tabelnya digambar
+    // ulang — bukan dibiarkan menampilkan status yang sudah tidak berlaku.
+    refreshMinimal();
+  }catch(e){
+    tampilGalat(e);
+    if(semula) el.value = semula.stok_minimal;
+  }
+}
+
+/** Setel satu angka untuk SELURUH barang yang lolos penyaring. */
+async function setelMinimalMassal(){
+  const isi = window.prompt(
+    "Setel stok minimal untuk SELURUH barang yang lolos penyaring ini "
+      + "(bukan hanya yang terlihat di halaman ini).\n\n"
+      + "Stok tidak berubah; yang berubah hanya ambang kapan barang disebut perlu order.\n\n"
+      + "Isi angkanya:", "0");
+  if(isi === null) return;
+
+  const nilai = Number(String(isi).trim());
+  if(!Number.isFinite(nilai) || nilai < 0){
+    toast("Isi angka yang sah, minimal 0.", "err");
+    return;
+  }
+
+  const ok = await konfirmasi(
+    "Setel stok minimal ke " + fmtNum(nilai) + "?",
+    "Dipasang ke seluruh barang yang lolos penyaring saat ini. "
+      + "Bisa diubah lagi kapan saja, dan tiap perubahan tercatat di Log aktivitas.",
+    "Ya, setel"
+  );
+  if(!ok) return;
+
+  setSaveStatus("saving");
+  try{
+    const res = await API.post("minimal/save.php", {
+      stok_minimal: nilai,
+      semua_tersaring: {
+        q: minFilter.q, kategori: minFilter.kategori,
+        status: minFilter.status, hanya: minFilter.hanya
+      }
+    });
+    setSaveStatus("ok");
+    toast(res.pesan || "Tersimpan.");
+    refreshMinimal();
+  }catch(e){ tampilGalat(e); }
+}
+
+/* ================================================================== */
 /* Master: Pengguna                                                   */
 /* ================================================================== */
 let editPenggunaId = null;
@@ -4727,6 +4962,7 @@ function renderContent(){
   else if(tab==="aktivitas") renderAktivitas();
   else if(tab==="master") renderMaster();
   else if(tab==="kategori") renderKategori();
+  else if(tab==="minimal") renderMinimal();
   else if(tab==="ket_masuk") renderKeterangan("masuk");
   else if(tab==="ket_keluar") renderKeterangan("keluar");
   else if(tab==="ket_retur") renderKeterangan("retur");

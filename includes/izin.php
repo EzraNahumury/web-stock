@@ -40,6 +40,7 @@ function menuIzin(): array
         'opname'     => 'Laporan stok opname',
         'master'     => 'Barang',
         'kategori'   => 'Kategori',
+        'minimal'    => 'Stok minimal',
         'ket_masuk'  => 'Keterangan barang masuk',
         'ket_keluar' => 'Keterangan barang keluar',
         'ket_retur'  => 'Keterangan retur',
@@ -68,6 +69,7 @@ function menuGrup(): array
         'opname'     => 'Operasional',
         'master'     => 'Master',
         'kategori'   => 'Master',
+        'minimal'    => 'Master',
         'ket_masuk'  => 'Master',
         'ket_keluar' => 'Master',
         'ket_retur'  => 'Master',
@@ -264,6 +266,8 @@ function petaEndpoint(): array
         // Pencarian barang dipakai form Barang masuk, Barang keluar, dan
         // Retur; popup riwayat dibuka dari Dashboard.
         'master/list.php'         => [null,         false],
+        'minimal/list.php'        => ['minimal',    false],
+        'minimal/save.php'        => ['minimal',    true],
         'master/cek_barcode.php'  => [null,         false],
         'master/riwayat.php'      => [null,         false],
         'master/save.php'         => ['master',     true],

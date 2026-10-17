@@ -134,7 +134,7 @@ vm.createContext(ctx);
 ctx.window.APP_USER = {
     id: 1, username: 'admin', nama_lengkap: 'Admin', role: 'admin', boleh_tulis: true,
     akses: ['dashboard', 'masuk', 'keluar', 'riwayat', 'pertukaran', 'retur', 'opname',
-            'master', 'kategori', 'ket_masuk', 'ket_keluar', 'ket_retur', 'pengguna',
+            'master', 'kategori', 'minimal', 'ket_masuk', 'ket_keluar', 'ket_retur', 'pengguna',
             'aktivitas'],
 };
 ctx.window.CSRF_TOKEN = 'uji';

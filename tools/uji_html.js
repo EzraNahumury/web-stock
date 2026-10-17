@@ -84,7 +84,7 @@ vm.createContext(ctx);
 ctx.window.APP_USER = {
   id: 1, username: 'admin', nama_lengkap: 'Admin', role: 'admin', boleh_tulis: true,
   akses: ['dashboard','masuk','keluar','riwayat','pertukaran','retur','opname',
-          'master','kategori','ket_masuk','ket_keluar','ket_retur','pengguna','aktivitas'],
+          'master','kategori','minimal','ket_masuk','ket_keluar','ket_retur','pengguna','aktivitas'],
 };
 ctx.window.CSRF_TOKEN = 'uji';
 ctx.window.KATEGORI_OPTIONS = ['FISIO'];
@@ -92,7 +92,8 @@ ctx.window.KET_MASUK = ['Restock', 'Barang Baru'];
 ctx.window.KET_KELUAR = ['Pesanan MP'];
 
 vm.runInContext(fs.readFileSync(path.join(akar, 'assets/js/api.js'), 'utf8') + ';globalThis.API = API;', ctx);
-const DIPAKAI = ['switchTab', 'renderContent', 'renderTransaksiTable', 'refreshRetur', 'refreshKeterangan', 'ketJenis'];
+const DIPAKAI = ['switchTab', 'renderContent', 'renderTransaksiTable', 'refreshRetur',
+                 'refreshKeterangan', 'refreshMinimal', 'ketJenis'];
 vm.runInContext(
   fs.readFileSync(path.join(akar, 'assets/js/app.js'), 'utf8')
   + ';(function(){ globalThis.__uji = {}; ' + JSON.stringify(DIPAKAI)
@@ -136,6 +137,16 @@ const semua = () => [...daftar.values()].map((e) => String(e.innerHTML || '')).j
   cek('menyebut "Mengembalikan barang ke stok"', /Mengembalikan barang ke stok/.test(htmlKet));
   await uji.refreshKeterangan();
   cek('lencana "Menambah stok" muncul', /Menambah stok/.test(isi('ketHasil')));
+
+  console.log('\n=== Master: Stok minimal ===');
+  uji.switchTab('minimal');
+  await uji.refreshMinimal();
+  const htmlMin = semua();
+  cek('ada kolom Stok minimal', /Stok minimal/.test(htmlMin));
+  cek('ada kolom bantu keluar per bulan', htmlMin.indexOf('Keluar/bln') >= 0);
+  cek('ambangnya bisa diketik', htmlMin.indexOf('onchange="simpanMinimal(') >= 0);
+  cek('ada penyaring ambang masih 0', /Ambangnya masih 0/.test(htmlMin));
+  cek('ada tombol setel massal', htmlMin.indexOf('setelMinimalMassal()') >= 0);
 
   console.log('\n=== Stok opname: keterangan penyesuaian sudah betul ===');
   uji.switchTab('opname');
