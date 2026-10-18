@@ -93,7 +93,8 @@ ctx.window.KET_KELUAR = ['Pesanan MP'];
 
 vm.runInContext(fs.readFileSync(path.join(akar, 'assets/js/api.js'), 'utf8') + ';globalThis.API = API;', ctx);
 const DIPAKAI = ['switchTab', 'renderContent', 'renderTransaksiTable', 'refreshRetur',
-                 'refreshKeterangan', 'refreshMinimal', 'ketJenis'];
+                 'refreshKeterangan', 'refreshMinimal', 'ketJenis',
+                 'tambahBarisRetur', 'hapusBarisRetur'];
 vm.runInContext(
   fs.readFileSync(path.join(akar, 'assets/js/app.js'), 'utf8')
   + ';(function(){ globalThis.__uji = {}; ' + JSON.stringify(DIPAKAI)
@@ -129,6 +130,45 @@ const semua = () => [...daftar.values()].map((e) => String(e.innerHTML || '')).j
   await uji.refreshRetur();
   const htmlRetur = semua();
   cek('ada kolom Accurate', /Accurate/.test(htmlRetur));
+
+  console.log('=== Retur: satu pesanan, banyak produk ===');
+  /* Baris produk pertama digambar renderRetur; keterangan returnya baru terisi
+   * sesudah refreshRetur di atas, jadi urutan di sini memang begitu. */
+  const hitung = (h, p) => h.split(p).length - 1;
+  const satu = isi('rtBarisWadah');
+  cek('ada tombol Tambah produk', /id="rtTambah"/.test(htmlRetur) && /Tambah produk/.test(htmlRetur));
+  cek('mulai dengan satu baris produk', hitung(satu, 'class="produk-baris"') === 1);
+  cek('satu produk tanpa nomor dan tombol hapus', satu.indexOf('produk-kepala') === -1);
+  cek('keterangan retur baris pertama terisi', /Sistem Belum Selesai/.test(isi('rtStatus_1')));
+
+  uji.tambahBarisRetur();
+  const dua = isi('rtBarisWadah');
+  cek('jadi dua baris produk', hitung(dua, 'class="produk-baris"') === 2);
+  cek('tiap baris punya kolom SKU sendiri',
+      /id="rtSku_1"/.test(dua) && /id="rtSku_2"/.test(dua));
+  cek('tiap baris punya keterangan retur sendiri',
+      /id="rtStatus_1"/.test(dua) && /id="rtStatus_2"/.test(dua));
+  cek('baris bernomor', /Produk 1/.test(dua) && /Produk 2/.test(dua));
+  cek('tiap baris bisa dihapus', hitung(dua, 'hapusBarisRetur(') === 2);
+  /* oninput + onfocus pada tiap baris */
+  cek('pencarian barang per baris', hitung(dua, 'onReturPicker(') === 4);
+
+  uji.hapusBarisRetur(2);
+  cek('kembali satu baris sesudah dihapus',
+      hitung(isi('rtBarisWadah'), 'class="produk-baris"') === 1);
+  uji.hapusBarisRetur(1);
+  cek('produk terakhir tidak bisa dihapus',
+      hitung(isi('rtBarisWadah'), 'class="produk-baris"') === 1);
+
+  console.log('=== Retur: yang menambah stok dibaca dari daftar, bukan satu nama ===');
+  /* Sejak migrasi 022 SELURUH keterangan retur mengembalikan barang ke stok.
+   * Layar yang membandingkannya dengan satu nama menggambar baris yang
+   * sebenarnya menambah stok seolah-olah belum. */
+  const htmlR2 = semua();
+  cek('info menyebut seluruh keterangan yang menambah stok',
+      htmlR2.indexOf('Sistem Belum Selesai</b>') >= 0);
+  cek('kaki kartu tidak memaku satu keterangan',
+      htmlR2.indexOf('berketerangan Lengkap') === -1);
 
   console.log('\n=== Master: Pengaruh ke stok pada keterangan retur ===');
   uji.switchTab('ket_retur');

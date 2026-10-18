@@ -583,6 +583,15 @@ tbody tr:hover{ background:#FAFCFC; }
 }
 .span2{ grid-column:span 2; }
 
+/* Satu blok produk pada form retur. Garis di kiri membuat batas antar produk
+ * terbaca sekilas, tanpa menumpuk kotak di dalam kotak. Nomor dan tombol
+ * hapusnya baru muncul kalau produknya memang lebih dari satu. */
+.produk-baris{ border-left:3px solid var(--line); padding-left:13px; }
+.produk-baris + .produk-baris{ margin-top:16px; }
+.produk-kepala{ display:flex; align-items:center; justify-content:space-between; margin-bottom:7px; }
+.produk-no{ font-size:10.5px; font-weight:700; letter-spacing:.09em; text-transform:uppercase;
+            color:var(--slateLo); }
+
 .picker-wrap{ position:relative; }
 .picker-list{
   position:absolute; z-index:20; top:calc(100% + 4px); left:0; right:0;

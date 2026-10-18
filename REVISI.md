@@ -9,6 +9,76 @@ berubah**, dan **bagaimana memastikannya jalan**.
 
 ---
 
+## 18 Oktober 2026 — satu pesanan, banyak produk retur
+
+### Tombol "Tambah produk"
+
+Satu nomor pesanan hanya bisa memuat satu produk, padahal pembeli sering
+mengembalikan beberapa barang sekaligus dalam satu paket. Akibatnya petugas
+mengetik nomor pesanan yang sama berulang kali, satu kali per barang.
+
+Sekarang formnya terbagi dua. Tanggal dan nomor pesanan milik seluruh retur;
+barang, qty, dan keterangannya milik tiap produk:
+
+| Bagian | Isinya |
+|---|---|
+| Kepala | tanggal, no. pesanan |
+| **Tiap produk** | cari barang, SKU, barcode, nama, qty, keterangan retur, ket. |
+
+**Keterangan returnya per produk, bukan per pesanan.** Itu yang terpenting:
+dalam satu paket bisa saja satu barang kembali utuh dan satunya lagi belum
+bisa diproses — dan karena keterangan itulah yang menentukan barangnya masuk
+stok atau tidak, menyamakannya untuk seluruh pesanan berarti memaksa stok
+yang salah. Keterangan produk terakhir diwarisi produk berikutnya, karena
+biasanya memang sama, tapi tetap bisa diganti per baris.
+
+### Gagal satu, batal semuanya
+
+Seluruh baris retur beserta baris barang masuknya ditulis dalam **satu
+transaksi**. Kalau produk ketiga ditolak, dua yang pertama ikut batal dan
+stoknya tidak bergeser sama sekali. Separuh pesanan yang terlanjur masuk stok
+lebih berbahaya daripada tidak ada yang masuk: selisihnya baru ketahuan saat
+stok opname, berminggu-minggu kemudian.
+
+Pesan galatnya menyebut produk yang bermasalah, dan layarnya langsung meloncat
+ke baris itu.
+
+### Barang yang sama disebut dua kali
+
+| Keadaan | Yang terjadi |
+|---|---|
+| Barang + keterangan retur + catatan **sama persis** | **Ditolak** — jadikan satu baris, qty dijumlahkan |
+| Barang + keterangan sama, catatan **berbeda** | Diterima, diberi peringatan |
+| Barang sama, **keterangan retur berbeda** | Diterima tanpa peringatan |
+
+Yang pertama nyaris selalu tombol tertekan dua kali, dan akibatnya stok
+bertambah dua kali lipat. Yang kedua memang bisa dua kejadian berbeda ("2 pcs
+sobek", "1 pcs salah kirim"), jadi tidak ditolak — hanya diingatkan. Barang
+dikenali lewat `master_id`, sehingga memasukkan barang yang sama lewat SKU di
+satu baris dan barcode di baris lain tetap terbaca sebagai barang yang sama.
+
+### Mengubah tetap satu baris
+
+Baris yang sudah tersimpan berdiri sendiri-sendiri, masing-masing dengan baris
+barang masuknya. Jadi saat mengubah, formnya kembali ke satu produk dan tombol
+"Tambah produk" disembunyikan — kalau dibiarkan, ia terbaca seolah produk bisa
+diselipkan ke retur yang sudah tercatat, padahal yang terjadi baris baru.
+Operator tetap boleh mencatat, dan tetap tidak boleh mengubah.
+
+Bentuk permintaan lama — satu produk tanpa `items` — masih diterima dan lewat
+jalur yang sama persis, bukan jalur cadangan tersendiri.
+
+### Ikut diperbaiki: keterangan penambah stok dibaca dari daftarnya
+
+Sejak revisi 16 Oktober **seluruh** keterangan retur mengembalikan barang ke
+stok, tapi layarnya masih membandingkan dengan satu nama saja. Akibatnya baris
+berketerangan "Sistem Belum Selesai" — yang sebenarnya menambah stok —
+tergambar merah "belum masuk stok", dan konfirmasi hapusnya menyatakan stok
+tidak akan bergeser padahal bergeser. Ketiganya sekarang membaca daftar yang
+dikirim server.
+
+---
+
 ## 17 Oktober 2026 — sub menu Stok minimal
 
 ### Master → Stok minimal

@@ -2586,7 +2586,25 @@ async function refreshPertukaran(){
 let returFilter = { q:"", dari:"", sampai:"", status:"", page:1 };
 let editReturId = null;
 let returStatusOptions = [];
-let returStatusMasuk = "Lengkap";   // ditimpa oleh jawaban server
+/* Keterangan mana saja yang mengembalikan barang ke stok. Bentuknya daftar,
+ * karena sejak revisi 16 Oktober SELURUH keterangan retur menambah stok —
+ * membandingkannya dengan satu nama membuat baris yang sebenarnya menambah
+ * stok tergambar seolah belum, dan konfirmasi hapusnya ikut salah. */
+let returStatusMasukList = ["Lengkap"];
+
+/* Satu pesanan bisa memuat beberapa produk, masing-masing satu baris di form.
+ * Kuncinya tidak pernah dipakai ulang, supaya id elemen baris baru tidak
+ * pernah bertabrakan dengan sisa baris yang baru saja dihapus. */
+let rtBaris = [];
+let rtBarisKey = 0;
+/* Sama dengan MAKS_PRODUK_RETUR di api/retur/save.php. Pagarnya tetap di
+ * server; yang di sini hanya supaya penolakannya terbaca sebelum dikirim. */
+const MAKS_PRODUK_RETUR = 50;
+
+/** Apakah retur berketerangan ini mengembalikan barang ke stok? */
+function returIkutStok(status){
+  return returStatusMasukList.indexOf(status) >= 0;
+}
 
 /**
  * Sel penanda "sudah diinput ke Accurate".
@@ -2694,28 +2712,21 @@ function renderRetur(){
       + 'stok. Salah catat? Catat koreksinya, atau minta admin memperbaikinya.</div>';
   }
   if(bisaTulis){
+  /* Tanggal dan nomor pesanan milik SELURUH retur ini; barang, qty, dan
+   * keterangannya milik tiap produk. Pembagian itu yang membuat satu pesanan
+   * berisi beberapa produk bisa dicatat sekali jalan. */
   html += '<form class="form-card" id="rtForm" onsubmit="submitRetur(event)">'
     + '<div class="form-grid">'
     + '<div><label class="field-label" for="rtTanggal">Tanggal</label>'
       + '<input type="date" id="rtTanggal" value="' + todayISO() + '"></div>'
     + '<div class="span2"><label class="field-label" for="rtNoPesanan">No. pesanan</label>'
       + '<input type="text" id="rtNoPesanan" maxlength="100" placeholder="Contoh: 260504HBRHB311"></div>'
-    + '<div class="span2 picker-wrap"><label class="field-label" for="rtPicker">Cari barang (nama / SKU / barcode)</label>'
-      + '<input type="text" id="rtPicker" placeholder="Ketik nama, SKU, atau barcode&hellip;" autocomplete="off"'
-        + ' oninput="onReturPicker()" onfocus="onReturPicker()">'
-      + '<div id="rtPickerList" class="picker-list" style="display:none"></div></div>'
-    + '<div><label class="field-label" for="rtSku">SKU</label>'
-      + '<input type="text" id="rtSku" class="mono" maxlength="50" placeholder="Contoh: AV-0063"></div>'
-    + '<div><label class="field-label" for="rtBarcode">Barcode</label>'
-      + '<input type="text" id="rtBarcode" class="mono" maxlength="50" placeholder="Opsional"></div>'
-    + '<div class="span2"><label class="field-label" for="rtNama">Nama produk</label>'
-      + '<input type="text" id="rtNama" maxlength="255" placeholder="Terisi sendiri bila barangnya dikenal"></div>'
-    + '<div><label class="field-label" for="rtJumlah">Qty</label>'
-      + '<input type="number" id="rtJumlah" min="1" value="1"></div>'
-    + '<div><label class="field-label" for="rtStatus">Keterangan retur</label>'
-      + '<select id="rtStatus"></select></div>'
-    + '<div class="span2"><label class="field-label" for="rtKet">Ket.</label>'
-      + '<input type="text" id="rtKet" maxlength="255" placeholder="Contoh: tidak bisa di proses"></div>'
+    + '</div>'
+    + '<div id="rtBarisWadah"></div>'
+    + '<div style="margin:10px 0 14px">'
+      + '<button type="button" class="btn ghost" id="rtTambah" onclick="tambahBarisRetur()" '
+        + 'title="Catat produk lain pada nomor pesanan yang sama">'
+        + svgIcon("plus") + 'Tambah produk</button>'
     + '</div>'
     + '<div style="display:flex; gap:8px;">'
       + '<button type="submit" class="btn" id="rtSubmit">' + svgIcon("plus") + 'Catat retur</button>'
@@ -2751,11 +2762,160 @@ function renderRetur(){
   $("rtCari").value   = returFilter.q;
   $("rtDari").value   = returFilter.dari;
   $("rtSampai").value = returFilter.sampai;
+
+  /* Formnya baru saja digambar ulang dari nol, jadi barisnya dimulai dari satu
+   * produk kosong. Yang sedang diubah tidak lewat sini: editRetur() menyiapkan
+   * barisnya sendiri sesudah ini. */
+  if(bisaTulis){
+    rtBaris = [barisReturBaru()];
+    gambarBarisRetur();
+  }
+
   refreshRetur();
 }
 
-const onReturPicker = debounce(async function(){
-  const el = $("rtPicker"), listEl = $("rtPickerList");
+/** Satu baris produk kosong. */
+function barisReturBaru(){
+  rtBarisKey++;
+  return { key:rtBarisKey, cari:"", sku:"", barcode:"", nama:"",
+           jumlah:1, status:"", keterangan:"" };
+}
+
+/**
+ * Pindahkan isi kolom yang sedang terlihat ke dalam rtBaris.
+ *
+ * Wajib dipanggil SEBELUM barisnya digambar ulang. Tanpa ini, menekan "Tambah
+ * produk" menghapus semua yang sudah diketik pada produk sebelumnya — nilainya
+ * hidup di DOM, dan menggambar ulang berarti membuangnya.
+ */
+function bacaBarisRetur(){
+  rtBaris.forEach(function(b){
+    const el = function(n){ return $("rt" + n + "_" + b.key); };
+    if(!el("Sku")) return;          // barisnya belum tergambar
+    b.cari       = el("Picker").value;
+    b.sku        = el("Sku").value.trim();
+    b.barcode    = el("Barcode").value.trim();
+    b.nama       = el("Nama").value.trim();
+    b.jumlah     = Number(el("Jumlah").value);
+    b.status     = el("Status").value;
+    b.keterangan = el("Ket").value.trim();
+  });
+}
+
+/** Gambar ulang seluruh baris produk dari rtBaris. */
+function gambarBarisRetur(){
+  const wadah = $("rtBarisWadah");
+  if(!wadah) return;
+
+  /* Nomor dan tombol hapus hanya muncul kalau produknya memang lebih dari
+   * satu; pada satu produk keduanya cuma kebisingan. */
+  const banyak = rtBaris.length > 1;
+
+  wadah.innerHTML = rtBaris.map(function(b, i){
+    const k = b.key;
+    return '<div class="produk-baris" id="rtBaris_' + k + '">'
+      + (banyak
+          ? '<div class="produk-kepala"><span class="produk-no">Produk ' + (i + 1) + '</span>'
+            + '<button type="button" class="icon-btn bahaya" onclick="hapusBarisRetur(' + k + ')"'
+            + ' aria-label="Hapus produk ' + (i + 1) + ' dari retur ini">' + svgIcon("trash") + '</button></div>'
+          : '')
+      + '<div class="form-grid">'
+      + '<div class="span2 picker-wrap"><label class="field-label" for="rtPicker_' + k + '">Cari barang (nama / SKU / barcode)</label>'
+        + '<input type="text" id="rtPicker_' + k + '" placeholder="Ketik nama, SKU, atau barcode&hellip;" autocomplete="off"'
+          + ' value="' + esc(b.cari) + '" oninput="onReturPicker(' + k + ')" onfocus="onReturPicker(' + k + ')">'
+        + '<div id="rtPickerList_' + k + '" class="picker-list" style="display:none"></div></div>'
+      + '<div><label class="field-label" for="rtSku_' + k + '">SKU</label>'
+        + '<input type="text" id="rtSku_' + k + '" class="mono" maxlength="50" value="' + esc(b.sku) + '" placeholder="Contoh: AV-0063"></div>'
+      + '<div><label class="field-label" for="rtBarcode_' + k + '">Barcode</label>'
+        + '<input type="text" id="rtBarcode_' + k + '" class="mono" maxlength="50" value="' + esc(b.barcode) + '" placeholder="Opsional"></div>'
+      + '<div class="span2"><label class="field-label" for="rtNama_' + k + '">Nama produk</label>'
+        + '<input type="text" id="rtNama_' + k + '" maxlength="255" value="' + esc(b.nama) + '" placeholder="Terisi sendiri bila barangnya dikenal"></div>'
+      + '<div><label class="field-label" for="rtJumlah_' + k + '">Qty</label>'
+        + '<input type="number" id="rtJumlah_' + k + '" min="1" value="' + (Number(b.jumlah) || 1) + '"></div>'
+      + '<div><label class="field-label" for="rtStatus_' + k + '">Keterangan retur</label>'
+        + '<select id="rtStatus_' + k + '"></select></div>'
+      + '<div class="span2"><label class="field-label" for="rtKet_' + k + '">Ket.</label>'
+        + '<input type="text" id="rtKet_' + k + '" maxlength="255" value="' + esc(b.keterangan) + '" placeholder="Contoh: tidak bisa di proses"></div>'
+      + '</div></div>';
+  }).join("");
+
+  isiSelectStatusRetur();
+}
+
+/**
+ * Isi dropdown keterangan tiap baris dari daftar milik server.
+ *
+ * Dipanggil dua kali: sesudah barisnya digambar (daftarnya mungkin belum tiba)
+ * dan sesudah jawaban server masuk. Pilihan yang sudah dipegang baris
+ * dikembalikan, supaya menambah produk tidak diam-diam mengubah keterangan
+ * produk yang sudah diisi.
+ */
+function isiSelectStatusRetur(){
+  if(!returStatusOptions.length) return;
+  const opsi = returStatusOptions.map(function(v){
+    return '<option value="' + esc(v) + '">' + esc(v) + '</option>';
+  }).join("");
+
+  rtBaris.forEach(function(b){
+    const sel = $("rtStatus_" + b.key);
+    if(!sel) return;
+    if(sel.innerHTML !== opsi) sel.innerHTML = opsi;
+    if(b.status && returStatusOptions.indexOf(b.status) >= 0){
+      sel.value = b.status;
+    }else{
+      // Belum pernah dipilih: yang terpakai pilihan pertama, dan keadaannya
+      // disamakan supaya tidak ada selisih antara layar dan rtBaris.
+      sel.value = returStatusOptions[0];
+      b.status  = returStatusOptions[0];
+    }
+  });
+}
+
+/** Tambah satu baris produk pada pesanan yang sedang dicatat. */
+function tambahBarisRetur(){
+  if(rtBaris.length >= MAKS_PRODUK_RETUR){
+    toast("Maksimal " + MAKS_PRODUK_RETUR + " produk dalam satu kali simpan. "
+      + "Simpan dulu yang ini, lalu catat sisanya dengan nomor pesanan yang sama.", "err");
+    return;
+  }
+  bacaBarisRetur();
+
+  const b = barisReturBaru();
+  /* Keterangan retur baris terakhir diwarisi: dalam satu pesanan alasannya
+   * biasanya sama, dan memilih ulang hal yang sama pada tiap produk hanya
+   * menambah langkah. Tetap bisa diganti per baris. */
+  const akhir = rtBaris[rtBaris.length - 1];
+  if(akhir) b.status = akhir.status;
+
+  rtBaris.push(b);
+  gambarBarisRetur();
+
+  const fokus = $("rtPicker_" + b.key);
+  if(fokus) fokus.focus();
+}
+
+/** Buang satu baris produk. Produk terakhir tidak bisa dibuang. */
+function hapusBarisRetur(key){
+  if(rtBaris.length <= 1) return;
+  bacaBarisRetur();
+  rtBaris = rtBaris.filter(function(b){ return b.key !== key; });
+  gambarBarisRetur();
+}
+
+/** Bawa perhatian ke baris yang ditolak validasi. */
+function fokusBarisRetur(i){
+  const b = rtBaris[i];
+  const el = b ? $("rtPicker_" + b.key) : null;
+  if(!el) return;
+  el.focus();
+  el.scrollIntoView({ behavior:"smooth", block:"center" });
+}
+
+/* Satu pengatur waktu dipakai bersama seluruh baris. Itu memang cukup: yang
+ * diketik hanya satu baris pada satu saat, dan hasilnya dikembalikan ke baris
+ * yang benar lewat kuncinya, bukan lewat baris yang kebetulan terakhir. */
+const onReturPicker = debounce(async function(key){
+  const el = $("rtPicker_" + key), listEl = $("rtPickerList_" + key);
   if(!el || !listEl) return;
   const q = el.value.trim();
   if(!q){ listEl.style.display = "none"; listEl.innerHTML = ""; return; }
@@ -2770,7 +2930,8 @@ const onReturPicker = debounce(async function(){
     return;
   }
   listEl.innerHTML = data.rows.map(m =>
-    '<div class="picker-item" data-bc="' + esc(m.barcode) + '" data-sku="' + esc(m.sku || "") + '"'
+    '<div class="picker-item" data-key="' + key + '" data-bc="' + esc(m.barcode) + '"'
+    + ' data-sku="' + esc(m.sku || "") + '"'
     + ' data-nama="' + esc(m.nama) + '" onclick="pilihBarangRetur(this)">'
     + '<div>' + esc(m.nama) + '</div>'
     + '<div class="sub">' + esc(m.sku || "-") + ' · ' + esc(m.barcode) + '</div></div>'
@@ -2779,11 +2940,13 @@ const onReturPicker = debounce(async function(){
 }, 250);
 
 function pilihBarangRetur(el){
-  $("rtBarcode").value = el.getAttribute("data-bc") || "";
-  $("rtSku").value     = el.getAttribute("data-sku") || "";
-  $("rtNama").value    = el.getAttribute("data-nama") || "";
-  $("rtPicker").value  = el.getAttribute("data-nama") || "";
-  $("rtPickerList").style.display = "none";
+  const k = el.getAttribute("data-key");
+  const nama = el.getAttribute("data-nama") || "";
+  $("rtBarcode_" + k).value = el.getAttribute("data-bc") || "";
+  $("rtSku_" + k).value     = el.getAttribute("data-sku") || "";
+  $("rtNama_" + k).value    = nama;
+  $("rtPicker_" + k).value  = nama;
+  $("rtPickerList_" + k).style.display = "none";
 }
 
 const onReturCari = debounce(function(){
@@ -2823,13 +2986,10 @@ async function refreshRetur(){
   }catch(e){ tampilGalat(e); return; }
 
   // Pilihan status datang dari server supaya layar dan validasi tak pernah beda.
-  if(d.status_masuk) returStatusMasuk = d.status_masuk;
+  if(Array.isArray(d.status_masuk_list)) returStatusMasukList = d.status_masuk_list;
   if(d.status_options && d.status_options.length){
     returStatusOptions = d.status_options;
-    const sel = $("rtStatus");
-    if(sel && !sel.options.length){
-      sel.innerHTML = returStatusOptions.map(v => '<option value="' + esc(v) + '">' + esc(v) + '</option>').join("");
-    }
+    isiSelectStatusRetur();
     const fs = $("rtFStatus");
     if(fs && fs.options.length <= 1){
       fs.innerHTML = '<option value="">Semua keterangan</option>'
@@ -2867,7 +3027,9 @@ async function refreshRetur(){
                    kaki: penyaringAktif.length ? "baris pada penyaring ini" : "baris tercatat" })
       + statCard({ label:"Unit diretur", nilai:d.total_unit, ikon:"unit", nada:"", kaki:"pcs dikembalikan" })
       + statCard({ label:"Sudah masuk stok", nilai:d.unit_ke_stok, ikon:"sku", nada:"safe", tone:"safe",
-                   kaki:"pcs dari retur berketerangan " + returStatusMasuk })
+                   kaki: returStatusMasukList.length === 1
+                     ? "pcs dari retur berketerangan " + returStatusMasukList[0]
+                     : "pcs dari retur yang keterangannya mengembalikan stok" })
       + statCard({ label:"Belum masuk stok", nilai:d.unit_tertahan, ikon:"alert", nada:"amber",
                    kaki:"pcs masih menunggu diselesaikan" })
       + statCard({ label:"Belum ke Accurate", nilai:d.belum_accurate, ikon:"kosong", nada:"",
@@ -2889,7 +3051,7 @@ async function refreshRetur(){
     // Yang menentukan stok bertambah adalah statusnya. masuk_id tetap terisi
     // meski returnya dibatalkan, supaya baris barang masuknya bisa dipakai
     // ulang kalau statusnya dikembalikan.
-    const masukStok = r.status === returStatusMasuk;
+    const masukStok = returIkutStok(r.status);
     return '<tr>'
       + '<td style="white-space:nowrap">' + fmtDate(r.tanggal) + '</td>'
       + '<td class="mono" style="font-size:11px">' + esc(r.no_pesanan || "-") + '</td>'
@@ -2922,9 +3084,14 @@ async function refreshRetur(){
   returRows = d.rows;
 
   wadah.innerHTML =
-    '<div class="info-box">Retur berketerangan <b>Lengkap</b> langsung menambah stok lewat '
-    + 'barang masuk "Retur Masuk". Yang belum selesai dicatat saja dan belum menyentuh stok, '
-    + 'sampai keterangannya diubah.</div>'
+    '<div class="info-box">'
+    + (returStatusMasukList.length
+        ? 'Retur berketerangan <b>' + returStatusMasukList.map(esc).join("</b>, <b>") + '</b> '
+          + 'mengembalikan barang ke stok lewat barang masuk "Retur Masuk". '
+        : 'Tidak ada keterangan retur yang mengembalikan barang ke stok saat ini. ')
+    + 'Pengaturannya di Master &rarr; Keterangan retur. '
+    + 'Satu nomor pesanan boleh memuat beberapa produk — tiap produk jadi satu baris di sini, '
+    + 'dan bisa punya keterangan sendiri-sendiri.</div>'
     + '<div class="table-card"><table style="min-width:980px"><thead><tr>'
     + ["Tanggal","No. pesanan","SKU","Nama produk","Qty","Keterangan retur","Ket.","Accurate"]
         .concat(adaKolomAksi()?[""]:[])
@@ -2942,13 +3109,26 @@ function editRetur(id){
   editReturId = id;
   $("rtTanggal").value   = r.tanggal;
   $("rtNoPesanan").value = r.no_pesanan || "";
-  $("rtSku").value       = r.sku || "";
-  $("rtBarcode").value   = r.barcode || "";
-  $("rtNama").value      = r.nama || "";
-  $("rtPicker").value    = r.nama || "";
-  $("rtJumlah").value    = r.jumlah;
-  $("rtStatus").value    = r.status;
-  $("rtKet").value       = r.keterangan || "";
+
+  /* Baris yang sudah tersimpan berdiri sendiri-sendiri, masing-masing dengan
+   * baris barang masuknya; yang diubah selalu satu. Jadi formnya dikembalikan
+   * ke satu produk dan "Tambah produk" disembunyikan — kalau dibiarkan, ia
+   * terbaca seolah produk bisa diselipkan ke retur yang sudah tercatat,
+   * padahal yang terjadi baris baru. */
+  rtBaris = [barisReturBaru()];
+  const b = rtBaris[0];
+  b.cari       = r.nama || "";
+  b.sku        = r.sku || "";
+  b.barcode    = r.barcode || "";
+  b.nama       = r.nama || "";
+  b.jumlah     = r.jumlah;
+  b.status     = r.status;
+  b.keterangan = r.keterangan || "";
+  gambarBarisRetur();
+
+  const tambah = $("rtTambah");
+  if(tambah) tambah.style.display = "none";
+
   $("rtSubmit").innerHTML = svgIcon("check") + "Simpan perubahan";
   $("rtBatal").style.display = "";
   $("rtForm").scrollIntoView({ behavior:"smooth", block:"start" });
@@ -2956,36 +3136,55 @@ function editRetur(id){
 
 function batalEditRetur(){
   editReturId = null;
-  $("rtForm").reset();
+  const form = $("rtForm");
+  if(form) form.reset();
   $("rtTanggal").value = todayISO();
-  $("rtJumlah").value = 1;
-  $("rtPicker").value = "";
+
+  rtBaris = [barisReturBaru()];
+  gambarBarisRetur();
+
+  const tambah = $("rtTambah");
+  if(tambah) tambah.style.display = "";
+
   $("rtSubmit").innerHTML = svgIcon("plus") + "Catat retur";
   $("rtBatal").style.display = "none";
 }
 
 async function submitRetur(e){
   e.preventDefault();
+  bacaBarisRetur();
+
+  const items = rtBaris.map(function(b){
+    return { sku:b.sku, barcode:b.barcode, nama:b.nama,
+             jumlah:Number(b.jumlah), status:b.status, keterangan:b.keterangan };
+  });
+
+  /* Yang diperiksa di sini hanya yang bisa dipastikan tanpa bertanya ke
+   * server: ada identitas barangnya, dan qty-nya masuk akal. Barang kembar
+   * TIDAK diperiksa di sini — kembar tidaknya ditentukan master_id, dan hanya
+   * server yang bisa mencarinya. Dua aturan yang mirip tapi tak pernah sama
+   * persis justru sumber bug. */
+  for(let i = 0; i < items.length; i++){
+    const it = items[i];
+    const awalan = items.length > 1 ? "Produk " + (i + 1) + ": " : "";
+    if(!it.sku && !it.barcode){
+      toast(awalan + "Isi SKU atau barcode barangnya dulu.", "err");
+      fokusBarisRetur(i);
+      return;
+    }
+    if(!it.jumlah || it.jumlah < 1){
+      toast(awalan + "Qty minimal 1.", "err");
+      fokusBarisRetur(i);
+      return;
+    }
+  }
+
   const body = {
     tanggal:    $("rtTanggal").value || todayISO(),
     no_pesanan: $("rtNoPesanan").value.trim(),
-    sku:        $("rtSku").value.trim(),
-    barcode:    $("rtBarcode").value.trim(),
-    nama:       $("rtNama").value.trim(),
-    jumlah:     Number($("rtJumlah").value),
-    status:     $("rtStatus").value,
-    keterangan: $("rtKet").value.trim()
+    items:      items
   };
   if(editReturId) body.id = editReturId;
-
-  if(!body.sku && !body.barcode){
-    toast("Isi SKU atau barcode barangnya dulu.", "err");
-    return;
-  }
-  if(!body.jumlah || body.jumlah < 1){
-    toast("Qty minimal 1.", "err");
-    return;
-  }
 
   const tombol = $("rtSubmit");
   if(tombol) tombol.disabled = true;
@@ -3007,7 +3206,7 @@ async function submitRetur(e){
 
 async function hapusRetur(id){
   const r = returRows.find(x => x.id === id);
-  const ikutStok = r && r.status === returStatusMasuk;
+  const ikutStok = r && returIkutStok(r.status);
   const ya = await konfirmasi(
     "Hapus retur ini?",
     ikutStok
