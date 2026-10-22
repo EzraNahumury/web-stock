@@ -9,6 +9,103 @@ berubah**, dan **bagaimana memastikannya jalan**.
 
 ---
 
+## 22 Oktober 2026 (sore) — menu Barang deadstok
+
+Menu baru di grup **Operasional**, di antara Retur dan Laporan stok opname.
+Isinya barang yang **ada di gudang tapi tidak bisa dijual**, dengan dua
+kategori yang diminta gudang:
+
+- **Barang Rusak**
+- **Barang Belum Siap Jual** (belum dipacking, belum dilabeli, dan sejenisnya)
+
+### Mencatat deadstok TIDAK mengurangi stok
+
+Ini keputusan rancangan yang paling penting di sini, jadi disebut di layarnya
+juga. Barang rusak dan barang yang belum siap jual **masih berada di rak**, dan
+stok opname menghitung rak. Kalau mencatat deadstok langsung memotong
+`stok_akhir`, setiap opname akan melaporkan **selisih palsu** tepat pada
+barang-barang itu — dan justru laporan itulah yang paling dipercaya gudang.
+
+Yang sebenarnya dibutuhkan bukan "stoknya berkurang", melainkan "dari sekian
+stok, berapa yang benar-benar bisa dijual". Angka itu dihitung saat
+ditampilkan, dan kolomnya ditaruh persis di samping Stok:
+
+```
+siap jual = stok akhir − SUM(deadstok yang masih tertahan)
+```
+
+Jadi tidak ada baris ledger yang dikarang, dan opname tetap cocok dengan rak.
+Angka siap jual yang jadi **minus** tidak disembunyikan — ia dicetak merah,
+karena itu tanda stok sistemnya yang perlu diperiksa.
+
+### Tiga keadaan, satu yang menggerakkan stok
+
+| Keadaan | Artinya | Stok |
+|---|---|---|
+| **Masih tertahan** | rusak / belum siap, masih di rak | tidak bergerak |
+| **Sudah siap jual** | sudah diperbaiki atau sudah siap | tidak bergerak |
+| **Dibuang** | barangnya benar-benar dibuang | **berkurang** |
+
+Hanya "Dibuang" yang menyentuh stok, dan sentuhnya lewat **ledger biasa**: satu
+baris barang keluar berketerangan `Deadstok Dibuang` (terkunci, sama seperti
+"Retur Masuk"). Dengan begitu Riwayat, Dashboard, dan stok opname melihat hal
+yang sama — bukan angka tersendiri yang hanya diketahui satu layar.
+
+Karena memakai ledger biasa, aturannya ikut aturan Barang keluar: **tidak boleh
+membuang melebihi stok yang tersedia**. Pemeriksaannya dilakukan per barang dan
+**sebelum** transaksi, bukan per baris di dalamnya — beberapa baris bisa
+menunjuk barang yang sama, masing-masing muat tapi jumlahnya tidak.
+
+Membatalkan pembuangan menghidupkan kembali baris barang keluar yang **sama**,
+bukan membuat yang baru, jadi status yang bolak-balik tidak menumpuk sampah
+terhapus. Menghapus catatan yang sudah dibuang ikut menghapus baris barang
+keluarnya, supaya stok tidak tetap berkurang sementara catatan yang
+menerangkannya sudah hilang.
+
+### Yang boleh dikerjakan siapa
+
+| Tindakan | Operator | Admin |
+|---|---|---|
+| Melihat | ya | ya |
+| Mencatat deadstok baru | **ya** | ya |
+| Memindahkan keadaan (termasuk membuang) | **ya** | ya |
+| Mengubah catatan yang sudah tersimpan | tidak | ya |
+| Menghapus | tidak | ya |
+
+Operator boleh mencatat dan memindahkan keadaan karena dialah yang memegang
+barangnya dan yang tahu barang itu sudah siap jual atau sudah dibuang.
+Mengubah catatan yang sudah tersimpan tetap admin: baris yang sudah "dibuang"
+memegang baris barang keluar, jadi mengubah qty-nya menggeser stok.
+
+Barang yang **belum terdaftar di master** boleh dicatat, tapi **tidak bisa
+ditandai dibuang**: tanpa `master_id`, baris barang keluarnya tidak
+menggerakkan stok apa pun dan hanya jadi baris yatim yang menyesatkan.
+Penolakannya terang, bukan diam-diam dilewati.
+
+### Ikut diperbaiki saat membangunnya
+
+`menuLaporan()` mengembalikan `null` untuk jenis laporan yang tidak terdaftar,
+dan `pdf.php` **melewati pemeriksaan hak akses sama sekali** kalau nilainya
+null. Jadi laporan baru yang lupa didaftarkan di sana bisa diunduh siapa pun
+yang login, tanpa memandang menu yang dia punya. `deadstok` didaftarkan, dan
+ujinya sekarang menegaskan akun tanpa menu Barang deadstok ditolak 403 saat
+mengunduh PDF-nya.
+
+Aturan "cari barcode dulu, baru SKU" yang dipakai Retur dipindah ke
+`cariMasterBarcodeAtauSku()` di `includes/helpers.php` dan dipakai bersama,
+bukan disalin. Dua salinan aturan yang sama akan menyimpang cepat atau lambat,
+dan selisihnya muncul sebagai barang yang dikenali di satu layar tapi tidak di
+layar lain. `cariMasterReturn()` tetap ada sebagai nama lama yang meneruskan.
+
+### Yang sengaja BELUM diubah
+
+Dashboard dan Riwayat masih memakai `stok_akhir`, bukan angka siap jual.
+Mengubahnya akan menggeser angka "Perlu order" yang setiap hari dilihat gudang,
+dan itu keputusan tersendiri — bukan efek samping dari menambah satu menu.
+Katakan kalau memang mau diikutkan.
+
+---
+
 ## 22 Oktober 2026 — penanda Accurate punya keadaan ketiga
 
 ### "Tidak masuk"

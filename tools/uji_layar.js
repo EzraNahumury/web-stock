@@ -133,7 +133,7 @@ vm.createContext(ctx);
  * layar yang diuji sebenarnya tetap dashboard. */
 ctx.window.APP_USER = {
     id: 1, username: 'admin', nama_lengkap: 'Admin', role: 'admin', boleh_tulis: true,
-    akses: ['dashboard', 'masuk', 'keluar', 'riwayat', 'pertukaran', 'retur', 'opname',
+    akses: ['dashboard', 'masuk', 'keluar', 'riwayat', 'pertukaran', 'retur','deadstok', 'opname',
             'master', 'kategori', 'minimal', 'ket_masuk', 'ket_keluar', 'ket_retur', 'pengguna',
             'aktivitas'],
 };

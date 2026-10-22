@@ -369,6 +369,43 @@ function cariMasterBySku(string $sku, int $batas = 2): array
 }
 
 /**
+ * Cari barang lewat barcode, lalu SKU sebagai cadangan.
+ *
+ * Lembar kerja gudang — baik retur maupun catatan barang rusak — ditulis per
+ * SKU, bukan barcode; kolom barcodenya sering kosong. SKU TIDAK dijamin unik,
+ * jadi yang pertama dipakai dan pemanggil diberi tahu bila ada lebih dari satu,
+ * supaya bisa meneruskan peringatannya ke petugas.
+ *
+ * Satu implementasi dipakai bersama beberapa menu dengan sengaja: dua salinan
+ * aturan "cari barcode dulu, baru SKU" akan menyimpang cepat atau lambat, dan
+ * selisihnya muncul sebagai barang yang dikenali di satu layar tapi tidak di
+ * layar lain.
+ *
+ * @return array{master:?array, ganda:bool}
+ */
+function cariMasterBarcodeAtauSku(string $barcode, string $sku): array
+{
+    if ($barcode !== '') {
+        $m = cariMasterByBarcode($barcode);
+        if ($m !== null) {
+            return ['master' => $m, 'ganda' => false];
+        }
+    }
+    if ($sku !== '') {
+        $rows = dbAll(
+            "SELECT * FROM master_barang
+              WHERE deleted_at IS NULL AND sku <> '' AND sku = ?
+              ORDER BY id LIMIT 2",
+            [$sku]
+        );
+        if ($rows) {
+            return ['master' => $rows[0], 'ganda' => count($rows) > 1];
+        }
+    }
+    return ['master' => null, 'ganda' => false];
+}
+
+/**
  * Bentuk metadata paginasi yang konsisten untuk semua endpoint list.
  */
 function metaPaginasi(int $total, int $page, int $perPage = PAGE_SIZE): array

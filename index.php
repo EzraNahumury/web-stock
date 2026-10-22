@@ -151,6 +151,9 @@ if ($inisial === '') {
   // lewat menu Master dan bisa berubah tanpa deploy ulang.
   window.KET_MASUK        = <?= json_encode(daftarKeterangan('masuk'), JSON_UNESCAPED_UNICODE) ?>;
   window.KET_KELUAR       = <?= json_encode(daftarKeterangan('keluar'), JSON_UNESCAPED_UNICODE) ?>;
+  // Keterangan barang keluar yang dipakai sistem saat deadstok dibuang; layar
+  // Barang deadstok menyebutnya apa adanya supaya tidak ada dua nama berbeda.
+  window.KET_DEADSTOK_BUANG = <?= json_encode(KET_DEADSTOK_BUANG, JSON_UNESCAPED_UNICODE) ?>;
 </script>
 <script src="assets/vendor/pdf.min.js"></script>
 <script src="<?= e(aset('assets/js/pdf-parser.js')) ?>"></script>

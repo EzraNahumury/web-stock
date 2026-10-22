@@ -3,7 +3,7 @@
  * GET api/export/pdf.php — ekspor laporan sebagai PDF.
  *
  * Parameter: jenis = dashboard | masuk | keluar | riwayat | pertukaran |
- *                    master | aktivitas | retur | opname
+ *                    master | aktivitas | retur | deadstok | opname
  *            filter mengikuti layar asalnya, jadi yang tercetak sama dengan
  *            yang sedang dilihat:
  *              dashboard : q, kategori, status
@@ -68,7 +68,7 @@ $oleh  = (userSaatIni()['nama_lengkap'] ?? '-');
 // Pencetakan laporan ikut masuk jejak aktivitas. Di gudang, siapa mengunduh
 // data apa dan kapan sama pentingnya dengan siapa mengubahnya.
 if (in_array($jenis, ['dashboard', 'masuk', 'keluar', 'riwayat', 'pertukaran',
-                     'master', 'aktivitas', 'retur', 'opname'], true)) {
+                     'master', 'aktivitas', 'retur', 'deadstok', 'opname'], true)) {
     catatAktivitas('ekspor', 'laporan', null, array_filter([
         'jenis'  => $jenis,
         'dari'   => $dari,
@@ -598,6 +598,120 @@ switch ($jenis) {
             . number_format($belumAccurate, 0, ',', '.') . ' baris  ·  tidak masuk Accurate '
             . number_format($tidakAccurate, 0, ',', '.') . ' baris');
         $pdf->kirim('laporan-retur-' . date('Ymd-His') . '.pdf');
+        break;
+
+    /* ------------------------------------------------------------------ */
+    case 'deadstok':
+        require_once __DIR__ . '/../../includes/deadstok.php';
+
+        $where  = ['d.deleted_at IS NULL'];
+        $params = [];
+
+        if ($dari !== '' && ambilTanggal(['d' => $dari], 'd') !== null) {
+            $where[] = 'd.tanggal >= ?';
+            $params[] = $dari;
+        }
+        if ($sampai !== '' && ambilTanggal(['d' => $sampai], 'd') !== null) {
+            $where[] = 'd.tanggal <= ?';
+            $params[] = $sampai;
+        }
+        if ($q !== '') {
+            $where[] = '(d.nama LIKE ? OR d.barcode LIKE ? OR d.sku LIKE ? OR d.keterangan LIKE ?)';
+            $pola = polaLike($q);
+            for ($i = 0; $i < 4; $i++) {
+                $params[] = $pola;
+            }
+        }
+        /* Kategori dan keadaan dibandingkan dengan daftar tertutup lebih dulu.
+         * Kolomnya ENUM: nilai asing memicu galat, bukan hasil kosong. */
+        $kat = ambilStr($_GET, 'kategori', 20);
+        if (isset(KATEGORI_DEADSTOK[$kat])) {
+            $where[] = 'd.kategori = ?';
+            $params[] = $kat;
+        } else {
+            $kat = '';
+        }
+        $keadaan = ambilStr($_GET, 'status', 20);
+        if (isset(STATUS_DEADSTOK[$keadaan])) {
+            $where[] = 'd.status = ?';
+            $params[] = $keadaan;
+        } else {
+            $keadaan = '';
+        }
+
+        $data = dbAll(
+            'SELECT d.*, u.nama_lengkap AS oleh
+               FROM deadstok d LEFT JOIN users u ON u.id = d.user_id
+              WHERE ' . implode(' AND ', $where) . '
+              ORDER BY d.tanggal DESC, d.id DESC',
+            $params
+        );
+
+        $pdf = new PdfTabel('lanskap');
+        $pdf->siapkan('Laporan Barang Deadstok', [
+            'Dicetak'  => $waktu,
+            'Oleh'     => $oleh,
+            'Periode'  => ($dari !== '' || $sampai !== '')
+                ? (($dari !== '' ? $dari : 'awal') . ' s/d ' . ($sampai !== '' ? $sampai : 'kini'))
+                : 'Semua',
+            'Kategori' => $kat !== '' ? KATEGORI_DEADSTOK[$kat] : 'Semua',
+            'Keadaan'  => $keadaan !== '' ? STATUS_DEADSTOK[$keadaan] : 'Semua',
+            'Baris'    => count($data),
+        ], [
+            ['label' => 'Tanggal',     'lebar' => 9],
+            ['label' => 'SKU',         'lebar' => 9],
+            ['label' => 'Nama produk', 'lebar' => 27],
+            ['label' => 'Kategori',    'lebar' => 15],
+            ['label' => 'Qty',         'lebar' => 5, 'rata' => 'kanan'],
+            ['label' => 'Keadaan',     'lebar' => 12],
+            ['label' => 'Ket.',        'lebar' => 13],
+            ['label' => 'Dicatat oleh', 'lebar' => 10],
+        ]);
+
+        $unitTertahan = 0;
+        $unitBeres    = 0;
+        $unitDibuang  = 0;
+        foreach ($data as $r) {
+            $jml = (int)$r['jumlah'];
+            $st  = (string)$r['status'];
+            if ($st === 'tertahan') {
+                $unitTertahan += $jml;
+            } elseif ($st === 'beres') {
+                $unitBeres += $jml;
+            } else {
+                $unitDibuang += $jml;
+            }
+
+            /* Warnanya mengikuti arti keadaannya, bukan sekadar berbeda-beda:
+             * yang masih tertahan itu yang perlu dikerjakan (amber), yang sudah
+             * siap jual sudah beres (hijau), dan yang dibuang memang sudah
+             * selesai urusannya (abu-abu tua). */
+            $warnaKeadaan = ['tertahan' => [199, 127, 14],
+                             'beres'    => [14, 128, 96],
+                             'dibuang'  => [92, 110, 118]];
+
+            $pdf->baris([
+                date('d/m/Y', strtotime($r['tanggal'])),
+                $r['sku'],
+                $r['nama'],
+                [KATEGORI_DEADSTOK[$r['kategori']] ?? $r['kategori'],
+                 $r['kategori'] === 'rusak' ? [178, 58, 46] : [92, 110, 118]],
+                number_format($jml, 0, ',', '.'),
+                [STATUS_DEADSTOK[$st] ?? $st, $warnaKeadaan[$st] ?? [139, 155, 163]],
+                $r['keterangan'],
+                (string)($r['oleh'] ?? '-'),
+            ]);
+        }
+
+        /* Hanya "tertahan" yang benar-benar menahan barang dari penjualan.
+         * Menjumlahkan ketiganya membuat angkanya naik selamanya dan berhenti
+         * berarti apa pun. */
+        $pdf->ringkasan(count($data) . ' catatan  ·  masih tertahan '
+            . number_format($unitTertahan, 0, ',', '.') . ' pcs  ·  sudah siap jual '
+            . number_format($unitBeres, 0, ',', '.') . ' pcs  ·  dibuang '
+            . number_format($unitDibuang, 0, ',', '.') . ' pcs'
+            . '  ·  hanya yang dibuang yang mengurangi stok');
+        $pdf->kirim('laporan-deadstok-' . date('Ymd-His') . '.pdf');
         break;
 
     /* ------------------------------------------------------------------ */

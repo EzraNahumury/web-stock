@@ -270,5 +270,72 @@
     "page": 1,
     "per_page": 50,
     "total_pages": 1
+  },
+  "deadstok/list.php": {
+    "rows": [
+      {
+        "id": 1,
+        "tanggal": "2026-10-22",
+        "master_id": 1,
+        "barcode": "12132528",
+        "sku": "FI-0001",
+        "nama": "FINGERTAPE PUTIH",
+        "jumlah": 4,
+        "kategori": "rusak",
+        "keterangan": "jahitan lepas",
+        "status": "tertahan",
+        "keluar_id": null,
+        "selesai_at": null,
+        "created_at": "2026-10-22 09:00:00",
+        "kategori_barang": "FISIO",
+        "oleh": "Admin",
+        "selesai_oleh": null,
+        "stok_akhir": 41,
+        "tertahan": 4,
+        "siap": 37
+      },
+      {
+        "id": 2,
+        "tanggal": "2026-10-22",
+        "master_id": 2,
+        "barcode": "6936047373262",
+        "sku": "AO-0001",
+        "nama": "AOLIKES ANKLE CREAM",
+        "jumlah": 2,
+        "kategori": "belum_siap",
+        "keterangan": "belum dilabeli",
+        "status": "dibuang",
+        "keluar_id": 9,
+        "selesai_at": "2026-10-22 10:00:00",
+        "created_at": "2026-10-22 09:30:00",
+        "kategori_barang": "AOLIKES",
+        "oleh": "Admin",
+        "selesai_oleh": "Admin",
+        "stok_akhir": 199,
+        "tertahan": 0,
+        "siap": 199
+      }
+    ],
+    "unit_tertahan": 4,
+    "unit_beres": 0,
+    "unit_dibuang": 2,
+    "unit_rusak": 4,
+    "unit_belum_siap": 0,
+    "barang_tertahan": 1,
+    "kategori": "",
+    "status": "",
+    "kategori_options": {
+      "rusak": "Barang Rusak",
+      "belum_siap": "Barang Belum Siap Jual"
+    },
+    "status_options": {
+      "tertahan": "Masih tertahan",
+      "beres": "Sudah siap jual",
+      "dibuang": "Dibuang"
+    },
+    "total": 2,
+    "page": 1,
+    "per_page": 50,
+    "total_pages": 1
   }
 }

@@ -39,7 +39,7 @@ define('KATEGORI_OPTIONS', [
     'LAINNYA',   // penampung
 ]);
 define('KET_MASUK',  ['Barang Baru', 'Restock', 'Retur Masuk', 'Lainnya']);
-define('KET_KELUAR', ['Pesanan MP', 'Retur', 'Rusak / Reject', 'Lainnya']);
+define('KET_KELUAR', ['Pesanan MP', 'Retur', 'Rusak / Reject', 'Deadstok Dibuang', 'Lainnya']);
 
 // Status retur. Hanya "Lengkap" yang mengembalikan barang ke stok; sisanya
 // belum bisa diproses, jadi stoknya belum boleh ikut bertambah.
@@ -49,6 +49,23 @@ define('STATUS_RETUR_MASUK', 'Lengkap');
 // Keterangan yang dipakai baris barang_masuk hasil retur. Harus salah satu
 // dari KET_MASUK supaya lolos validasi yang sama dengan input manual.
 define('KET_RETUR_MASUK', 'Retur Masuk');
+
+/* Barang deadstok: ada di gudang, tapi tidak bisa dijual.
+ *
+ * Dua kategorinya dipaku di sini dan di skema, bukan jadi daftar yang bisa
+ * dikelola sendiri: keduanya diminta gudang sebagai dua hal yang berbeda, dan
+ * kode di atasnya memperlakukan keduanya berbeda pula.
+ *
+ * Mencatat deadstok TIDAK mengurangi stok — barangnya masih di rak, dan stok
+ * opname menghitung rak. Yang dihitung adalah angka "siap jual" saat
+ * ditampilkan. Hanya status "dibuang" yang menggerakkan stok, lewat satu baris
+ * barang keluar berketerangan KET_DEADSTOK_BUANG. */
+define('KATEGORI_DEADSTOK', ['rusak' => 'Barang Rusak', 'belum_siap' => 'Barang Belum Siap Jual']);
+define('STATUS_DEADSTOK', ['tertahan' => 'Masih tertahan', 'beres' => 'Sudah siap jual', 'dibuang' => 'Dibuang']);
+
+// Harus salah satu dari KET_KELUAR supaya lolos validasi yang sama dengan
+// input manual di menu Barang keluar.
+define('KET_DEADSTOK_BUANG', 'Deadstok Dibuang');
 
 // Keputusan atas selisih pada satu baris stok opname. Ini catatan keputusan,
 // bukan pemicu: menandai "Stok Disesuaikan" tidak mengubah stok sendiri.

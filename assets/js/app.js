@@ -399,6 +399,8 @@ const TABS = [
     ikon:'<polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>' },
   { id:"retur", label:"Retur", sub:"Barang kembali dari pembeli", grup:"Operasional",
     ikon:'<polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/>' },
+  { id:"deadstok", label:"Barang deadstok", sub:"Barang ada di gudang tapi belum bisa dijual", grup:"Operasional",
+    ikon:'<path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/>' },
   { id:"opname", label:"Laporan stok opname", sub:"Stok sistem dibanding hitungan fisik dan Accurate", grup:"Operasional",
     ikon:'<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>' },
 
@@ -623,7 +625,8 @@ function statCard(o){
     unit:   '<path d="M3 9h18M3 15h18"/><rect x="3" y="4" width="18" height="16" rx="2"/>',
     alert:  '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
     kosong: '<circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
-    tag:    '<path d="M20.6 13.4L12 22l-9-9V4a1 1 0 0 1 1-1h9l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.2"/>'
+    tag:    '<path d="M20.6 13.4L12 22l-9-9V4a1 1 0 0 1 1-1h9l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.2"/>',
+    trash:  '<path d="M3 6h18"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/>'
   }[o.ikon] || "";
 
   return '<div class="stat-card' + (o.klik ? ' bisa-klik' : '') + '"'
@@ -948,7 +951,11 @@ async function refreshDashboard(){
 // Disuntikkan index.php dari config/config.php — satu sumber kebenaran.
 // Nilai cadangan hanya dipakai bila halaman dibuka tanpa suntikan server.
 const KET_MASUK  = window.KET_MASUK  || ["Barang Baru","Restock","Retur Masuk","Lainnya"];
-const KET_KELUAR = window.KET_KELUAR || ["Pesanan MP","Retur","Rusak / Reject","Lainnya"];
+const KET_KELUAR = window.KET_KELUAR || ["Pesanan MP","Retur","Rusak / Reject","Deadstok Dibuang","Lainnya"];
+/* Keterangan barang keluar yang dipakai sistem saat deadstok dibuang. Satu
+ * nama yang sama dipegang server dan layar; cadangannya hanya supaya layar
+ * tidak pecah bila index.php yang termuat masih versi lama dari cache. */
+const KET_DEADSTOK_BUANG = window.KET_DEADSTOK_BUANG || "Deadstok Dibuang";
 
 function renderTransaksiTab(kind){
   const ketOptions = kind==="masuk" ? KET_MASUK : KET_KELUAR;
@@ -3279,6 +3286,409 @@ async function hapusRetur(id){
 }
 
 /* ================================================================== */
+/* Barang deadstok                                                     */
+/* ================================================================== */
+
+let dsFilter = { q:"", kategori:"", status:"", dari:"", sampai:"", page:1 };
+let dsRows   = [];
+let editDsId = null;
+/* Daftar pilihannya datang dari server supaya layar dan validasi tidak pernah
+ * memegang daftar yang berbeda; nilai di bawah hanya cadangan untuk gambar
+ * pertama, sebelum jawaban pertama tiba. */
+let dsKategoriOpsi = { rusak:"Barang Rusak", belum_siap:"Barang Belum Siap Jual" };
+let dsStatusOpsi   = { tertahan:"Masih tertahan", beres:"Sudah siap jual", dibuang:"Dibuang" };
+
+const DS_KELAS = { tertahan:"rendah", beres:"aman", dibuang:"abai" };
+
+/**
+ * Barang yang ADA di gudang tapi TIDAK BISA DIJUAL.
+ *
+ * Mencatat deadstok sengaja TIDAK mengurangi stok: barangnya masih di rak, dan
+ * stok opname menghitung rak. Yang berkurang angka "siap jual", yang dihitung
+ * saat ditampilkan. Stok baru benar-benar turun kalau barangnya ditandai
+ * dibuang — dan turunnya lewat baris barang keluar biasa, supaya Riwayat,
+ * Dashboard, dan opname melihat hal yang sama.
+ */
+function renderDeadstok(){
+  const bisaTulis = bolehTulis();
+
+  let html = "";
+  if(!bisaTulis){
+    html += '<div class="info-box">Akun ini hanya bisa melihat daftar barang deadstok.</div>';
+  } else if(!bolehUbahCatatan()){
+    html += '<div class="info-box">Mencatat deadstok baru dan memindahkan keadaannya boleh. '
+      + 'Mengubah atau menghapus catatan yang sudah tersimpan hanya bisa dilakukan admin, '
+      + 'karena catatan yang sudah ditandai dibuang ikut menggeser stok.</div>';
+  }
+
+  if(bisaTulis){
+    html += '<form class="form-card" id="dsForm" onsubmit="submitDeadstok(event)">'
+      + '<div class="form-grid">'
+      + '<div><label class="field-label" for="dsTanggal">Tanggal</label>'
+        + '<input type="date" id="dsTanggal" value="' + todayISO() + '"></div>'
+      + '<div><label class="field-label" for="dsKategori">Kategori</label>'
+        + '<select id="dsKategori"></select></div>'
+      + '<div class="span2 picker-wrap"><label class="field-label" for="dsPicker">Cari barang (nama / SKU / barcode)</label>'
+        + '<input type="text" id="dsPicker" placeholder="Ketik nama, SKU, atau barcode&hellip;" autocomplete="off"'
+          + ' oninput="onDeadstokPicker()" onfocus="onDeadstokPicker()">'
+        + '<div id="dsPickerList" class="picker-list" style="display:none"></div></div>'
+      + '<div><label class="field-label" for="dsSku">SKU</label>'
+        + '<input type="text" id="dsSku" class="mono" maxlength="50" placeholder="Contoh: AV-0063"></div>'
+      + '<div><label class="field-label" for="dsBarcode">Barcode</label>'
+        + '<input type="text" id="dsBarcode" class="mono" maxlength="50" placeholder="Opsional"></div>'
+      + '<div class="span2"><label class="field-label" for="dsNama">Nama produk</label>'
+        + '<input type="text" id="dsNama" maxlength="255" placeholder="Terisi sendiri bila barangnya dikenal"></div>'
+      + '<div><label class="field-label" for="dsJumlah">Qty</label>'
+        + '<input type="number" id="dsJumlah" min="1" value="1"></div>'
+      + '<div class="span2"><label class="field-label" for="dsKet">Ket.</label>'
+        + '<input type="text" id="dsKet" maxlength="255" placeholder="Contoh: jahitan lepas, belum dilabeli"></div>'
+      + '</div>'
+      + '<div style="display:flex; gap:8px;">'
+        + '<button type="submit" class="btn" id="dsSubmit">' + svgIcon("plus") + 'Catat deadstok</button>'
+        + '<button type="button" class="btn ghost" id="dsBatal" style="display:none" onclick="batalEditDeadstok()">'
+          + svgIcon("x") + 'Batal</button>'
+      + '</div></form>';
+  }
+
+  html += '<div class="toolbar">'
+    + '<div class="search-wrap">' + svgIcon("search")
+      + '<input type="text" id="dsCari" placeholder="Cari nama, SKU, barcode, atau ket.&hellip;" oninput="onDeadstokCari()"></div>'
+    + '<select id="dsFKategori" onchange="onDeadstokFilter()"><option value="">Semua kategori</option></select>'
+    + '<select id="dsFStatus" onchange="onDeadstokFilter()"><option value="">Semua keadaan</option></select>'
+    + '<div class="daterange">Dari <input type="date" id="dsDari" onchange="onDeadstokFilter()">'
+      + ' s/d <input type="date" id="dsSampai" onchange="onDeadstokFilter()"></div>'
+    + '<button type="button" class="btn ghost" onclick="resetDeadstok()">' + svgIcon("x") + 'Reset</button>'
+    + '<a class="btn ghost" id="dsUnduh" href="api/export/pdf.php?jenis=deadstok">'
+      + svgIcon("download") + 'Unduh PDF</a>'
+    + '</div>'
+    + '<div class="stat-row" id="dsRingkas"></div>'
+    + '<div id="dsHasil"></div>';
+
+  $("content").innerHTML = html;
+  isiPilihanDeadstok();
+  $("dsCari").value   = dsFilter.q;
+  $("dsDari").value   = dsFilter.dari;
+  $("dsSampai").value = dsFilter.sampai;
+  refreshDeadstok();
+}
+
+/** Isi ketiga dropdown dari daftar milik server. */
+function isiPilihanDeadstok(){
+  const opsi = (peta) => Object.keys(peta).map(k =>
+    '<option value="' + esc(k) + '">' + esc(peta[k]) + '</option>').join("");
+
+  const form = $("dsKategori");
+  if(form){
+    form.innerHTML = opsi(dsKategoriOpsi);
+    form.value = dsFilter.kategori || Object.keys(dsKategoriOpsi)[0];
+  }
+  const fk = $("dsFKategori");
+  if(fk){
+    fk.innerHTML = '<option value="">Semua kategori</option>' + opsi(dsKategoriOpsi);
+    fk.value = dsFilter.kategori;
+  }
+  const fs = $("dsFStatus");
+  if(fs){
+    fs.innerHTML = '<option value="">Semua keadaan</option>' + opsi(dsStatusOpsi);
+    fs.value = dsFilter.status;
+  }
+}
+
+const onDeadstokPicker = debounce(async function(){
+  const el = $("dsPicker"), listEl = $("dsPickerList");
+  if(!el || !listEl) return;
+  const q = el.value.trim();
+  if(!q){ listEl.style.display = "none"; listEl.innerHTML = ""; return; }
+
+  let data;
+  try{ data = await API.masterPick(q); }catch(e){ return; }
+  if(el.value.trim() !== q) return;   // ketikan sudah berubah saat respons tiba
+
+  if(!data.rows.length){
+    listEl.innerHTML = '<div class="picker-item">Tidak ditemukan — isi manual di bawah.</div>';
+    listEl.style.display = "block";
+    return;
+  }
+  listEl.innerHTML = data.rows.map(m =>
+    '<div class="picker-item" data-bc="' + esc(m.barcode) + '" data-sku="' + esc(m.sku || "") + '"'
+    + ' data-nama="' + esc(m.nama) + '" onclick="pilihBarangDeadstok(this)">'
+    + '<div>' + esc(m.nama) + '</div>'
+    + '<div class="sub">' + esc(m.sku || "-") + ' · ' + esc(m.barcode) + '</div></div>'
+  ).join("");
+  listEl.style.display = "block";
+}, 250);
+
+function pilihBarangDeadstok(el){
+  const nama = el.getAttribute("data-nama") || "";
+  $("dsBarcode").value = el.getAttribute("data-bc") || "";
+  $("dsSku").value     = el.getAttribute("data-sku") || "";
+  $("dsNama").value    = nama;
+  $("dsPicker").value  = nama;
+  $("dsPickerList").style.display = "none";
+}
+
+const onDeadstokCari = debounce(function(){
+  dsFilter.q = $("dsCari").value;
+  dsFilter.page = 1;
+  refreshDeadstok();
+}, 300);
+
+function onDeadstokFilter(){
+  dsFilter.q        = $("dsCari").value;
+  dsFilter.kategori = $("dsFKategori").value;
+  dsFilter.status   = $("dsFStatus").value;
+  dsFilter.dari     = $("dsDari").value;
+  dsFilter.sampai   = $("dsSampai").value;
+  dsFilter.page     = 1;
+  refreshDeadstok();
+}
+
+function resetDeadstok(){
+  dsFilter = { q:"", kategori:"", status:"", dari:"", sampai:"", page:1 };
+  $("dsCari").value = ""; $("dsFKategori").value = ""; $("dsFStatus").value = "";
+  $("dsDari").value = ""; $("dsSampai").value = "";
+  refreshDeadstok();
+}
+
+function dsGoPage(p){ dsFilter.page = p; refreshDeadstok(); }
+
+async function refreshDeadstok(){
+  const wadah = $("dsHasil");
+  if(!wadah) return;
+
+  let d;
+  try{
+    d = await API.get("deadstok/list.php", {
+      q: dsFilter.q, kategori: dsFilter.kategori, status: dsFilter.status,
+      dari: dsFilter.dari, sampai: dsFilter.sampai, page: dsFilter.page
+    });
+  }catch(e){
+    tampilGalat(e);
+    wadah.innerHTML = '<div class="warn-box"><b>Data tidak bisa dimuat.</b><br>'
+      + esc(rapikanPesanGalat(e)) + rincianGalat(e) + '</div>';
+    return;
+  }
+
+  if(d.kategori_options) dsKategoriOpsi = d.kategori_options;
+  if(d.status_options)   dsStatusOpsi   = d.status_options;
+  isiPilihanDeadstok();
+
+  dsRows = d.rows;
+  const unduh = $("dsUnduh");
+  if(unduh){
+    unduh.href = "api/export/pdf.php?jenis=deadstok"
+      + "&q=" + encodeURIComponent(dsFilter.q)
+      + "&kategori=" + encodeURIComponent(dsFilter.kategori)
+      + "&status=" + encodeURIComponent(dsFilter.status)
+      + "&dari=" + encodeURIComponent(dsFilter.dari)
+      + "&sampai=" + encodeURIComponent(dsFilter.sampai);
+  }
+
+  const ringkas = $("dsRingkas");
+  if(ringkas){
+    ringkas.innerHTML =
+        statCard({ label:"Tertahan", nilai:d.unit_tertahan, ikon:"alert", nada:"amber",
+                   kaki:"pcs tidak bisa dijual sekarang" })
+      + statCard({ label:"Barang Rusak", nilai:d.unit_rusak, ikon:"alert", nada:"",
+                   kaki:"pcs masih tertahan" })
+      + statCard({ label:"Belum Siap Jual", nilai:d.unit_belum_siap, ikon:"kosong", nada:"",
+                   kaki:"pcs masih tertahan" })
+      + statCard({ label:"Sudah siap jual", nilai:d.unit_beres, ikon:"sku", nada:"safe", tone:"safe",
+                   kaki:"pcs sudah kembali bisa dijual" })
+      + statCard({ label:"Dibuang", nilai:d.unit_dibuang, ikon:"trash", nada:"",
+                   kaki:"pcs sudah keluar dari stok" });
+    ringkas.querySelectorAll(".stat-value[data-nilai]").forEach(n =>
+      Grafik.angkaNaik(n, Number(n.getAttribute("data-nilai"))));
+  }
+
+  const bisaTulis = bolehTulis();
+
+  let baris = d.rows.map(r => {
+    const kelas = DS_KELAS[r.status] || "belum_diatur";
+    const jejak = r.status !== "tertahan" && r.selesai_at
+      ? '<div class="item-sub" style="font-family:Inter">' + esc(pecahWaktu(r.selesai_at).tgl)
+        + (r.selesai_oleh ? ' · ' + esc(r.selesai_oleh) : '') + '</div>'
+      : '';
+
+    return '<tr>'
+      + '<td style="white-space:nowrap">' + fmtDate(r.tanggal) + '</td>'
+      + '<td class="mono" style="font-size:11px; color:var(--slateLo)">' + esc(r.sku || "-") + '</td>'
+      + '<td><div class="item-name">' + esc(r.nama)
+        + (r.master_id === null ? '<span class="flag-gen">TAK DIKENAL</span>' : '') + '</div>'
+        + '<div class="item-sub">' + esc(r.barcode || "-") + '</div></td>'
+      + '<td><span class="badge ' + (r.kategori === "rusak" ? "kritis" : "netral") + '">'
+        + esc(dsKategoriOpsi[r.kategori] || r.kategori) + '</span></td>'
+      + '<td class="num" style="font-weight:700">' + fmtNum(r.jumlah) + '</td>'
+      /* Stok dan siap jual ditaruh bersebelahan dengan sengaja: selisih
+       * keduanya persis yang dijelaskan layar ini. */
+      + '<td class="num" style="color:var(--slateLo)">' + (r.stok_akhir === null ? '-' : fmtNum(r.stok_akhir)) + '</td>'
+      + '<td class="num" style="font-weight:700'
+        + (r.siap !== null && r.siap < 0 ? '; color:var(--danger)' : '') + '">'
+        + (r.siap === null ? '-' : fmtNum(r.siap)) + '</td>'
+      + '<td>' + (bisaTulis
+          ? '<select class="sel-tanda ' + kelas + '" onchange="pindahDeadstok(' + r.id + ', this.value)"'
+            + ' aria-label="Keadaan deadstok ' + esc(r.nama) + '">'
+            + Object.keys(dsStatusOpsi).map(k => '<option value="' + esc(k) + '"'
+                + (k === r.status ? ' selected' : '') + '>' + esc(dsStatusOpsi[k]) + '</option>').join("")
+            + '</select>'
+          : '<span class="badge ' + kelas + '">' + esc(dsStatusOpsi[r.status] || r.status) + '</span>')
+        + jejak + '</td>'
+      + '<td style="font-size:11.5px; color:var(--slate)">' + esc(r.keterangan || "-") + '</td>'
+      + (adaKolomAksi()
+          ? '<td class="num" style="white-space:nowrap">'
+            + (bolehUbahCatatan()
+                ? '<button class="icon-btn" onclick="editDeadstok(' + r.id + ')" aria-label="Ubah catatan deadstok">' + svgIcon("edit") + '</button>'
+                : '')
+            + (bolehHapus()
+                ? '<button class="icon-btn bahaya" onclick="hapusDeadstok(' + r.id + ')" aria-label="Hapus catatan deadstok">' + svgIcon("trash") + '</button>'
+                : '')
+            + '</td>'
+          : '')
+      + '</tr>';
+  }).join("");
+
+  const jmlKolom = adaKolomAksi() ? 10 : 9;
+  if(!d.rows.length){
+    baris = '<tr class="empty-row"><td colspan="' + jmlKolom + '">Belum ada barang deadstok pada penyaring ini.</td></tr>';
+  }
+
+  wadah.innerHTML =
+    '<div class="info-box">Barang yang <b>ada di gudang tapi tidak bisa dijual</b>. '
+    + 'Mencatatnya di sini <b>tidak mengurangi stok</b> — barangnya masih di rak, jadi stok opname '
+    + 'harus tetap menemukannya. Yang berkurang kolom <b>siap jual</b>. '
+    + 'Stok baru benar-benar turun kalau keadaannya diubah jadi <b>Dibuang</b>, lewat barang keluar '
+    + '"' + esc(KET_DEADSTOK_BUANG) + '".</div>'
+    + '<div class="table-card"><table style="min-width:1060px"><thead><tr>'
+    + ["Tanggal","SKU","Nama produk","Kategori","Qty","Stok","Siap jual","Keadaan","Ket."]
+        .concat(adaKolomAksi()?[""]:[])
+        .map((h,i)=>'<th'+([4,5,6].indexOf(i)>=0?' class="num"':'')+'>'+esc(h)+'</th>').join("")
+    + '</tr></thead><tbody>' + baris + '</tbody></table>'
+    + paginationBar(d.total, d.page, d.total_pages, "dsGoPage")
+    + '</div>';
+}
+
+/** Pindahkan keadaan satu baris. Hanya "Dibuang" yang menggerakkan stok. */
+async function pindahDeadstok(id, status){
+  const r = dsRows.find(x => x.id === id);
+
+  if(status === "dibuang"){
+    const ok = await konfirmasi(
+      "Tandai dibuang?",
+      (r ? '"' + r.nama + '" sebanyak ' + fmtNum(r.jumlah) + ' pcs. ' : "")
+        + "Ini SATU-SATUNYA keadaan yang mengurangi stok: akan dibuat satu baris barang keluar "
+        + '"' + KET_DEADSTOK_BUANG + '". Bisa dibatalkan dengan mengembalikan keadaannya.',
+      "Ya, buang"
+    );
+    if(!ok){ refreshDeadstok(); return; }   // kembalikan pilihannya
+  }
+
+  setSaveStatus("saving");
+  try{
+    const res = await API.post("deadstok/status.php", { id: id, status: status });
+    setSaveStatus("ok");
+    toast(res.pesan || "Keadaan diperbarui.");
+    (res.peringatan || []).forEach(p => toast(p, "err"));
+    refreshDeadstok();
+  }catch(e){
+    tampilGalat(e);
+    refreshDeadstok();   // kembalikan pilihannya ke keadaan yang benar-benar tersimpan
+  }
+}
+
+function editDeadstok(id){
+  const r = dsRows.find(x => x.id === id);
+  if(!r) return;
+  editDsId = id;
+  $("dsTanggal").value  = r.tanggal;
+  $("dsKategori").value = r.kategori;
+  $("dsSku").value      = r.sku || "";
+  $("dsBarcode").value  = r.barcode || "";
+  $("dsNama").value     = r.nama || "";
+  $("dsPicker").value   = r.nama || "";
+  $("dsJumlah").value   = r.jumlah;
+  $("dsKet").value      = r.keterangan || "";
+  $("dsSubmit").innerHTML = svgIcon("check") + "Simpan perubahan";
+  $("dsBatal").style.display = "";
+  $("dsForm").scrollIntoView({ behavior:"smooth", block:"start" });
+}
+
+function batalEditDeadstok(){
+  editDsId = null;
+  const form = $("dsForm");
+  if(form) form.reset();
+  $("dsTanggal").value = todayISO();
+  $("dsJumlah").value  = 1;
+  $("dsPicker").value  = "";
+  isiPilihanDeadstok();
+  $("dsSubmit").innerHTML = svgIcon("plus") + "Catat deadstok";
+  $("dsBatal").style.display = "none";
+}
+
+async function submitDeadstok(e){
+  e.preventDefault();
+  const body = {
+    tanggal:    $("dsTanggal").value || todayISO(),
+    kategori:   $("dsKategori").value,
+    sku:        $("dsSku").value.trim(),
+    barcode:    $("dsBarcode").value.trim(),
+    nama:       $("dsNama").value.trim(),
+    jumlah:     Number($("dsJumlah").value),
+    keterangan: $("dsKet").value.trim()
+  };
+  if(editDsId) body.id = editDsId;
+
+  if(!body.sku && !body.barcode){
+    toast("Isi SKU atau barcode barangnya dulu.", "err");
+    return;
+  }
+  if(!body.jumlah || body.jumlah < 1){
+    toast("Qty minimal 1.", "err");
+    return;
+  }
+
+  const tombol = $("dsSubmit");
+  if(tombol) tombol.disabled = true;
+  setSaveStatus("saving");
+  try{
+    const res = await API.post("deadstok/save.php", body);
+    setSaveStatus("ok");
+    toast(res.pesan || "Tersimpan.");
+    (res.peringatan || []).forEach(p => toast(p, "err"));
+    batalEditDeadstok();
+    dsFilter.page = 1;
+    refreshDeadstok();
+  }catch(err){
+    tampilGalat(err);
+  }finally{
+    if(tombol) tombol.disabled = false;
+  }
+}
+
+async function hapusDeadstok(id){
+  const r = dsRows.find(x => x.id === id);
+  const ikutStok = r && r.status === "dibuang";
+
+  const ok = await konfirmasi(
+    "Hapus catatan deadstok ini?",
+    (r ? '"' + r.nama + '" sebanyak ' + fmtNum(r.jumlah) + ' pcs. ' : "")
+      + (ikutStok
+          ? "Baris barang keluar hasil pembuangannya ikut dihapus, jadi STOK AKAN BERTAMBAH LAGI."
+          : "Stok tidak bergerak; yang berubah angka siap jualnya."),
+    "Ya, hapus"
+  );
+  if(!ok) return;
+
+  setSaveStatus("saving");
+  try{
+    const res = await API.post("deadstok/delete.php", { id: id });
+    setSaveStatus("ok");
+    toast(res.pesan || "Terhapus.");
+    (res.peringatan || []).forEach(p => toast(p, "err"));
+    refreshDeadstok();
+  }catch(e){ tampilGalat(e); }
+}
+
+/* ================================================================== */
 /* Laporan stok opname                                                */
 /* ================================================================== */
 let opnameSesiId = null;                                   // null = daftar sesi
@@ -5209,6 +5619,7 @@ function renderContent(){
   else if(tab==="riwayat") renderRiwayat();
   else if(tab==="pertukaran") renderPertukaran();
   else if(tab==="retur") renderRetur();
+  else if(tab==="deadstok") renderDeadstok();
   else if(tab==="opname") renderOpname();
   else if(tab==="aktivitas") renderAktivitas();
   else if(tab==="master") renderMaster();

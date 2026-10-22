@@ -83,7 +83,7 @@ vm.createContext(ctx);
  * akses" — dan ujinya akan lulus tanpa pernah melihat layar yang sebenarnya. */
 ctx.window.APP_USER = {
   id: 1, username: 'admin', nama_lengkap: 'Admin', role: 'admin', boleh_tulis: true,
-  akses: ['dashboard','masuk','keluar','riwayat','pertukaran','retur','opname',
+  akses: ['dashboard','masuk','keluar','riwayat','pertukaran','retur','deadstok','opname',
           'master','kategori','minimal','ket_masuk','ket_keluar','ket_retur','pengguna','aktivitas'],
 };
 ctx.window.CSRF_TOKEN = 'uji';
@@ -93,7 +93,7 @@ ctx.window.KET_KELUAR = ['Pesanan MP'];
 
 vm.runInContext(fs.readFileSync(path.join(akar, 'assets/js/api.js'), 'utf8') + ';globalThis.API = API;', ctx);
 const DIPAKAI = ['switchTab', 'renderContent', 'renderTransaksiTable', 'refreshRetur',
-                 'refreshKeterangan', 'refreshMinimal', 'ketJenis',
+                 'refreshKeterangan', 'refreshMinimal', 'refreshDeadstok', 'ketJenis',
                  'tambahBarisRetur', 'hapusBarisRetur'];
 vm.runInContext(
   fs.readFileSync(path.join(akar, 'assets/js/app.js'), 'utf8')
@@ -197,6 +197,34 @@ const semua = () => [...daftar.values()].map((e) => String(e.innerHTML || '')).j
   cek('menyebut "Mengembalikan barang ke stok"', /Mengembalikan barang ke stok/.test(htmlKet));
   await uji.refreshKeterangan();
   cek('lencana "Menambah stok" muncul', /Menambah stok/.test(isi('ketHasil')));
+
+  console.log('\n=== Barang deadstok ===');
+  uji.switchTab('deadstok');
+  await uji.refreshDeadstok();
+  const htmlDs = semua();
+  cek('ada dua kategori yang diminta gudang',
+      /Barang Rusak/.test(htmlDs) && /Barang Belum Siap Jual/.test(htmlDs));
+  cek('ada kolom Siap jual di samping Stok',
+      htmlDs.indexOf('Siap jual') >= 0 && htmlDs.indexOf('>Stok<') >= 0);
+  cek('keadaannya bisa dipilih tiga-tiganya',
+      htmlDs.indexOf('value="tertahan"') >= 0
+      && htmlDs.indexOf('value="beres"') >= 0
+      && htmlDs.indexOf('value="dibuang"') >= 0);
+  cek('keadaan tiap baris ikut terpilih',
+      htmlDs.indexOf('value="tertahan" selected') >= 0
+      && htmlDs.indexOf('value="dibuang" selected') >= 0);
+  cek('ada penyaring kategori dan keadaan',
+      /id="dsFKategori"/.test(htmlDs) && /id="dsFStatus"/.test(htmlDs));
+  /* Inti seluruh menu ini: mencatat deadstok TIDAK mengurangi stok, dan hanya
+   * "Dibuang" yang mengurangi. Kalau kalimat itu hilang dari layar, orang akan
+   * mengira stoknya sudah turun padahal belum. */
+  cek('layar menyatakan stok tidak berkurang',
+      htmlDs.indexOf('tidak mengurangi stok') >= 0);
+  cek('layar menyebut Dibuang sebagai yang menurunkan stok',
+      /Dibuang<\/b>/.test(htmlDs));
+  cek('kartu memisahkan kedua kategori',
+      isi('dsRingkas').indexOf('Barang Rusak') >= 0
+      && isi('dsRingkas').indexOf('Belum Siap Jual') >= 0);
 
   console.log('\n=== Master: Stok minimal ===');
   uji.switchTab('minimal');

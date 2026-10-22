@@ -94,30 +94,14 @@ function sinkronMasukRetur(PDO $pdo, array $r, ?int $masukId, ?bool $paksaMasuk 
 /**
  * Cari barang di master lewat barcode, lalu SKU sebagai cadangan.
  *
- * Lembar retur gudang ditulis per SKU, bukan barcode — kolom barcode
- * sering kosong. SKU tidak dijamin unik, jadi yang pertama dipakai dan
- * pemanggil diberi tahu bila ada lebih dari satu.
+ * Isinya pindah ke cariMasterBarcodeAtauSku() di includes/helpers.php ketika
+ * menu Barang deadstok membutuhkan aturan yang sama persis. Namanya
+ * dipertahankan di sini supaya pemanggil lama tidak perlu ikut diubah — yang
+ * penting aturannya tinggal satu salinan.
  *
  * @return array{master:?array, ganda:bool}
  */
 function cariMasterReturn(string $barcode, string $sku): array
 {
-    if ($barcode !== '') {
-        $m = cariMasterByBarcode($barcode);
-        if ($m !== null) {
-            return ['master' => $m, 'ganda' => false];
-        }
-    }
-    if ($sku !== '') {
-        $rows = dbAll(
-            "SELECT * FROM master_barang
-              WHERE deleted_at IS NULL AND sku <> '' AND sku = ?
-              ORDER BY id LIMIT 2",
-            [$sku]
-        );
-        if ($rows) {
-            return ['master' => $rows[0], 'ganda' => count($rows) > 1];
-        }
-    }
-    return ['master' => null, 'ganda' => false];
+    return cariMasterBarcodeAtauSku($barcode, $sku);
 }
