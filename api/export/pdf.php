@@ -502,11 +502,14 @@ switch ($jenis) {
         }
         // Penanda pembukuan Accurate — penyaringnya sama dengan di layar,
         // supaya laporan yang diunduh memuat persis yang sedang dilihat.
+        // 0 belum, 1 sudah, 2 sengaja tidak dimasukkan.
         $accurate = ambilStr($_GET, 'accurate', 10);
         if ($accurate === 'sudah') {
             $where[] = 'r.accurate = 1';
         } elseif ($accurate === 'belum') {
             $where[] = 'r.accurate = 0';
+        } elseif ($accurate === 'tidak') {
+            $where[] = 'r.accurate = 2';
         } else {
             $accurate = '';
         }
@@ -527,19 +530,34 @@ switch ($jenis) {
                 ? (($dari !== '' ? $dari : 'awal') . ' s/d ' . ($sampai !== '' ? $sampai : 'kini'))
                 : 'Semua',
             'Status'  => $status !== '' ? $status : 'Semua',
-            'Accurate' => $accurate !== '' ? $accurate : 'Semua',
+            'Accurate' => $accurate === 'tidak' ? 'tidak masuk'
+                : ($accurate !== '' ? $accurate : 'Semua'),
             'Baris'   => count($data),
         ], [
             ['label' => 'Tanggal',          'lebar' => 9],
             ['label' => 'No. Pesanan',      'lebar' => 16],
             ['label' => 'SKU',              'lebar' => 9],
-            ['label' => 'Nama produk',      'lebar' => 28],
+            ['label' => 'Nama produk',      'lebar' => 25],
             ['label' => 'Qty',              'lebar' => 5, 'rata' => 'kanan'],
             ['label' => 'Keterangan retur', 'lebar' => 14],
             ['label' => 'Ket.',             'lebar' => 10],
-            ['label' => 'Accurate',         'lebar' => 8],
+            // 11, bukan 8: "Tidak masuk" terpotong jadi "Tidak m…" di lebar 8.
+            ['label' => 'Accurate',         'lebar' => 11],
             ['label' => 'Dicatat oleh',     'lebar' => 10],
         ]);
+
+        /* Tiga keadaan penanda Accurate, dengan warnanya masing-masing.
+         * "Tidak masuk" sengaja abu-abu tua dan bukan merah: itu keputusan
+         * yang sah, bukan kesalahan yang perlu diperbaiki. */
+        $tandaAccuratePdf = static function (int $nilai): array {
+            if ($nilai === 1) {
+                return ['Sudah', [14, 128, 96]];
+            }
+            if ($nilai === 2) {
+                return ['Tidak masuk', [92, 110, 118]];
+            }
+            return ['Belum', [139, 155, 163]];
+        };
 
         $totalQty = 0;
         $qtyStok  = 0;
@@ -557,23 +575,28 @@ switch ($jenis) {
                 number_format((int)$r['jumlah'], 0, ',', '.'),
                 [$r['status'], $masukStok ? [14, 128, 96] : [178, 58, 46]],
                 $r['keterangan'],
-                (int)$r['accurate'] === 1
-                    ? ['Sudah', [14, 128, 96]]
-                    : ['Belum', [139, 155, 163]],
+                $tandaAccuratePdf((int)$r['accurate']),
                 (string)($r['oleh'] ?? '-'),
             ]);
         }
+        /* "Tidak masuk" dihitung sendiri, tidak digabung ke "belum". Laporan
+         * yang menjumlahkan keduanya mengembalikan persis masalah yang membuat
+         * keadaan ketiga ini dibuat: sisa pekerjaan yang tidak pernah nol. */
         $belumAccurate = 0;
+        $tidakAccurate = 0;
         foreach ($data as $r) {
-            if ((int)$r['accurate'] !== 1) {
+            if ((int)$r['accurate'] === 0) {
                 $belumAccurate++;
+            } elseif ((int)$r['accurate'] === 2) {
+                $tidakAccurate++;
             }
         }
         $pdf->ringkasan(count($data) . ' retur  ·  total '
             . number_format($totalQty, 0, ',', '.') . ' pcs  ·  sudah masuk stok '
             . number_format($qtyStok, 0, ',', '.') . ' pcs  ·  belum masuk stok '
             . number_format($totalQty - $qtyStok, 0, ',', '.') . ' pcs  ·  belum ke Accurate '
-            . number_format($belumAccurate, 0, ',', '.') . ' baris');
+            . number_format($belumAccurate, 0, ',', '.') . ' baris  ·  tidak masuk Accurate '
+            . number_format($tidakAccurate, 0, ',', '.') . ' baris');
         $pdf->kirim('laporan-retur-' . date('Ymd-His') . '.pdf');
         break;
 

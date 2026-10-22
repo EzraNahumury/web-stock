@@ -400,6 +400,26 @@ tbody tr:hover{ background:#FAFCFC; }
 .badge.aman{ background:var(--safeBg); color:var(--safe); border:1px solid var(--safeLine); }
 .badge.belum_diatur{ background:#EFF3F5; color:var(--slate); border:1px solid var(--line); }
 .badge.netral{ background:#EFF3F5; color:var(--slate); border:1px solid var(--line); }
+/* "Tidak masuk" pada penanda Accurate. Abu-abu tua pekat, BUKAN merah: itu
+ * keputusan yang sah, bukan kesalahan yang menunggu diperbaiki. Pekat supaya
+ * tetap bisa dibedakan sekilas dari "Belum" yang abu-abu muda — kalau
+ * keduanya mirip, kolom ini berhenti memberi tahu mana yang masih jadi
+ * pekerjaan. */
+.badge.abai{ background:var(--slate); color:#fff; border:1px solid var(--slate); }
+
+/* Penanda Accurate yang bisa diubah: tiga keadaan, jadi pilihannya eksplisit —
+ * bukan tombol berputar, yang pada tiga keadaan menyimpan tanda yang salah di
+ * setiap langkah tengahnya. Warnanya tetap ikut keadaannya. */
+.sel-tanda{
+  font-family:'Inter',sans-serif; font-size:10.5px; font-weight:700; letter-spacing:.01em;
+  padding:3px 6px; border-radius:999px; cursor:pointer; max-width:118px;
+}
+.sel-tanda.aman{ background-color:var(--safeBg); color:var(--safe); border:1px solid var(--safeLine); }
+.sel-tanda.belum_diatur{ background-color:#EFF3F5; color:var(--slate); border:1px solid var(--line); }
+.sel-tanda.abai{ background-color:var(--slate); color:#fff; border:1px solid var(--slate); }
+/* Daftar pilihannya selalu di atas kertas putih; tanpa ini, pilihan di dalam
+   .abai terbaca putih-di-atas-putih pada sebagian peramban. */
+.sel-tanda option{ background:#fff; color:var(--ink); font-weight:600; }
 
 /* --- Log aktivitas --- */
 /* Jam ditaruh di bawah tanggal, bukan di kolom sendiri: yang dicari orang

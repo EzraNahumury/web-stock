@@ -9,6 +9,74 @@ berubah**, dan **bagaimana memastikannya jalan**.
 
 ---
 
+## 22 Oktober 2026 — penanda Accurate punya keadaan ketiga
+
+### "Tidak masuk"
+
+Penanda Accurate hanya punya dua keadaan: **Sudah** dan **Belum**. Retur yang
+memang tidak perlu dibukukan tidak punya tempat, jadi selamanya tertinggal di
+**Belum** — dan karena itu angka "Belum ke Accurate" tidak pernah bisa mencapai
+nol. Angka yang tidak pernah bisa nol berhenti memberi tahu apa pun.
+
+Sekarang ada tiga:
+
+| Keadaan | Artinya | Ikut hitungan "Belum"? |
+|---|---|---|
+| **Belum** | belum diinput, masih sisa pekerjaan | ya |
+| **Sudah** | sudah diinput ke Accurate | tidak |
+| **Tidak masuk** | sengaja tidak dibukukan | **tidak** |
+
+Sesudah ini "Belum ke Accurate" kembali berarti sisa pekerjaan yang nyata.
+Yang bertanda "Tidak masuk" tidak hilang dari pandangan — jumlahnya disebut
+terpisah di kaki kartunya.
+
+### Pilihan, bukan tombol berputar
+
+Kolomnya dulu tombol yang berbalik antara dua keadaan. Dengan tiga keadaan,
+tombol berputar berarti harus menekan dua kali untuk mundur satu langkah, dan
+**setiap langkah di tengahnya tersimpan sebagai tanda yang salah**. Jadi
+pilihannya sekarang eksplisit, tapi warnanya tetap ikut keadaannya supaya
+kolomnya masih terbaca sekilas:
+
+- **Sudah** hijau · **Belum** abu-abu muda · **Tidak masuk** abu-abu tua pekat
+
+"Tidak masuk" sengaja bukan merah: itu keputusan yang sah, bukan kesalahan
+yang menunggu diperbaiki.
+
+### Penyaring Accurate
+
+Toolbar Retur sekarang punya dropdown **Semua Accurate / Belum / Sudah / Tidak
+masuk**. Penyaringnya sebenarnya sudah lama ada di server dan di unduhan PDF,
+tapi **tidak pernah ada kontrolnya di layar** — `returFilter.accurate` dipakai
+untuk menulis catatan "angka di atas hanya menghitung…", padahal kuncinya tidak
+pernah ada di objeknya dan `resetRetur` menimpanya. Sekarang keduanya
+tersambung, dan pilihannya ikut terbawa ke Unduh PDF.
+
+### Jejak, dan yang tidak ikut tersapu
+
+Waktu dan pelakunya dicatat untuk **"Sudah" maupun "Tidak masuk"** — keduanya
+keputusan seseorang, dan kelak perlu ditelusuri kalau angkanya berbeda dengan
+yang ada di Accurate. Hanya "Belum" yang berarti belum ada keputusan, jadi
+jejaknya dikosongkan lagi.
+
+Tombol **Tandai Accurate** massal hanya menyentuh baris berkeadaan "Belum".
+Menyapu baris "Tidak masuk" jadi "Sudah" akan membatalkan keputusan itu
+diam-diam, dan orangnya baru tahu saat angkanya tidak cocok dengan Accurate.
+
+### Tanpa migrasi
+
+Kolomnya tetap `retur.accurate` yang sama: `0` belum, `1` sudah, `2` tidak
+masuk. TINYINT sudah muat, `idx_accurate` tetap terpakai, dan satu-satunya yang
+menulis ke sana adalah `api/retur/accurate.php` yang memetakan nama keadaan ke
+angkanya lewat daftar tertutup. Menambahkan CHECK constraint hanya untuk itu
+berarti mempertaruhkan boot seluruh aplikasi demi perlindungan yang sudah ada
+— persis cara kolom bernama `sqlstate` dulu menjatuhkan semuanya.
+
+Bentuk permintaan lama `{ sudah: true|false }` masih diterima dan dipetakan ke
+`sudah`/`belum`.
+
+---
+
 ## 18 Oktober 2026 — satu pesanan, banyak produk retur
 
 ### Tombol "Tambah produk"

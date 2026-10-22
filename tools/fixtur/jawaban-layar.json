@@ -119,11 +119,29 @@
         "accurate_at": null,
         "oleh": "Admin",
         "accurate_oleh": null
+      },
+      {
+        "id": 2,
+        "tanggal": "2026-10-08",
+        "no_pesanan": "ORD-2",
+        "master_id": 2,
+        "barcode": "6936047373262",
+        "sku": "AO-0001",
+        "nama": "AOLIKES ANKLE CREAM",
+        "jumlah": 1,
+        "status": "Sistem Belum Selesai",
+        "keterangan": "tidak perlu dibukukan",
+        "masuk_id": 10,
+        "created_at": "2026-10-08 09:00:00",
+        "accurate": 2,
+        "accurate_at": "2026-10-22 10:00:00",
+        "oleh": "Admin",
+        "accurate_oleh": "Admin"
       }
     ],
-    "total": 1,
-    "total_unit": 2,
-    "unit_ke_stok": 2,
+    "total": 2,
+    "total_unit": 3,
+    "unit_ke_stok": 3,
     "unit_tertahan": 0,
     "status_options": [
       "Lengkap",
@@ -138,7 +156,8 @@
     "status_masuk_list": [
       "Lengkap",
       "Sistem Belum Selesai"
-    ]
+    ],
+    "tidak_accurate": 1
   },
   "opname/list.php": {
     "rows": [],

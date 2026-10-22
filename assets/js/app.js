@@ -2583,7 +2583,7 @@ async function refreshPertukaran(){
 /* ================================================================== */
 /* Retur barang                                                       */
 /* ================================================================== */
-let returFilter = { q:"", dari:"", sampai:"", status:"", page:1 };
+let returFilter = { q:"", dari:"", sampai:"", status:"", accurate:"", page:1 };
 let editReturId = null;
 let returStatusOptions = [];
 /* Keterangan mana saja yang mengembalikan barang ke stok. Bentuknya daftar,
@@ -2616,36 +2616,63 @@ function returIkutStok(status){
  * Tandanya tidak menyentuh stok sama sekali. Yang menambah stok tetap
  * keterangan returnya.
  */
+/* Tiga keadaan penanda Accurate. Angkanya milik basis data; layar bekerja
+ * dengan namanya, supaya tidak ada dua pihak yang masing-masing menghafal arti
+ * angka 2. Urutannya sengaja belum -> sudah -> tidak: dari yang paling sering
+ * ke yang paling jarang. */
+const TANDA_ACCURATE = [
+  { nilai:0, kode:"belum", label:"Belum",       kelas:"belum_diatur" },
+  { nilai:1, kode:"sudah", label:"Sudah",       kelas:"aman" },
+  { nilai:2, kode:"tidak", label:"Tidak masuk", kelas:"abai" }
+];
+function tandaAccurate(nilai){
+  return TANDA_ACCURATE.find(t => t.nilai === nilai) || TANDA_ACCURATE[0];
+}
+
+/**
+ * Kolom Accurate: satu pilihan tiga keadaan.
+ *
+ * Dulu tombol yang berbalik antara dua keadaan. Pada tiga keadaan, tombol
+ * berputar berarti harus menekan dua kali untuk mundur satu langkah — dan
+ * setiap langkah di tengahnya tersimpan sebagai tanda yang salah. Jadi di sini
+ * pilihannya eksplisit, tapi warnanya tetap ikut keadaannya supaya satu kolom
+ * masih terbaca sekilas seperti sebelumnya.
+ */
 function selAccurate(r){
-  const sudah = r.accurate === 1;
-  const jejak = sudah && r.accurate_at
+  const t = tandaAccurate(r.accurate);
+
+  /* Jejak dicatat untuk "sudah" maupun "tidak masuk" — keduanya keputusan
+   * seseorang. Hanya "belum" yang berarti belum ada keputusan. */
+  const jejak = r.accurate !== 0 && r.accurate_at
     ? '<div class="item-sub" style="font-family:Inter">' + esc(pecahWaktu(r.accurate_at).tgl)
       + (r.accurate_oleh ? ' · ' + esc(r.accurate_oleh) : '') + '</div>'
     : '';
 
   if(!bolehTulis()){
-    return (sudah
-      ? '<span class="badge aman">' + svgIcon("check") + 'Sudah</span>'
-      : '<span class="badge belum_diatur">Belum</span>') + jejak;
+    return '<span class="badge ' + t.kelas + '">'
+      + (t.nilai === 1 ? svgIcon("check") : '') + esc(t.label) + '</span>' + jejak;
   }
 
-  return '<button type="button" class="badge '
-    + (sudah ? 'aman' : 'belum_diatur') + '" style="cursor:pointer; border:0"'
-    + ' onclick="tandaiAccurate(' + r.id + ',' + (sudah ? 'false' : 'true') + ')"'
-    + ' title="' + (sudah ? 'Klik untuk menandai belum masuk Accurate'
-                          : 'Klik bila retur ini sudah diinput ke Accurate') + '">'
-    + (sudah ? svgIcon("check") + 'Sudah' : 'Belum') + '</button>' + jejak;
+  return '<select class="sel-tanda ' + t.kelas + '" onchange="tandaiAccurate(' + r.id + ', this.value)"'
+    + ' aria-label="Tanda Accurate untuk ' + esc(r.nama) + '"'
+    + ' title="Sudah / belum diinput ke Accurate, atau memang tidak perlu dimasukkan">'
+    + TANDA_ACCURATE.map(o => '<option value="' + o.kode + '"'
+        + (o.nilai === t.nilai ? ' selected' : '') + '>' + esc(o.label) + '</option>').join("")
+    + '</select>' + jejak;
 }
 
 /** Tandai satu retur sudah / belum masuk Accurate. */
-async function tandaiAccurate(id, sudah){
+async function tandaiAccurate(id, tanda){
   setSaveStatus("saving");
   try{
-    const res = await API.post("retur/accurate.php", { id: id, sudah: sudah });
+    const res = await API.post("retur/accurate.php", { id: id, tanda: tanda });
     setSaveStatus("ok");
     toast(res.pesan || "Tanda diperbarui.");
     refreshRetur();
-  }catch(e){ tampilGalat(e); }
+  }catch(e){
+    tampilGalat(e);
+    refreshRetur();   // kembalikan pilihannya ke keadaan yang benar-benar tersimpan
+  }
 }
 
 /**
@@ -2678,22 +2705,35 @@ async function masukkanSemuaReturKeStok(){
   }catch(e){ tampilGalat(e); }
 }
 
-/** Tandai seluruh baris yang sedang tampil sudah masuk Accurate. */
+/**
+ * Tandai seluruh baris yang sedang tampil sudah masuk Accurate.
+ *
+ * Hanya yang berkeadaan "Belum" yang disentuh. Baris "Tidak masuk" adalah
+ * keputusan yang sudah diambil — menyapunya jadi "Sudah" di sini akan
+ * membatalkan keputusan itu diam-diam, dan orangnya baru tahu saat angkanya
+ * tidak cocok dengan Accurate.
+ */
 async function tandaiAccurateSemua(){
-  const belum = returRows.filter(r => r.accurate !== 1);
-  if(!belum.length){ toast("Semua baris di halaman ini sudah ditandai.", "err"); return; }
+  const belum = returRows.filter(r => r.accurate === 0);
+  if(!belum.length){
+    const adaTidak = returRows.some(r => r.accurate === 2);
+    toast(adaTidak
+      ? "Tidak ada lagi yang berkeadaan Belum di halaman ini. Baris \"Tidak masuk\" tidak ikut ditandai."
+      : "Semua baris di halaman ini sudah ditandai.", "err");
+    return;
+  }
 
   const ok = await konfirmasi(
     "Tandai " + belum.length + " retur sudah masuk Accurate?",
-    "Yang ditandai hanya baris yang sedang tampil di halaman ini. "
-      + "Tandanya tidak mengubah stok sama sekali.",
+    "Hanya baris berkeadaan \u201cBelum\u201d yang sedang tampil di halaman ini. "
+      + "Yang ditandai \u201cTidak masuk\u201d dibiarkan apa adanya, dan stok tidak berubah sama sekali.",
     "Ya, tandai"
   );
   if(!ok) return;
 
   setSaveStatus("saving");
   try{
-    const res = await API.post("retur/accurate.php", { ids: belum.map(r => r.id), sudah: true });
+    const res = await API.post("retur/accurate.php", { ids: belum.map(r => r.id), tanda: "sudah" });
     setSaveStatus("ok");
     toast(res.pesan || "Tanda diperbarui.");
     refreshRetur();
@@ -2739,6 +2779,10 @@ function renderRetur(){
     + '<div class="search-wrap">' + svgIcon("search")
       + '<input type="text" id="rtCari" placeholder="Cari no. pesanan, SKU, atau nama produk&hellip;" oninput="onReturCari()"></div>'
     + '<select id="rtFStatus" onchange="onReturFilter()"><option value="">Semua keterangan</option></select>'
+    + '<select id="rtFAccurate" onchange="onReturFilter()">'
+      + '<option value="">Semua Accurate</option>'
+      + TANDA_ACCURATE.map(t => '<option value="' + t.kode + '">' + esc(t.label) + '</option>').join("")
+      + '</select>'
     + '<div class="daterange">Dari <input type="date" id="rtDari" onchange="onReturFilter()">'
       + ' s/d <input type="date" id="rtSampai" onchange="onReturFilter()"></div>'
     + '<button type="button" class="btn ghost" onclick="resetRetur()">' + svgIcon("x") + 'Reset</button>'
@@ -2759,9 +2803,10 @@ function renderRetur(){
     + '<div id="rtHasil"></div>';
 
   $("content").innerHTML = html;
-  $("rtCari").value   = returFilter.q;
-  $("rtDari").value   = returFilter.dari;
-  $("rtSampai").value = returFilter.sampai;
+  $("rtCari").value      = returFilter.q;
+  $("rtFAccurate").value = returFilter.accurate;
+  $("rtDari").value      = returFilter.dari;
+  $("rtSampai").value    = returFilter.sampai;
 
   /* Formnya baru saja digambar ulang dari nol, jadi barisnya dimulai dari satu
    * produk kosong. Yang sedang diubah tidak lewat sini: editRetur() menyiapkan
@@ -2956,17 +3001,19 @@ const onReturCari = debounce(function(){
 }, 300);
 
 function onReturFilter(){
-  returFilter.q      = $("rtCari").value;
-  returFilter.status = $("rtFStatus").value;
-  returFilter.dari   = $("rtDari").value;
-  returFilter.sampai = $("rtSampai").value;
-  returFilter.page   = 1;
+  returFilter.q        = $("rtCari").value;
+  returFilter.status   = $("rtFStatus").value;
+  returFilter.accurate = $("rtFAccurate").value;
+  returFilter.dari     = $("rtDari").value;
+  returFilter.sampai   = $("rtSampai").value;
+  returFilter.page     = 1;
   refreshRetur();
 }
 
 function resetRetur(){
-  returFilter = { q:"", dari:"", sampai:"", status:"", page:1 };
+  returFilter = { q:"", dari:"", sampai:"", status:"", accurate:"", page:1 };
   $("rtCari").value = ""; $("rtFStatus").value = "";
+  $("rtFAccurate").value = "";
   $("rtDari").value = ""; $("rtSampai").value = "";
   refreshRetur();
 }
@@ -2980,7 +3027,7 @@ async function refreshRetur(){
   let d;
   try{
     d = await API.get("retur/list.php", {
-      q: returFilter.q, status: returFilter.status,
+      q: returFilter.q, status: returFilter.status, accurate: returFilter.accurate,
       dari: returFilter.dari, sampai: returFilter.sampai, page: returFilter.page
     });
   }catch(e){ tampilGalat(e); return; }
@@ -3003,6 +3050,7 @@ async function refreshRetur(){
     unduh.href = "api/export/pdf.php?jenis=retur"
       + "&q=" + encodeURIComponent(returFilter.q)
       + "&status=" + encodeURIComponent(returFilter.status)
+      + "&accurate=" + encodeURIComponent(returFilter.accurate)
       + "&dari=" + encodeURIComponent(returFilter.dari)
       + "&sampai=" + encodeURIComponent(returFilter.sampai);
   }
@@ -3013,8 +3061,10 @@ async function refreshRetur(){
    * yang belum selesai. */
   const penyaringAktif = [];
   if(returFilter.status)   penyaringAktif.push('keterangan "' + returFilter.status + '"');
-  if(returFilter.accurate) penyaringAktif.push(returFilter.accurate === "sudah"
-    ? "yang sudah masuk Accurate" : "yang belum masuk Accurate");
+  if(returFilter.accurate){
+    const t = TANDA_ACCURATE.find(x => x.kode === returFilter.accurate);
+    penyaringAktif.push(t ? 'Accurate "' + t.label + '"' : "penanda Accurate");
+  }
   if(returFilter.q)        penyaringAktif.push('pencarian "' + returFilter.q + '"');
   if(returFilter.dari || returFilter.sampai){
     penyaringAktif.push("tanggal " + (returFilter.dari || "awal") + " s/d " + (returFilter.sampai || "akhir"));
@@ -3033,7 +3083,9 @@ async function refreshRetur(){
       + statCard({ label:"Belum masuk stok", nilai:d.unit_tertahan, ikon:"alert", nada:"amber",
                    kaki:"pcs masih menunggu diselesaikan" })
       + statCard({ label:"Belum ke Accurate", nilai:d.belum_accurate, ikon:"kosong", nada:"",
-                   kaki:"baris belum diinput ke pembukuan" });
+                   kaki: d.tidak_accurate
+                     ? "baris; " + fmtNum(d.tidak_accurate) + " lagi ditandai tidak masuk"
+                     : "baris belum diinput ke pembukuan" });
     ringkas.querySelectorAll(".stat-value[data-nilai]").forEach(n =>
       Grafik.angkaNaik(n, Number(n.getAttribute("data-nilai"))));
   }

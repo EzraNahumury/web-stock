@@ -2,7 +2,7 @@
 /**
  * GET api/retur/list.php — daftar retur barang.
  *
- * Parameter: q, dari, sampai, status, accurate (sudah|belum), page
+ * Parameter: q, dari, sampai, status, accurate (sudah|belum|tidak), page
  */
 
 declare(strict_types=1);
@@ -45,12 +45,16 @@ if ($status !== '' && in_array($status, $pilihanStatus, true)) {
     $params[] = $status;
 }
 
-// Penanda pembukuan Accurate. Bukan nilai bebas, jadi cukup dua pilihan.
+/* Penanda pembukuan Accurate: 0 belum, 1 sudah, 2 sengaja tidak dimasukkan.
+ * Bukan nilai bebas, jadi dibandingkan dengan angkanya langsung — bukan lewat
+ * teks, yang pada koneksi bercollation lain pernah membuat Dashboard 500. */
 $accurate = ambilStr($_GET, 'accurate', 10);
 if ($accurate === 'sudah') {
     $where[] = 'r.accurate = 1';
 } elseif ($accurate === 'belum') {
     $where[] = 'r.accurate = 0';
+} elseif ($accurate === 'tidak') {
+    $where[] = 'r.accurate = 2';
 } else {
     $accurate = '';
 }
@@ -103,10 +107,20 @@ if ($ketMasuk) {
     $masukStok = 0;
 }
 
-// Berapa baris yang belum diinput ke Accurate — dihitung atas hasil penyaring
-// yang sama, supaya angkanya sejalan dengan yang terlihat di tabel.
+/* Berapa baris yang belum diinput ke Accurate — dihitung atas hasil penyaring
+ * yang sama, supaya angkanya sejalan dengan yang terlihat di tabel.
+ *
+ * Yang ditandai "tidak masuk" sengaja TIDAK ikut terhitung di sini. Itulah
+ * gunanya keadaan ketiga: selama retur yang memang tidak perlu dibukukan masih
+ * dihitung sebagai "belum", angkanya tidak pernah bisa nol dan berhenti
+ * menunjukkan sisa pekerjaan. Jumlahnya tetap dikirim terpisah supaya tidak
+ * hilang begitu saja dari pandangan. */
 $belumAccurate = (int)dbValue(
     "SELECT COUNT(*) FROM retur r $sqlWhere AND r.accurate = 0",
+    $params
+);
+$tidakAccurate = (int)dbValue(
+    "SELECT COUNT(*) FROM retur r $sqlWhere AND r.accurate = 2",
     $params
 );
 
@@ -118,6 +132,7 @@ jsonOk([
     'status_options' => $pilihanStatus,
     'accurate'       => $accurate,
     'belum_accurate' => $belumAccurate,
+    'tidak_accurate' => $tidakAccurate,
     // Keterangan mana yang berarti "sudah masuk stok" ditentukan server, supaya
     // layar tidak perlu menebaknya dari teks yang bisa berubah. Bentuknya
     // daftar, karena sekarang bisa lebih dari satu.

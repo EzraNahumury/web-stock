@@ -131,6 +131,26 @@ const semua = () => [...daftar.values()].map((e) => String(e.innerHTML || '')).j
   const htmlRetur = semua();
   cek('ada kolom Accurate', /Accurate/.test(htmlRetur));
 
+  console.log('=== Retur: penanda Accurate tiga keadaan ===');
+  const htmlTabel = isi('rtHasil');
+  cek('penandanya bisa dipilih, bukan tombol berputar',
+      htmlTabel.indexOf('class="sel-tanda') >= 0);
+  cek('tiga pilihan: Belum, Sudah, Tidak masuk',
+      htmlTabel.indexOf('value="belum"') >= 0
+      && htmlTabel.indexOf('value="sudah"') >= 0
+      && htmlTabel.indexOf('value="tidak"') >= 0);
+  cek('keadaan tiap baris ikut terpilih',
+      htmlTabel.indexOf('value="belum" selected') >= 0
+      && htmlTabel.indexOf('value="tidak" selected') >= 0);
+  cek('"Tidak masuk" punya warna sendiri', htmlTabel.indexOf('sel-tanda abai') >= 0);
+  cek('ada penyaring Accurate', /id="rtFAccurate"/.test(htmlRetur));
+  cek('penyaringnya memuat ketiganya dan "Semua"',
+      /Semua Accurate/.test(htmlRetur) && /Tidak masuk/.test(htmlRetur));
+  /* Kartunya tidak boleh menggabungkan "tidak masuk" ke dalam "belum": itu
+   * persis masalah yang membuat keadaan ketiga ini dibuat. */
+  cek('kartu menyebut yang tidak masuk secara terpisah',
+      isi('rtRingkas').indexOf('ditandai tidak masuk') >= 0);
+
   console.log('=== Retur: satu pesanan, banyak produk ===');
   /* Baris produk pertama digambar renderRetur; keterangan returnya baru terisi
    * sesudah refreshRetur di atas, jadi urutan di sini memang begitu. */

@@ -69,6 +69,8 @@ const ALAMAT = [
     'retur/list.php',
     'retur/list.php?status=Lengkap',
     'retur/list.php?accurate=belum',
+    'retur/list.php?accurate=sudah',
+    'retur/list.php?accurate=tidak',
     'opname/list.php',
     'minimal/list.php',
     'minimal/list.php?hanya=belum',
@@ -89,6 +91,7 @@ const ALAMAT = [
     'export/pdf.php?jenis=riwayat',
     'export/pdf.php?jenis=pertukaran',
     'export/pdf.php?jenis=retur&accurate=belum',
+    'export/pdf.php?jenis=retur&accurate=tidak',
     'export/pdf.php?jenis=master',
     'export/pdf.php?jenis=aktivitas',
 ];
