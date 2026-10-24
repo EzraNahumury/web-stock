@@ -2608,10 +2608,16 @@ let rtBarisKey = 0;
  * server; yang di sini hanya supaya penolakannya terbaca sebelum dikirim. */
 const MAKS_PRODUK_RETUR = 50;
 
-/** Apakah retur berketerangan ini mengembalikan barang ke stok? */
-function returIkutStok(status){
-  return returStatusMasukList.indexOf(status) >= 0;
-}
+/* CATATAN: dulu ada returIkutStok(status) di sini, dipakai untuk menyimpulkan
+ * "stok sudah bertambah" dari nama keterangannya. Itu kesimpulan yang salah —
+ * keterangan menyatakan apa yang SEHARUSNYA terjadi, bukan apa yang sudah
+ * terjadi — dan menyebabkan ratusan retur digambar "stok bertambah" padahal
+ * barang masuknya tidak pernah dibuat. Fungsinya dibuang, bukan diperbaiki,
+ * supaya tidak ada yang memakainya lagi untuk pertanyaan itu. Yang menjawab
+ * "sudah bertambah atau belum" adalah r.masuk_aktif dari server.
+ *
+ * returStatusMasukList tetap dipakai, tapi hanya untuk MENERANGKAN aturannya
+ * di kotak info — bukan untuk menyimpulkan keadaan satu baris. */
 
 /**
  * Sel penanda "sudah diinput ke Accurate".
@@ -2807,6 +2813,7 @@ function renderRetur(){
     + '<a class="btn ghost" id="rtUnduh" href="api/export/pdf.php?jenis=retur">' + svgIcon("download") + 'Unduh PDF</a>'
     + '</div>'
     + '<div class="stat-row" id="rtRingkas"></div>'
+    + '<div id="rtTautPutus"></div>'
     + '<div id="rtHasil"></div>';
 
   $("content").innerHTML = html;
@@ -3084,17 +3091,44 @@ async function refreshRetur(){
                    kaki: penyaringAktif.length ? "baris pada penyaring ini" : "baris tercatat" })
       + statCard({ label:"Unit diretur", nilai:d.total_unit, ikon:"unit", nada:"", kaki:"pcs dikembalikan" })
       + statCard({ label:"Sudah masuk stok", nilai:d.unit_ke_stok, ikon:"sku", nada:"safe", tone:"safe",
-                   kaki: returStatusMasukList.length === 1
-                     ? "pcs dari retur berketerangan " + returStatusMasukList[0]
-                     : "pcs dari retur yang keterangannya mengembalikan stok" })
-      + statCard({ label:"Belum masuk stok", nilai:d.unit_tertahan, ikon:"alert", nada:"amber",
-                   kaki:"pcs masih menunggu diselesaikan" })
+                   kaki:"pcs yang barang masuknya benar-benar ada" })
+      + statCard({ label:"Belum tersusul", nilai:d.unit_belum_tersusul || 0, ikon:"alert",
+                   nada:"amber", tone:(d.unit_belum_tersusul ? "amber" : ""),
+                   kaki:"pcs seharusnya masuk stok, tapi belum" })
+      + statCard({ label:"Belum masuk stok", nilai:d.unit_tertahan, ikon:"kosong", nada:"",
+                   kaki:"pcs yang keterangannya memang menahan" })
       + statCard({ label:"Belum ke Accurate", nilai:d.belum_accurate, ikon:"kosong", nada:"",
                    kaki: d.tidak_accurate
                      ? "baris; " + fmtNum(d.tidak_accurate) + " lagi ditandai tidak masuk"
                      : "baris belum diinput ke pembukuan" });
     ringkas.querySelectorAll(".stat-value[data-nilai]").forEach(n =>
       Grafik.angkaNaik(n, Number(n.getAttribute("data-nilai"))));
+  }
+
+  /* Retur yang keterangannya mengembalikan barang ke stok tapi barang masuknya
+   * tidak pernah dibuat. Disebut apa adanya dan diberi tombolnya, bukan
+   * dibiarkan tersembunyi di dalam angka "sudah masuk stok". */
+  const peringatanTaut = $("rtTautPutus");
+  if(peringatanTaut){
+    const n = d.baris_belum_tersusul || 0;
+    const lebih = d.baris_kelebihan || 0;
+    let isi = "";
+    if(n > 0){
+      isi = '<b>' + fmtNum(n) + ' baris (' + fmtNum(d.unit_belum_tersusul) + ' pcs) '
+        + 'belum benar-benar masuk stok.</b><br>'
+        + 'Keterangannya mengembalikan barang ke stok, tapi baris Barang masuknya belum pernah '
+        + 'dibuat — biasanya karena returnya dicatat sebelum keterangan itu diubah. '
+        + 'Stoknya belum bertambah, dan di Barang masuk memang tidak akan ketemu.'
+        + (sayaAdmin() && bolehTulis()
+            ? '<br><br><button type="button" class="btn" onclick="masukkanSemuaReturKeStok()">'
+              + svgIcon("download") + 'Susulkan sekarang</button>'
+            : '<br><br>Minta admin menekan <b>Masukkan semua ke stok</b> untuk menyusulkannya.');
+    }else if(lebih > 0){
+      isi = '<b>' + fmtNum(lebih) + ' baris menambah stok padahal keterangannya tidak '
+        + 'mengembalikan barang ke stok.</b><br>'
+        + 'Kebalikan dari yang di atas. Tombol <b>Masukkan semua ke stok</b> menariknya kembali.';
+    }
+    peringatanTaut.innerHTML = isi ? '<div class="warn-box">' + isi + '</div>' : "";
   }
 
   const catatan = $("rtCatatanSaring");
@@ -3107,10 +3141,16 @@ async function refreshRetur(){
   }
 
   let baris = d.rows.map(r => {
-    // Yang menentukan stok bertambah adalah statusnya. masuk_id tetap terisi
-    // meski returnya dibatalkan, supaya baris barang masuknya bisa dipakai
-    // ulang kalau statusnya dikembalikan.
-    const masukStok = returIkutStok(r.status);
+    /* Yang menentukan "stok bertambah" adalah ADA TIDAKNYA baris barang masuk,
+     * bukan nama keterangannya. Dulu dibaca dari keterangannya, dan retur yang
+     * dicatat sebelum keterangannya diubah tetap digambar "stok bertambah"
+     * padahal stoknya tidak pernah naik.
+     *
+     * masuk_id sendiri tidak cukup: ia sengaja tetap terisi meski barisnya
+     * dihapus, supaya baris yang sama bisa dipakai ulang. Karena itu yang
+     * dipakai masuk_aktif, yang sudah memeriksa deleted_at di server. */
+    const masukStok = r.masuk_aktif === 1;
+    const belumTersusul = r.belum_tersusul === 1;
     return '<tr>'
       + '<td style="white-space:nowrap">' + fmtDate(r.tanggal) + '</td>'
       + '<td class="mono" style="font-size:11px">' + esc(r.no_pesanan || "-") + '</td>'
@@ -3119,8 +3159,15 @@ async function refreshRetur(){
         + (r.master_id === null ? '<span class="flag-gen">TAK DIKENAL</span>' : '') + '</div>'
         + '<div class="item-sub">' + esc(r.barcode || "-") + '</div></td>'
       + '<td class="num" style="font-weight:700">' + fmtNum(r.jumlah) + '</td>'
-      + '<td><span class="badge ' + (masukStok ? 'aman' : 'kritis') + '">' + esc(r.status) + '</span>'
-        + (masukStok ? '<div class="item-sub" style="font-family:Inter">stok bertambah</div>' : '') + '</td>'
+      + '<td><span class="badge ' + (masukStok ? 'aman' : (belumTersusul ? 'rendah' : 'kritis')) + '">'
+        + esc(r.status) + '</span>'
+        + (masukStok
+            ? '<div class="item-sub" style="font-family:Inter">stok bertambah</div>'
+            : (belumTersusul
+                ? '<div class="item-sub" style="font-family:Inter; color:var(--amber)">'
+                  + 'belum masuk stok</div>'
+                : ''))
+        + '</td>'
       + '<td style="font-size:11.5px; color:var(--slate)">' + esc(r.keterangan || "-") + '</td>'
       + '<td style="white-space:nowrap">' + selAccurate(r) + '</td>'
       + (adaKolomAksi()
@@ -3265,7 +3312,8 @@ async function submitRetur(e){
 
 async function hapusRetur(id){
   const r = returRows.find(x => x.id === id);
-  const ikutStok = r && returIkutStok(r.status);
+  // Bukti, bukan dugaan: yang menggeser stok hanya baris barang masuk yang ada.
+  const ikutStok = r && r.masuk_aktif === 1;
   const ya = await konfirmasi(
     "Hapus retur ini?",
     ikutStok

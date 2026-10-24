@@ -118,7 +118,10 @@
         "accurate": 0,
         "accurate_at": null,
         "oleh": "Admin",
-        "accurate_oleh": null
+        "accurate_oleh": null,
+        "masuk_aktif": 1,
+        "ket_tambah_stok": 1,
+        "belum_tersusul": 0
       },
       {
         "id": 2,
@@ -136,12 +139,15 @@
         "accurate": 2,
         "accurate_at": "2026-10-22 10:00:00",
         "oleh": "Admin",
-        "accurate_oleh": "Admin"
+        "accurate_oleh": "Admin",
+        "masuk_aktif": 0,
+        "ket_tambah_stok": 1,
+        "belum_tersusul": 1
       }
     ],
     "total": 2,
     "total_unit": 3,
-    "unit_ke_stok": 3,
+    "unit_ke_stok": 2,
     "unit_tertahan": 0,
     "status_options": [
       "Lengkap",
@@ -157,7 +163,10 @@
       "Lengkap",
       "Sistem Belum Selesai"
     ],
-    "tidak_accurate": 1
+    "tidak_accurate": 1,
+    "unit_belum_tersusul": 1,
+    "baris_belum_tersusul": 1,
+    "baris_kelebihan": 0
   },
   "opname/list.php": {
     "rows": [],

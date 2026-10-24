@@ -9,6 +9,114 @@ berubah**, dan **bagaimana memastikannya jalan**.
 
 ---
 
+## 24 Oktober 2026 — "sudah masuk stok" yang ternyata belum
+
+### Laporannya
+
+Di halaman Retur, kartu **Sudah masuk stok** menunjukkan **398 pcs** dan tiap
+barisnya berlencana hijau *stok bertambah*. Dicek di Barang masuk: tidak ada.
+Stoknya memang tidak pernah naik.
+
+### Sebabnya
+
+Kartu dan lencananya menyimpulkan "stok bertambah" **dari nama keterangannya**:
+
+```php
+// api/retur/list.php — SEBELUM
+SUM(r.jumlah) ... WHERE r.status IN ('Dikirim','Pembatalan','Lengkap', ...)
+```
+
+```js
+// app.js — SEBELUM
+const masukStok = returIkutStok(r.status);
+```
+
+Keterangan menyatakan apa yang **seharusnya** terjadi, bukan apa yang **sudah**
+terjadi. Urutan kejadiannya:
+
+1. Retur Oktober dicatat ketika keterangannya belum mengembalikan barang ke
+   stok → `masuk_id` NULL, tidak ada baris Barang masuk
+2. Migrasi `022` menyetel `tambah_stok = 1` untuk semua keterangan — lewat SQL
+   mentah, bukan lewat jalur yang menyusulkan barisnya (migrasi itu sendiri
+   sudah menuliskan batasan ini)
+3. Layar membaca keterangannya yang baru dan berkata "stok bertambah"
+4. Barang masuk tidak pernah punya barisnya
+
+Direproduksi lokal persis seperti laporannya: layar bilang 7 pcs masuk stok,
+`barang_masuk` kosong, stok 201 → 201.
+
+### Perbaikannya: baca bukti, bukan dugaan
+
+Yang menjawab "sudah bertambah atau belum" sekarang **ada tidaknya baris barang
+masuk yang masih hidup**, bukan nama keterangannya. `masuk_id` saja tidak cukup
+— ia sengaja tetap terisi meski barisnya dihapus, supaya bisa dipakai ulang —
+jadi `deleted_at`-nya ikut diperiksa di server dan dikirim sebagai
+`masuk_aktif`.
+
+Angkanya kini terbagi tiga ember yang **saling lepas** dan berjumlah total:
+
+| Kartu | Artinya |
+|---|---|
+| **Sudah masuk stok** | baris barang masuknya ADA — stok memang sudah naik |
+| **Belum tersusul** | keterangannya mengembalikan ke stok, tapi barisnya TIDAK ADA |
+| **Belum masuk stok** | keterangannya memang tidak mengembalikan ke stok |
+
+Baris "belum tersusul" digambar **amber** dengan sub-teks *belum masuk stok* —
+bukan hijau seolah beres, bukan juga merah seolah sengaja ditahan.
+
+### Kotak peringatan yang membawa tombolnya
+
+Angka yang berubah saja tidak cukup; orang perlu tahu apa yang harus
+dilakukan. Jadi di atas tabel muncul kotak yang menyebut jumlahnya,
+menerangkan sebabnya, dan — untuk admin — memuat tombol **Susulkan sekarang**
+yang memanggil jalur yang sama dengan "Masukkan semua ke stok". Aman diulang:
+yang sudah benar tidak disentuh.
+
+Kebalikannya juga terdeteksi: baris barang masuknya ada padahal keterangannya
+berkata tidak boleh (`baris_kelebihan`). Tombol yang sama menariknya kembali.
+
+### `returIkutStok()` dibuang, bukan diperbaiki
+
+Fungsi itulah perangkapnya. Selama ia ada, orang berikutnya akan memakainya
+lagi untuk pertanyaan yang salah. Tempatnya diisi komentar yang menerangkan
+kenapa ia tidak ada.
+
+### Empat query jadi satu
+
+Ringkasannya dulu empat query terpisah yang menyaring tabel yang sama
+berulang-ulang. Sekarang satu. Bukan sekadar lebih hemat: angka yang dihitung
+terpisah bisa saling bertentangan kalau salah satu syaratnya tidak persis sama
+— dan itu persis yang terjadi pada kasus ini.
+
+`tambah_stok` dibaca lewat JOIN ke tabel `keterangan`, bukan dengan menyusun
+daftar nama lalu `IN (?)`. Perbandingannya jadi kolom-lawan-kolom dengan
+collation yang sama, bukan kolom-lawan-parameter yang COERCIBLE — bentuk yang
+dulu menjatuhkan Dashboard dengan galat 1267. Sudah ikut diuji pada server
+bercollation berbeda.
+
+### Uji HTTP pindah ke repo
+
+Hari ini folder sementara dibersihkan sistem dan **sebelas suite uji HTTP
+hilang sekaligus** — termasuk yang menjaga pencatatan retur, pencabutan centang
+keterangan, dan penghapusan catatan pertukaran. Yang hilang tidak bisa
+dikembalikan.
+
+Lima yang tersisa dipindah ke **`tools/http/`** beserta
+[JALANKAN.md](tools/http/JALANKAN.md). Cakupan paling relevan dari yang hilang
+— mencentang "menambah stok" lewat Master menyusulkan retur lama tanpa tombol
+apa pun — ditulis ulang di `uji_tersusul.cjs`.
+
+Uji yang hanya hidup di folder sementara bukan uji; ia hanya kebetulan pernah
+lulus.
+
+### Yang perlu dilakukan di server
+
+Sesudah deploy, buka **Retur**, hapus penyaring tanggalnya, dan lihat kotak
+peringatannya. Kalau ada, tekan **Susulkan sekarang** sebagai admin. Itu yang
+benar-benar memasukkan 398 pcs itu ke Barang masuk.
+
+---
+
 ## 22 Oktober 2026 (sore) — menu Barang deadstok
 
 Menu baru di grup **Operasional**, di antara Retur dan Laporan stok opname.

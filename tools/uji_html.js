@@ -180,6 +180,28 @@ const semua = () => [...daftar.values()].map((e) => String(e.innerHTML || '')).j
   cek('produk terakhir tidak bisa dihapus',
       hitung(isi('rtBarisWadah'), 'class="produk-baris"') === 1);
 
+  console.log('=== Retur: "stok bertambah" dibaca dari BUKTI, bukan dari keterangannya ===');
+  /* Layar dulu menyimpulkannya dari nama keterangannya. Keterangan menyatakan
+   * apa yang SEHARUSNYA terjadi, bukan apa yang sudah terjadi — dan ratusan
+   * retur digambar "stok bertambah" padahal barang masuknya tidak pernah ada. */
+  const tabelRetur = isi('rtHasil');
+  cek('baris yang barang masuknya ada: "stok bertambah"',
+      tabelRetur.indexOf('stok bertambah') >= 0);
+  cek('baris yang belum tersusul: "belum masuk stok"',
+      tabelRetur.indexOf('belum masuk stok') >= 0);
+  cek('yang belum tersusul tidak digambar hijau seolah beres',
+      tabelRetur.indexOf('badge rendah') >= 0);
+  cek('ada kartu "Belum tersusul"', isi('rtRingkas').indexOf('Belum tersusul') >= 0);
+  /* Kotak peringatannya yang membuat masalahnya bisa diperbaiki sendiri;
+   * tanpa itu angkanya hanya berubah tanpa memberi tahu apa yang harus dilakukan. */
+  const kotak = isi('rtTautPutus');
+  cek('kotak peringatan menyebut jumlah barisnya',
+      kotak.indexOf('belum benar-benar masuk stok') >= 0);
+  cek('kotak peringatan menerangkan sebabnya',
+      kotak.indexOf('dicatat sebelum keterangan itu diubah') >= 0);
+  cek('kotak peringatan membawa tombol perbaikannya',
+      kotak.indexOf('masukkanSemuaReturKeStok()') >= 0);
+
   console.log('=== Retur: yang menambah stok dibaca dari daftar, bukan satu nama ===');
   /* Sejak migrasi 022 SELURUH keterangan retur mengembalikan barang ke stok.
    * Layar yang membandingkannya dengan satu nama menggambar baris yang

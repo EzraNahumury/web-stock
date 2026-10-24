@@ -64,13 +64,35 @@ $total  = (int)dbValue("SELECT COUNT(*) FROM retur r $sqlWhere", $params);
 $meta   = metaPaginasi($total, $page);
 $offset = ($meta['page'] - 1) * PAGE_SIZE;
 
+/* masuk_aktif: baris barang masuk milik retur ini BENAR-BENAR ada dan belum
+ * dihapus. Inilah satu-satunya bukti bahwa stoknya sudah bertambah.
+ *
+ * Sebelumnya layar menyimpulkannya dari nama keterangannya saja. Itu keliru,
+ * dan kelirunya mahal: retur yang dicatat SEBELUM keterangannya diubah jadi
+ * "mengembalikan barang ke stok" tidak pernah punya baris barang masuk, tapi
+ * tetap digambar "stok bertambah" dan ikut dihitung di kartu "Sudah masuk
+ * stok". Angkanya meyakinkan, stoknya tidak pernah naik, dan selisihnya baru
+ * ketahuan saat stok opname.
+ *
+ * tambah_stok dibaca dengan JOIN ke tabel keterangan, bukan dengan menyusun
+ * daftar nama lalu membandingkannya lewat IN (?). Perbandingannya jadi
+ * kolom-lawan-kolom dengan collation yang sama, bukan kolom-lawan-parameter
+ * yang COERCIBLE — bentuk yang dulu menjatuhkan Dashboard dengan galat 1267. */
+$joinTaut = "
+       LEFT JOIN barang_masuk bm ON bm.id = r.masuk_id AND bm.deleted_at IS NULL
+       LEFT JOIN keterangan k ON k.jenis = 'retur' AND k.nama = r.status
+                             AND k.aktif = 1 AND k.deleted_at IS NULL";
+
 $rows = dbAll(
     "SELECT r.id, r.tanggal, r.no_pesanan, r.master_id, r.barcode, r.sku, r.nama,
             r.jumlah, r.status, r.keterangan, r.masuk_id, r.created_at,
             r.accurate, r.accurate_at,
             u.nama_lengkap  AS oleh,
-            ua.nama_lengkap AS accurate_oleh
+            ua.nama_lengkap AS accurate_oleh,
+            CASE WHEN bm.id IS NULL THEN 0 ELSE 1 END AS masuk_aktif,
+            COALESCE(k.tambah_stok, 0) AS ket_tambah_stok
        FROM retur r
+       $joinTaut
        LEFT JOIN users u  ON u.id  = r.user_id
        LEFT JOIN users ua ON ua.id = r.accurate_user
      $sqlWhere
@@ -80,55 +102,77 @@ $rows = dbAll(
 );
 
 foreach ($rows as &$r) {
-    $r['id']        = (int)$r['id'];
-    $r['jumlah']    = (int)$r['jumlah'];
-    $r['master_id'] = $r['master_id'] === null ? null : (int)$r['master_id'];
-    $r['masuk_id']  = $r['masuk_id']  === null ? null : (int)$r['masuk_id'];
-    $r['accurate']  = (int)$r['accurate'];
+    $r['id']          = (int)$r['id'];
+    $r['jumlah']      = (int)$r['jumlah'];
+    $r['master_id']   = $r['master_id'] === null ? null : (int)$r['master_id'];
+    $r['masuk_id']    = $r['masuk_id']  === null ? null : (int)$r['masuk_id'];
+    $r['accurate']    = (int)$r['accurate'];
+    $r['masuk_aktif'] = (int)$r['masuk_aktif'];
+    // Keterangannya menyatakan barangnya kembali ke stok.
+    $r['ket_tambah_stok'] = (int)$r['ket_tambah_stok'];
+    /* Dan inilah yang perlu diperbaiki: seharusnya menambah stok, tapi baris
+     * barang masuknya tidak ada. Dihitung di server supaya layar tidak perlu
+     * menyimpulkannya sendiri dari dua angka. */
+    $r['belum_tersusul'] = ($r['ket_tambah_stok'] === 1 && $r['masuk_aktif'] === 0) ? 1 : 0;
 }
 unset($r);
 
-// Ringkasan dihitung atas seluruh hasil penyaring, bukan halaman ini saja.
-$totalUnit = (int)dbValue("SELECT COALESCE(SUM(r.jumlah),0) FROM retur r $sqlWhere", $params);
-/* Unit yang benar-benar menambah stok.
+/* Ringkasan dihitung atas SELURUH hasil penyaring, bukan halaman ini saja.
  *
- * Keterangan mana yang menambah stok sekarang bisa lebih dari satu dan diatur
- * dari menu Master, jadi yang dipakai daftarnya — bukan satu nama yang dipaku.
- * Daftar kosong berarti tidak ada satu pun keterangan yang menambah stok;
- * hasilnya nol, bukan galat SQL karena IN () kosong. */
-$ketMasuk = keteranganTambahStok();
-if ($ketMasuk) {
-    $tanda = implode(',', array_fill(0, count($ketMasuk), '?'));
-    $masukStok = (int)dbValue(
-        "SELECT COALESCE(SUM(r.jumlah),0) FROM retur r $sqlWhere AND r.status IN ($tanda)",
-        array_merge($params, $ketMasuk)
-    );
-} else {
-    $masukStok = 0;
-}
+ * Satu query untuk semuanya, menggantikan empat yang dulu berjalan sendiri-
+ * sendiri. Bukan sekadar lebih hemat: keempatnya dulu menyaring tabel yang
+ * sama berulang kali, dan angka yang dihitung terpisah bisa saling
+ * bertentangan kalau salah satu syaratnya tidak persis sama.
+ *
+ * Tiga ember unit di bawah ini SALING LEPAS dan jumlahnya = total unit:
+ *
+ *   unit_ke_stok        baris barang masuknya ADA  -> stok memang sudah naik
+ *   unit_belum_tersusul keterangannya mengembalikan ke stok, tapi barisnya
+ *                       TIDAK ADA -> stok belum naik; inilah yang perlu
+ *                       disusulkan lewat "Masukkan semua ke stok"
+ *   unit_tertahan       keterangannya memang tidak mengembalikan ke stok
+ *
+ * baris_kelebihan adalah kebalikannya: barisnya ada padahal keterangannya
+ * berkata tidak boleh. Tombol yang sama menariknya kembali. */
+$ringkas = dbOne(
+    "SELECT
+        COALESCE(SUM(r.jumlah), 0) AS unit_total,
+        COALESCE(SUM(CASE WHEN bm.id IS NOT NULL
+                          THEN r.jumlah ELSE 0 END), 0) AS unit_ke_stok,
+        COALESCE(SUM(CASE WHEN bm.id IS NULL AND COALESCE(k.tambah_stok, 0) = 1
+                          THEN r.jumlah ELSE 0 END), 0) AS unit_belum_tersusul,
+        COALESCE(SUM(CASE WHEN bm.id IS NULL AND COALESCE(k.tambah_stok, 0) = 0
+                          THEN r.jumlah ELSE 0 END), 0) AS unit_tertahan,
+        COALESCE(SUM(CASE WHEN bm.id IS NULL AND COALESCE(k.tambah_stok, 0) = 1
+                          THEN 1 ELSE 0 END), 0) AS baris_belum_tersusul,
+        COALESCE(SUM(CASE WHEN bm.id IS NOT NULL AND COALESCE(k.tambah_stok, 0) = 0
+                          THEN 1 ELSE 0 END), 0) AS baris_kelebihan,
+        COALESCE(SUM(CASE WHEN r.accurate = 0 THEN 1 ELSE 0 END), 0) AS belum_accurate,
+        COALESCE(SUM(CASE WHEN r.accurate = 2 THEN 1 ELSE 0 END), 0) AS tidak_accurate
+       FROM retur r
+       $joinTaut
+     $sqlWhere",
+    $params
+);
 
-/* Berapa baris yang belum diinput ke Accurate — dihitung atas hasil penyaring
- * yang sama, supaya angkanya sejalan dengan yang terlihat di tabel.
- *
- * Yang ditandai "tidak masuk" sengaja TIDAK ikut terhitung di sini. Itulah
- * gunanya keadaan ketiga: selama retur yang memang tidak perlu dibukukan masih
- * dihitung sebagai "belum", angkanya tidak pernah bisa nol dan berhenti
- * menunjukkan sisa pekerjaan. Jumlahnya tetap dikirim terpisah supaya tidak
- * hilang begitu saja dari pandangan. */
-$belumAccurate = (int)dbValue(
-    "SELECT COUNT(*) FROM retur r $sqlWhere AND r.accurate = 0",
-    $params
-);
-$tidakAccurate = (int)dbValue(
-    "SELECT COUNT(*) FROM retur r $sqlWhere AND r.accurate = 2",
-    $params
-);
+$ketMasuk      = keteranganTambahStok();
+$totalUnit     = (int)$ringkas['unit_total'];
+$masukStok     = (int)$ringkas['unit_ke_stok'];
+$belumAccurate = (int)$ringkas['belum_accurate'];
+$tidakAccurate = (int)$ringkas['tidak_accurate'];
 
 jsonOk([
     'rows'           => $rows,
     'total_unit'     => $totalUnit,
     'unit_ke_stok'   => $masukStok,
-    'unit_tertahan'  => $totalUnit - $masukStok,
+    'unit_tertahan'  => (int)$ringkas['unit_tertahan'],
+    /* Retur yang keterangannya mengembalikan barang ke stok tapi barang
+     * masuknya belum pernah dibuat. Dikirim terpisah supaya layar bisa
+     * menyebutnya apa adanya dan menawarkan perbaikannya, bukan menyembunyikan
+     * angkanya di dalam "sudah masuk stok". */
+    'unit_belum_tersusul'  => (int)$ringkas['unit_belum_tersusul'],
+    'baris_belum_tersusul' => (int)$ringkas['baris_belum_tersusul'],
+    'baris_kelebihan'      => (int)$ringkas['baris_kelebihan'],
     'status_options' => $pilihanStatus,
     'accurate'       => $accurate,
     'belum_accurate' => $belumAccurate,
