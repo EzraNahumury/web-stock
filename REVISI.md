@@ -9,6 +9,110 @@ berubah**, dan **bagaimana memastikannya jalan**.
 
 ---
 
+## 25 Oktober 2026 — laporan stok opname: PDF, HP, dan isi massal
+
+Lima hal, semuanya di Laporan stok opname.
+
+### 1. Nama barang di PDF tidak lagi terpotong
+
+Laporan yang dipakai SAMBIL menghitung barang di rak memuat belasan baris
+`AYRES CELANA RUNNING DOUBLE LAYE...` yang tidak bisa dibedakan satu sama
+lain — tepat pada laporan yang paling butuh dibedakan.
+
+Ini bukan kasus pinggiran: **908 dari 1.435 nama** di katalog ini lebih dari 28
+karakter, dan yang terpanjang 93. Melebarkan kolomnya tidak akan pernah cukup,
+jadi `PdfTabel` sekarang bisa **membungkus** teks ke beberapa baris:
+
+```
+sebelum   AYRES Jersey Bola Negara Argentina Dewasa Ka...
+sesudah   AYRES Jersey Bola Negara Argentina Dewasa Kaos
+          Futsal Sepakbola Dry Fit Premium Grade Ori L
+```
+
+Dipenggal di spasi; kata yang sendirian saja tidak muat dipenggal per karakter;
+paling banyak tiga baris supaya satu nama aneh tidak membuat satu baris tabel
+setinggi setengah halaman. Tinggi barisnya mengikuti isinya, dan halaman
+diputus berdasarkan tinggi yang sebenarnya — bukan 15 poin yang ditebak.
+
+Berlaku untuk **seluruh laporan**, bukan hanya opname: katalognya sama, jadi
+masalahnya sama. Laporan opname penuh 1.435 baris jadi 49 halaman (sebelumnya
+sekitar 39) — sepuluh halaman untuk nama yang terbaca, dan **nol nama tersisa
+terpotong**.
+
+### 2. Bisa diisi dari HP
+
+Tabelnya 11 kolom dengan `min-width:1320px`. Di HP itu berarti menggeser-geser
+ke samping untuk mengisi satu baris, dan petugas akhirnya meminta "situs versi
+desktop" lalu mencubit layar sepanjang hari opname — padahal justru di gudang
+HP yang dipegang.
+
+Di bawah **820px** tiap baris jadi **satu kartu**: kepala tabelnya
+disembunyikan dan tiap sel memakai labelnya sendiri, nama barang jadi judul
+kartunya, dan kolom isiannya dibesarkan supaya nyaman untuk jempol. Kolom angka
+juga memunculkan papan angka HP (`inputmode="numeric"`).
+
+Tidak ada cabang JavaScript: HTML-nya sama persis, hanya tampilannya yang
+berbeda — jadi tidak ada dua jalur yang bisa berbeda perilaku.
+
+### 3. Stok accurate boleh minus
+
+Kolom itu **bukan hitungan rak**, melainkan salinan saldo dari Accurate — dan
+saldo pembukuan memang bisa minus, misalnya ketika barang terlanjur dikeluarkan
+sebelum penerimaannya dibukukan. `min="0"` dan penolakan di server membuat angka
+yang benar-benar tertera di sana tidak bisa diketik, sehingga selisih yang
+justru paling perlu dilihat tidak pernah bisa dicatat.
+
+**Stok hitung tetap tidak boleh minus.** Tidak ada rak berisi minus tiga
+barang; yang negatif di sana selalu salah ketik, dan membiarkannya masuk berarti
+penyesuaiannya ikut menggeser stok ke angka yang mustahil.
+
+### 4. Centang semua "Dicek"
+
+Tombol **Centang semua** menandai Dicek untuk SELURUH baris yang lolos penyaring
+sekarang — bukan hanya yang terlihat di halaman ini. Tandanya tidak menyentuh
+stok sama sekali. Bisa dilepas lagi dengan cara yang sama.
+
+### 5. Sesuaikan semua
+
+Endpoint massal dulu **menolak** penyesuaian, karena tiap baris menulis koreksi
+stok sendiri dan ribuan koreksi dalam satu klik terasa terlalu besar. Gudang
+memintanya tetap ada — menyetel ratusan baris satu per satu pada hari opname
+memakan waktu yang tidak mereka punya. Jadi sekarang bisa, dengan tiga pagar:
+
+1. **Jumlahnya disebut lebih dulu.** Dialognya menyatakan berapa baris yang
+   AKAN disesuaikan dan berapa yang dilewati beserta sebabnya. Menyebut "55
+   baris" padahal yang berubah 12 berarti orang menyetujui hal yang berbeda
+   dari yang terjadi.
+2. **Baris yang belum dihitung atau tidak terhubung ke master DILEWATI**, bukan
+   menggagalkan seluruh permintaan. Pada sesi berisi ratusan barang selalu ada
+   yang belum dihitung, dan menggagalkan karena itu membuat tombolnya tidak
+   pernah bisa dipakai.
+3. **Dibatasi 1.000 baris sekali jalan**, dengan pesan yang menyuruh
+   mempersempit penyaring — pagar transaksi, karena tiap baris menulis satu
+   baris barang masuk/keluar.
+
+Tiap baris tetap lewat `sinkronPenyesuaianStok()` — jalur yang sama persis
+dengan menyetelnya satu per satu — bukan UPDATE massal yang hanya mengubah
+kolom penyesuaian tanpa menggeser stoknya. Aman diulang: menekannya dua kali
+tidak menaikkan stok dua kali.
+
+Tombol **Batal sesuaikan** adalah kebalikannya, dan koreksi stok yang pernah
+ditulis ikut ditarik — jadi kalau massalnya keliru, pembatalannya juga massal.
+
+### Catatan uji
+
+`tools/http/uji_opname_hp.cjs` menjaga kelimanya, termasuk membaca kembali isi
+PDF-nya untuk memastikan nama 93 karakter benar-benar utuh dan tidak ada satu
+pun nama yang berakhir elipsis.
+
+Satu kegagalan sempat muncul dan ternyata salah harness, bukan aplikasi:
+memipa suite ke `head` menutup pipe lebih awal dan membunuh prosesnya di tengah
+jalan, sehingga pembersihannya tidak pernah berjalan dan jalan berikutnya mulai
+dari basis data yang kotor. Peringatannya ditulis di
+[tools/http/JALANKAN.md](tools/http/JALANKAN.md).
+
+---
+
 ## 24 Oktober 2026 — "sudah masuk stok" yang ternyata belum
 
 ### Laporannya

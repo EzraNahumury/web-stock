@@ -31,6 +31,11 @@ Seluruhnya sekaligus:
 for f in tools/http/uji_*.cjs; do printf '%-28s ' "$f"; node "$f" | tail -1; done
 ```
 
+**Jangan dipipa ke `head`.** Pipe yang ditutup lebih awal membunuh prosesnya
+di tengah jalan, pembersihannya tidak pernah berjalan, dan jalan berikutnya
+mulai dari basis data yang kotor — kegagalannya lalu terlihat seperti bug
+aplikasi. Pakai `> berkas` lalu baca berkasnya, atau `| tail`.
+
 Alamat lain lewat `UJI_BASE`. Ini yang dipakai untuk mengujinya pada collation
 yang berbeda dari mesin pengembangan — bentuk galat yang dulu menjatuhkan
 Dashboard di server dan tidak pernah bisa ditiru secara lokal:
@@ -49,6 +54,7 @@ UJI_BASE=http://127.0.0.1:8100 node tools/http/uji_tersusul.cjs
 | `uji_accurate3.cjs` | Penanda Accurate tiga keadaan, dan "tidak masuk" yang tidak boleh terhitung sebagai "belum" |
 | `uji_deadstok.cjs` | Barang deadstok: mencatatnya tidak menggerakkan stok, hanya "dibuang" yang menggerakkan |
 | `uji_minimal.cjs` | Setel ambang stok minimal, satuan maupun massal |
+| `uji_opname_hp.cjs` | Nama barang di PDF opname, stok accurate minus, centang massal, penyesuaian massal |
 
 ## Aturan menulis suite di sini
 

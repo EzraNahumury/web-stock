@@ -346,5 +346,75 @@
     "page": 1,
     "per_page": 50,
     "total_pages": 1
+  },
+  "opname/detail.php": {
+    "sesi": {
+      "id": 31,
+      "nama": "LAPORAN STOK OPNAME OKTOBER 2026 / ACC",
+      "periode": "OKTOBER 2026",
+      "tanggal": "2026-10-25",
+      "kategori": "ACC",
+      "status": "berjalan",
+      "oleh": "Administrator Gudang"
+    },
+    "rows": [
+      {
+        "id": 1,
+        "master_id": 1,
+        "sku": "102151",
+        "barcode": "12132471",
+        "nama": "AYRES CELANA RUNNING DOUBLE LAYER HITAM XL",
+        "kategori": "ACC",
+        "stok_sistem": 0,
+        "stok_hitung": 0,
+        "stok_accurate": 0,
+        "dicek": 1,
+        "petugas": "NANAY",
+        "penyesuaian": "Stok Disesuaikan",
+        "catatan": "",
+        "selisih": 0,
+        "disesuaikan": true,
+        "adj_jenis": null,
+        "adj_qty": 0
+      },
+      {
+        "id": 2,
+        "master_id": 2,
+        "sku": "AC-0038",
+        "barcode": "12132472",
+        "nama": "AVA SKIPPING POLOS HITAM",
+        "kategori": "ACC",
+        "stok_sistem": 68,
+        "stok_hitung": 73,
+        "stok_accurate": -3,
+        "dicek": 0,
+        "petugas": "",
+        "penyesuaian": "Tidak Disesuaikan",
+        "catatan": "",
+        "selisih": 76,
+        "disesuaikan": false,
+        "adj_jenis": null,
+        "adj_qty": null
+      }
+    ],
+    "ringkas": {
+      "jml": 55,
+      "dicek": 1,
+      "belum": 54,
+      "beda": 1,
+      "total_selisih": 76,
+      "disesuaikan": 1
+    },
+    "kategori_options": [
+      "ACC"
+    ],
+    "penyesuaian_options": [
+      "Tidak Disesuaikan",
+      "Stok Disesuaikan"
+    ],
+    "total": 2,
+    "page": 1,
+    "per_page": 50,
+    "total_pages": 1
   }
 }

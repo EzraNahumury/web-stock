@@ -114,6 +114,83 @@ class PdfTabel
         return rtrim($hasil) . $elipsis;
     }
 
+    /**
+     * Pecah teks jadi beberapa baris yang masing-masing muat di satu kolom.
+     *
+     * ADA KARENA 63% NAMA BARANG TIDAK MUAT
+     * Nama barang di katalog ini panjangnya sampai 93 karakter, dan 908 dari
+     * 1.435 barang melewati 28 karakter. Dipotong dengan elipsis, laporan stok
+     * opname jadi memuat belasan baris "AYRES CELANA RUNNING DOUBLE LAYE..."
+     * yang tidak bisa dibedakan satu sama lain — persis pada laporan yang
+     * dipakai menghitung barang di rak. Melebarkan kolomnya tidak menolong:
+     * 93 karakter tidak akan pernah muat dalam satu baris.
+     *
+     * Dipenggal di spasi; kata yang sendirian saja tidak muat dipenggal per
+     * karakter. Baris melebihi $maksBaris dibuang dengan elipsis, supaya satu
+     * nama yang aneh tidak membuat satu baris tabel setinggi setengah halaman.
+     *
+     * @return string[] minimal satu baris, maksimal $maksBaris
+     */
+    private function bungkus(string $s, float $maks, float $ukuran, int $maksBaris = 3): array
+    {
+        $s = trim($s);
+        if ($s === '') {
+            return [''];
+        }
+        if ($this->lebarTeks($s, $ukuran) <= $maks) {
+            return [$s];
+        }
+
+        $kata  = preg_split('/\s+/', $s) ?: [$s];
+        $baris = [];
+        $kini  = '';
+
+        foreach ($kata as $w) {
+            $uji = $kini === '' ? $w : $kini . ' ' . $w;
+            if ($this->lebarTeks($uji, $ukuran) <= $maks) {
+                $kini = $uji;
+                continue;
+            }
+            if ($kini !== '') {
+                $baris[] = $kini;
+                $kini = '';
+            }
+            // Satu kata yang sendirian pun tidak muat: dipenggal per karakter.
+            while ($this->lebarTeks($w, $ukuran) > $maks) {
+                $pas = '';
+                $n = strlen($w);
+                for ($i = 0; $i < $n; $i++) {
+                    if ($this->lebarTeks($pas . $w[$i], $ukuran) > $maks) {
+                        break;
+                    }
+                    $pas .= $w[$i];
+                }
+                if ($pas === '') {
+                    // Kolomnya lebih sempit daripada satu karakter. Tidak
+                    // mungkin dalam pemakaian nyata, tapi tanpa jaring ini
+                    // perulangannya tidak pernah berhenti.
+                    $pas = substr($w, 0, 1);
+                }
+                $baris[] = $pas;
+                $w = substr($w, strlen($pas));
+            }
+            $kini = $w;
+        }
+        if ($kini !== '') {
+            $baris[] = $kini;
+        }
+        if (!$baris) {
+            $baris = [''];
+        }
+
+        if (count($baris) > $maksBaris) {
+            $baris = array_slice($baris, 0, $maksBaris);
+            $akhir = $baris[$maksBaris - 1];
+            $baris[$maksBaris - 1] = $this->potong($akhir . ' ...', $maks, $ukuran);
+        }
+        return $baris;
+    }
+
     private function teks(float $x, float $y, string $s, float $ukuran, bool $tebal = false, array $warna = null): void
     {
         if ($s === '') {
@@ -168,6 +245,9 @@ class PdfTabel
                 'label' => $k['label'],
                 'lebar' => $tersedia * ($k['lebar'] / $jumlah),
                 'rata'  => $k['rata'] ?? 'kiri',
+                // Kolom yang boleh memakai beberapa baris. Sengaja opt-in:
+                // kolom angka dan lencana justru lebih terbaca satu baris.
+                'bungkus' => !empty($k['bungkus']),
             ];
         }
         $this->mulaiHalaman();
@@ -227,12 +307,11 @@ class PdfTabel
      */
     public function baris(array $sel): void
     {
-        $tinggi = 15.0;
-        if ($this->y - $tinggi < $this->tepi + 22) {
-            $this->mulaiHalaman();
-        }
-
-        $x = $this->tepi;
+        /* Isinya disiapkan lebih dulu, baru tingginya ditentukan: baris yang
+         * memuat nama panjang perlu lebih tinggi, dan halaman harus diputus
+         * berdasarkan tinggi yang sebenarnya — bukan 15 poin yang ditebak. */
+        $siap     = [];
+        $maksunit = 1;
         foreach ($this->kolom as $i => $k) {
             $isi = $sel[$i] ?? '';
             $warna = null;
@@ -240,11 +319,31 @@ class PdfTabel
                 $warna = $isi[1] ?? null;
                 $isi = (string)($isi[0] ?? '');
             }
-            $isi = $this->potong((string)$isi, $k['lebar'] - 8, 8.5);
-            $tx = $k['rata'] === 'kanan'
-                ? $x + $k['lebar'] - 4 - $this->lebarTeks($isi, 8.5)
-                : $x + 4;
-            $this->teks($tx, $this->y - 10.5, $isi, 8.5, false, $warna);
+            $lebarIsi = $k['lebar'] - 8;
+            $potongan = $k['bungkus']
+                ? $this->bungkus((string)$isi, $lebarIsi, 8.5)
+                : [$this->potong((string)$isi, $lebarIsi, 8.5)];
+            $siap[$i] = ['baris' => $potongan, 'warna' => $warna];
+            if (count($potongan) > $maksunit) {
+                $maksunit = count($potongan);
+            }
+        }
+
+        $tinggi = 15.0 + ($maksunit - 1) * 10.0;
+        if ($this->y - $tinggi < $this->tepi + 22) {
+            $this->mulaiHalaman();
+        }
+
+        $x = $this->tepi;
+        foreach ($this->kolom as $i => $k) {
+            $yb = $this->y - 10.5;
+            foreach ($siap[$i]['baris'] as $teks) {
+                $tx = $k['rata'] === 'kanan'
+                    ? $x + $k['lebar'] - 4 - $this->lebarTeks($teks, 8.5)
+                    : $x + 4;
+                $this->teks($tx, $yb, $teks, 8.5, false, $siap[$i]['warna']);
+                $yb -= 10.0;
+            }
             $x += $k['lebar'];
         }
 

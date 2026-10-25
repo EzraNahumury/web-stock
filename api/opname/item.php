@@ -79,12 +79,20 @@ $penyesuaian = array_key_exists('penyesuaian', $in)
     ? pilihanValid(ambilStr($in, 'penyesuaian', 30), PENYESUAIAN_OPNAME)
     : (string)$item['penyesuaian'];
 
+/* Hitungan fisik tetap tidak boleh negatif: tidak ada rak berisi minus tiga
+ * barang. Yang negatif di sana selalu salah ketik, dan membiarkannya masuk
+ * berarti penyesuaiannya ikut menggeser stok ke angka yang mustahil. */
 if ($hitung !== null && $hitung < 0) {
-    jsonError('Stok hitung tidak boleh negatif.');
+    jsonError('Stok hitung tidak boleh negatif — itu hasil hitungan fisik di rak.');
 }
-if ($accurate !== null && $accurate < 0) {
-    jsonError('Stok accurate tidak boleh negatif.');
-}
+
+/* STOK ACCURATE BOLEH NEGATIF.
+ *
+ * Kolom ini bukan hitungan rak, melainkan SALINAN saldo dari Accurate, dan
+ * saldo pembukuan memang bisa minus — misalnya ketika barang terlanjur
+ * dikeluarkan sebelum penerimaannya dibukukan. Menolaknya berarti petugas
+ * tidak bisa menuliskan angka yang benar-benar tertera di sana, dan selisih
+ * yang justru paling perlu dilihat tidak pernah bisa dicatat. */
 
 /* --- Penyesuaian stok ---------------------------------------------------- */
 $sesuaikan = ($penyesuaian === PENYESUAIAN_DISESUAIKAN);

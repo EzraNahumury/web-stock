@@ -94,7 +94,8 @@ ctx.window.KET_KELUAR = ['Pesanan MP'];
 vm.runInContext(fs.readFileSync(path.join(akar, 'assets/js/api.js'), 'utf8') + ';globalThis.API = API;', ctx);
 const DIPAKAI = ['switchTab', 'renderContent', 'renderTransaksiTable', 'refreshRetur',
                  'refreshKeterangan', 'refreshMinimal', 'refreshDeadstok', 'ketJenis',
-                 'tambahBarisRetur', 'hapusBarisRetur'];
+                 'tambahBarisRetur', 'hapusBarisRetur',
+                 'bukaOpname', 'refreshOpnameDetail'];
 vm.runInContext(
   fs.readFileSync(path.join(akar, 'assets/js/app.js'), 'utf8')
   + ';(function(){ globalThis.__uji = {}; ' + JSON.stringify(DIPAKAI)
@@ -257,6 +258,42 @@ const semua = () => [...daftar.values()].map((e) => String(e.innerHTML || '')).j
   cek('ambangnya bisa diketik', htmlMin.indexOf('onchange="simpanMinimal(') >= 0);
   cek('ada penyaring ambang masih 0', /Ambangnya masih 0/.test(htmlMin));
   cek('ada tombol setel massal', htmlMin.indexOf('setelMinimalMassal()') >= 0);
+
+  console.log('\n=== Laporan stok opname: bisa diisi dari HP ===');
+  uji.switchTab('opname');
+  uji.bukaOpname(31);
+  await uji.refreshOpnameDetail();
+  const htmlOp = semua();
+  const tabelOp = isi('oiHasil');
+
+  /* Tabelnya 11 kolom dan min-width 1320px. Di HP itu berarti menggeser ke
+   * samping untuk mengisi satu baris — sebabnya petugas minta "versi desktop"
+   * lalu mencubit layar sepanjang hari opname. Kelas tabel-kartu + data-label
+   * yang membuatnya jadi tumpukan kartu di layar sempit. */
+  cek('tabelnya ditandai bisa jadi kartu', tabelOp.indexOf('class="tabel-kartu"') >= 0);
+  cek('tiap sel membawa label kolomnya',
+      tabelOp.indexOf('data-label="Stok hitung"') >= 0
+      && tabelOp.indexOf('data-label="Stok accurate"') >= 0
+      && tabelOp.indexOf('data-label="Petugas"') >= 0
+      && tabelOp.indexOf('data-label="Penyesuaian"') >= 0);
+  cek('nama barang jadi judul kartu', tabelOp.indexOf('class="kartu-judul"') >= 0);
+  cek('papan angka HP dimunculkan', tabelOp.indexOf('inputmode="numeric"') >= 0);
+
+  console.log('\n=== Laporan stok opname: stok accurate boleh minus ===');
+  /* Kolom ini salinan saldo Accurate, bukan hitungan rak, dan saldo pembukuan
+   * memang bisa minus. min="0" dulu membuatnya tidak bisa diketik. */
+  const kolomHitung = tabelOp.slice(tabelOp.indexOf('id="oh2"') - 90, tabelOp.indexOf('id="oh2"') + 40);
+  const kolomAcc = tabelOp.slice(tabelOp.indexOf('id="oa2"') - 90, tabelOp.indexOf('id="oa2"') + 40);
+  cek('stok hitung tetap tidak boleh minus', kolomHitung.indexOf('min="0"') >= 0);
+  cek('stok accurate tidak lagi dipaku min 0', kolomAcc.indexOf('min="0"') === -1);
+  cek('nilai minus tergambar apa adanya', tabelOp.indexOf('value="-3"') >= 0);
+  cek('kotak info menyebut boleh minus', htmlOp.indexOf('boleh diisi angka minus') >= 0);
+
+  console.log('\n=== Laporan stok opname: tombol massal ===');
+  cek('ada tombol centang semua', /id="oiCentang"/.test(htmlOp) && /Centang semua/.test(htmlOp));
+  cek('ada tombol sesuaikan semua', /id="oiSesuaikan"/.test(htmlOp) && /Sesuaikan semua/.test(htmlOp));
+  cek('ada tombol batal sesuaikan', /id="oiBatalSesuai"/.test(htmlOp) && /Batal sesuaikan/.test(htmlOp));
+  cek('tombol isi petugas tetap ada', /id="oiMassal"/.test(htmlOp));
 
   console.log('\n=== Stok opname: keterangan penyesuaian sudah betul ===');
   uji.switchTab('opname');

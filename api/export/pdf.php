@@ -122,7 +122,7 @@ switch ($jenis) {
         ], [
             ['label' => 'SKU',          'lebar' => 9],
             ['label' => 'Barcode',      'lebar' => 11],
-            ['label' => 'Nama barang',  'lebar' => 30],
+            ['label' => 'Nama barang',  'lebar' => 30, 'bungkus' => true],
             ['label' => 'Kategori',     'lebar' => 9],
             ['label' => 'Awal',         'lebar' => 6,   'rata' => 'kanan'],
             ['label' => 'Masuk',        'lebar' => 6,   'rata' => 'kanan'],
@@ -197,7 +197,7 @@ switch ($jenis) {
         $kolom = [
             ['label' => 'Tanggal',     'lebar' => 9],
             ['label' => 'Barcode',     'lebar' => 12],
-            ['label' => 'Nama barang', 'lebar' => 32],
+            ['label' => 'Nama barang', 'lebar' => 32, 'bungkus' => true],
             ['label' => $isKel ? 'Keluar' : 'Masuk', 'lebar' => 7, 'rata' => 'kanan'],
             ['label' => 'Keterangan',  'lebar' => 12],
         ];
@@ -257,7 +257,7 @@ switch ($jenis) {
         ], [
             ['label' => 'SKU',         'lebar' => 9],
             ['label' => 'Barcode',     'lebar' => 12],
-            ['label' => 'Nama barang', 'lebar' => 32],
+            ['label' => 'Nama barang', 'lebar' => 32, 'bungkus' => true],
             ['label' => 'Kategori',    'lebar' => 9],
             ['label' => 'Stok awal',   'lebar' => 8, 'rata' => 'kanan'],
             ['label' => 'Stok masuk',  'lebar' => 8, 'rata' => 'kanan'],
@@ -371,7 +371,7 @@ switch ($jenis) {
         ], [
             ['label' => 'SKU',          'lebar' => 10],
             ['label' => 'Barcode',      'lebar' => 13],
-            ['label' => 'Nama barang',  'lebar' => 38],
+            ['label' => 'Nama barang',  'lebar' => 38, 'bungkus' => true],
             ['label' => 'Stok awal',    'lebar' => 8,  'rata' => 'kanan'],
             ['label' => 'Stok minimal', 'lebar' => 9,  'rata' => 'kanan'],
             ['label' => 'Kategori',     'lebar' => 11],
@@ -537,7 +537,7 @@ switch ($jenis) {
             ['label' => 'Tanggal',          'lebar' => 9],
             ['label' => 'No. Pesanan',      'lebar' => 16],
             ['label' => 'SKU',              'lebar' => 9],
-            ['label' => 'Nama produk',      'lebar' => 25],
+            ['label' => 'Nama produk',      'lebar' => 25, 'bungkus' => true],
             ['label' => 'Qty',              'lebar' => 5, 'rata' => 'kanan'],
             ['label' => 'Keterangan retur', 'lebar' => 14],
             ['label' => 'Ket.',             'lebar' => 10],
@@ -660,7 +660,7 @@ switch ($jenis) {
         ], [
             ['label' => 'Tanggal',     'lebar' => 9],
             ['label' => 'SKU',         'lebar' => 9],
-            ['label' => 'Nama produk', 'lebar' => 27],
+            ['label' => 'Nama produk', 'lebar' => 27, 'bungkus' => true],
             ['label' => 'Kategori',    'lebar' => 15],
             ['label' => 'Qty',         'lebar' => 5, 'rata' => 'kanan'],
             ['label' => 'Keadaan',     'lebar' => 12],
@@ -754,15 +754,17 @@ switch ($jenis) {
             'Baris'    => count($data),
         ], [
             ['label' => 'SKU',            'lebar' => 8],
-            ['label' => 'Nama barang',    'lebar' => 23],
+            // Dilebarkan DAN dibungkus: 63% nama barang di katalog ini lebih
+            // dari 28 karakter, jadi melebarkan saja tidak pernah cukup.
+            ['label' => 'Nama barang',    'lebar' => 27, 'bungkus' => true],
             ['label' => 'Stok akhir',     'lebar' => 7,  'rata' => 'kanan'],
             ['label' => 'Stok hitung',    'lebar' => 7,  'rata' => 'kanan'],
-            ['label' => 'Stok accurate',  'lebar' => 8,  'rata' => 'kanan'],
+            ['label' => 'Stok accurate',  'lebar' => 7,  'rata' => 'kanan'],
             ['label' => 'Dicek',          'lebar' => 5],
-            ['label' => 'Petugas',        'lebar' => 10],
-            ['label' => 'Kategori',       'lebar' => 8],
-            ['label' => 'Selisih barang', 'lebar' => 8,  'rata' => 'kanan'],
-            ['label' => 'Penyesuaian',    'lebar' => 12],
+            ['label' => 'Petugas',        'lebar' => 9],
+            ['label' => 'Kategori',       'lebar' => 7],
+            ['label' => 'Selisih barang', 'lebar' => 7,  'rata' => 'kanan'],
+            ['label' => 'Penyesuaian',    'lebar' => 11],
         ]);
 
         $totalSelisih   = 0;

@@ -3929,6 +3929,15 @@ function renderOpnameDetail(){
     + '<button type="button" class="btn ghost" id="oiMassal" onclick="isiMassalOpname()"'
       + ' title="Isi petugas untuk seluruh baris yang sedang tersaring">'
       + svgIcon("edit") + 'Isi petugas</button>'
+    + '<button type="button" class="btn ghost" id="oiCentang" onclick="centangSemuaOpname()"'
+      + ' title="Tandai Dicek untuk seluruh baris yang sedang tersaring">'
+      + svgIcon("check") + 'Centang semua</button>'
+    + '<button type="button" class="btn ghost" id="oiSesuaikan" onclick="sesuaikanSemuaOpname(true)"'
+      + ' title="Setel Stok Disesuaikan untuk seluruh baris tersaring yang sudah dihitung">'
+      + svgIcon("check") + 'Sesuaikan semua</button>'
+    + '<button type="button" class="btn ghost" id="oiBatalSesuai" onclick="sesuaikanSemuaOpname(false)"'
+      + ' title="Kembalikan ke Tidak Disesuaikan; koreksi stoknya ikut ditarik">'
+      + svgIcon("x") + 'Batal sesuaikan</button>'
     + '<label class="btn ghost" id="oiAccurate" title="Isi kolom Stok accurate dari laporan Accurate">'
       + svgIcon("plus") + 'PDF Accurate'
       + '<input type="file" accept="application/pdf,.pdf" id="oiAccurateFile"'
@@ -4042,8 +4051,10 @@ async function refreshOpnameDetail(){
 
   opnameRows = d.rows;
   const mati = terkunci ? " disabled" : "";
-  const tblMassal = $("oiMassal");
-  if(tblMassal) tblMassal.disabled = terkunci;
+  ["oiMassal","oiCentang","oiSesuaikan","oiBatalSesuai"].forEach(id => {
+    const b = $(id);
+    if(b) b.disabled = terkunci || !bolehTulis();
+  });
   const tblAcc = $("oiAccurate");
   if(tblAcc){
     tblAcc.classList.toggle("mati", terkunci);
@@ -4052,34 +4063,43 @@ async function refreshOpnameDetail(){
   }
   let baris = d.rows.map(it =>
     '<tr>'
-    + '<td class="mono" style="font-size:11px; color:var(--slateLo)">' + esc(it.sku || "-") + '</td>'
-    + '<td><div class="item-name">' + esc(it.nama) + '</div>'
+    /* data-label dipakai tampilan HP: di layar sempit tiap baris jadi kartu,
+     * dan label kolomnya diambil dari sini karena kepala tabelnya disembunyikan.
+     * Kolom nama diberi kelas khusus supaya jadi judul kartunya. */
+    + '<td class="mono kartu-sub" data-label="SKU" style="font-size:11px; color:var(--slateLo)">' + esc(it.sku || "-") + '</td>'
+    + '<td class="kartu-judul" data-label=""><div class="item-name">' + esc(it.nama) + '</div>'
       + '<div class="item-sub">' + esc(it.barcode || "-") + '</div></td>'
-    + '<td class="num">' + fmtNum(it.stok_sistem) + '</td>'
-    + '<td class="num"><input type="number" class="sel-angka" id="oh' + it.id + '" min="0"'
+    + '<td class="num" data-label="Stok akhir">' + fmtNum(it.stok_sistem) + '</td>'
+    /* Hitungan fisik tetap min=0 — tidak ada rak berisi minus tiga barang. */
+    + '<td class="num" data-label="Stok hitung"><input type="number" class="sel-angka" id="oh' + it.id + '" min="0"'
+      + ' inputmode="numeric"'
       + ' value="' + (it.stok_hitung === null ? "" : it.stok_hitung) + '"'
       + ' onchange="simpanItemOpname(' + it.id + ')"' + mati + '></td>'
-    + '<td class="num"><input type="number" class="sel-angka" id="oa' + it.id + '" min="0"'
+    /* Stok accurate TANPA min: ini salinan saldo dari Accurate, dan saldo
+     * pembukuan memang bisa minus. min="0" dulu membuat angka yang benar-benar
+     * tertera di sana tidak bisa diketik. */
+    + '<td class="num" data-label="Stok accurate"><input type="number" class="sel-angka" id="oa' + it.id + '"'
+      + ' inputmode="numeric"'
       + ' value="' + (it.stok_accurate === null ? "" : it.stok_accurate) + '"'
       + ' onchange="simpanItemOpname(' + it.id + ')"' + mati + '></td>'
-    + '<td class="num"><input type="checkbox" class="sel-cek" id="oc' + it.id + '"'
+    + '<td class="num" data-label="Dicek"><input type="checkbox" class="sel-cek" id="oc' + it.id + '"'
       + (it.dicek ? " checked" : "") + ' onchange="simpanItemOpname(' + it.id + ')"' + mati + '></td>'
-    + '<td><input type="text" class="sel-petugas" id="op' + it.id + '" maxlength="100"'
+    + '<td data-label="Petugas"><input type="text" class="sel-petugas" id="op' + it.id + '" maxlength="100"'
       + ' value="' + esc(it.petugas || "") + '" placeholder="Nama"'
       + ' onchange="simpanItemOpname(' + it.id + ')"' + mati + '></td>'
-    + '<td>' + (it.kategori
+    + '<td data-label="Kategori">' + (it.kategori
         ? '<span class="badge netral">' + esc(it.kategori) + '</span>'
         : '<span style="color:var(--slateLo); font-size:11px">-</span>') + '</td>'
-    + '<td class="num"><span id="sel' + it.id + '" class="' + kelasSelisih(it.selisih) + '">'
+    + '<td class="num" data-label="Selisih"><span id="sel' + it.id + '" class="' + kelasSelisih(it.selisih) + '">'
       + teksSelisih(it.selisih) + '</span></td>'
-    + '<td><select class="sel-penyesuaian' + (it.disesuaikan ? ' ya' : '') + '" id="oy' + it.id + '"'
+    + '<td data-label="Penyesuaian"><select class="sel-penyesuaian' + (it.disesuaikan ? ' ya' : '') + '" id="oy' + it.id + '"'
       + ' onchange="onPenyesuaianBerubah(' + it.id + ')"' + mati + '>'
       + opnamePenyesuaian.map(v => '<option value="' + esc(v) + '"'
           + (v === it.penyesuaian ? ' selected' : '') + '>' + esc(v) + '</option>').join("")
       + '</select>'
       + '<div class="item-sub" style="font-family:Inter" id="oq' + it.id + '">'
       + teksKoreksi(it) + '</div></td>'
-    + '<td><input type="text" class="sel-catatan" id="ok' + it.id + '" maxlength="255"'
+    + '<td data-label="Ket."><input type="text" class="sel-catatan" id="ok' + it.id + '" maxlength="255"'
       + ' value="' + esc(it.catatan || "") + '" placeholder="Ket."'
       + ' onchange="simpanItemOpname(' + it.id + ')"' + mati + '></td>'
     + '</tr>'
@@ -4096,12 +4116,16 @@ async function refreshOpnameDetail(){
       ? '<div class="info-box">Laporan ini sudah ditandai <b>selesai</b>, jadi angkanya dikunci. '
         + 'Buka kembali statusnya bila memang perlu diubah.</div>'
       : '<div class="info-box">Isi <b>stok hitung</b> dari hasil hitungan fisik dan <b>stok accurate</b> '
-        + 'dari catatan Accurate. Angkanya tersimpan begitu kamu pindah dari kolomnya. '
+        + 'dari catatan Accurate — kolom itu boleh diisi angka minus, karena saldo pembukuan '
+        + 'memang bisa minus. Angkanya tersimpan begitu kamu pindah dari kolomnya. '
         + 'Memilih <b>"Stok Disesuaikan"</b> langsung membetulkan stoknya: stok akhir '
         + 'barang itu mengikuti stok hitung, lewat satu baris Barang masuk atau Barang '
         + 'keluar berketerangan "Penyesuaian Opname" — jadi koreksinya ikut terbaca di '
         + 'Riwayat, bukan berubah diam-diam.</div>')
-    + '<div class="table-card"><table style="min-width:1320px"><thead><tr>'
+    /* tabel-kartu: di layar sempit tabel ini berubah jadi tumpukan kartu,
+     * supaya laporan stok opname bisa diisi langsung dari HP tanpa harus
+     * meminta "situs versi desktop" dan mencubit layar. */
+    + '<div class="table-card"><table class="tabel-kartu" style="min-width:1320px"><thead><tr>'
     + ["SKU","Nama barang","Stok akhir","Stok hitung","Stok accurate","Dicek","Petugas",
        "Kategori","Selisih barang","Penyesuaian","Ket."]
         .map((h,i)=>'<th'+((i>=2&&i<=5)||i===8?' class="num"':'')+'>'+esc(h)+'</th>').join("")
@@ -4224,6 +4248,107 @@ async function simpanItemOpname(id){
  * satu sesi bisa memuat ribuan baris, dan menimpanya tanpa menyebut
  * angkanya membuat orang menekan "ya" tanpa tahu apa yang terjadi.
  */
+/** Centang "Dicek" untuk seluruh baris yang sedang tersaring. */
+async function centangSemuaOpname(){
+  if(!opnameSesiId) return;
+
+  let pra;
+  try{
+    pra = await API.post("opname/massal.php", {
+      id: opnameSesiId, pratinjau: true,
+      q: opnameFilter.q, kategori: opnameFilter.kategori, hanya: opnameFilter.hanya
+    });
+  }catch(e){ tampilGalat(e); return; }
+
+  if(!pra.jumlah){ toast("Tidak ada baris pada penyaring ini.", "err"); return; }
+
+  const ok = await konfirmasi(
+    "Centang Dicek untuk " + fmtNum(pra.jumlah) + " baris?",
+    "Yang dicentang SELURUH baris yang lolos penyaring sekarang, bukan hanya yang terlihat "
+      + "di halaman ini. Tandanya tidak menyentuh stok sama sekali — ia hanya menyatakan "
+      + "barisnya sudah didatangi petugas.",
+    "Ya, centang"
+  );
+  if(!ok) return;
+
+  setSaveStatus("saving");
+  try{
+    const res = await API.post("opname/massal.php", {
+      id: opnameSesiId, dicek: true,
+      q: opnameFilter.q, kategori: opnameFilter.kategori, hanya: opnameFilter.hanya
+    });
+    setSaveStatus("ok");
+    toast(res.pesan || "Tersimpan.");
+    refreshOpnameDetail();
+  }catch(e){ tampilGalat(e); }
+}
+
+/**
+ * Setel penyesuaian untuk seluruh baris tersaring.
+ *
+ * Ini SATU-SATUNYA tombol di layar ini yang menggeser stok banyak barang
+ * sekaligus, jadi jumlahnya disebut lebih dulu — berapa yang akan disesuaikan
+ * dan berapa yang dilewati beserta sebabnya. Menyebut "55 baris" padahal yang
+ * berubah 12 berarti orang menyetujui hal yang berbeda dari yang terjadi.
+ */
+async function sesuaikanSemuaOpname(sesuaikan){
+  if(!opnameSesiId) return;
+
+  let pra;
+  try{
+    pra = await API.post("opname/massal.php", {
+      id: opnameSesiId, pratinjau: true, penyesuaian: "x",
+      q: opnameFilter.q, kategori: opnameFilter.kategori, hanya: opnameFilter.hanya
+    });
+  }catch(e){ tampilGalat(e); return; }
+
+  if(!pra.jumlah){ toast("Tidak ada baris pada penyaring ini.", "err"); return; }
+
+  if(sesuaikan && !pra.bisa_sesuai){
+    toast("Tidak ada baris yang bisa disesuaikan: isi stok hitungnya dulu.", "err");
+    return;
+  }
+  if(sesuaikan && pra.bisa_sesuai > pra.maks){
+    toast("Terlalu banyak sekaligus (" + fmtNum(pra.bisa_sesuai) + " baris, batas "
+      + fmtNum(pra.maks) + "). Persempit penyaringnya, misalnya per kategori.", "err");
+    return;
+  }
+
+  const lewat = [];
+  if(pra.lewat_hitung) lewat.push(fmtNum(pra.lewat_hitung) + " belum diisi stok hitungnya");
+  if(pra.lewat_master) lewat.push(fmtNum(pra.lewat_master) + " tidak terhubung ke master");
+
+  const ok = sesuaikan
+    ? await konfirmasi(
+        "Sesuaikan stok " + fmtNum(pra.bisa_sesuai) + " barang?",
+        "Stok akhir tiap barang itu akan mengikuti stok hitungnya, lewat baris Barang masuk "
+          + "atau Barang keluar berketerangan \u201cPenyesuaian Opname\u201d — jadi koreksinya "
+          + "terbaca di Riwayat, bukan berubah diam-diam."
+          + (lewat.length ? " Dilewati: " + lewat.join(", ") + "." : "")
+          + " Bisa dibatalkan lagi dengan tombol Batal sesuaikan.",
+        "Ya, sesuaikan"
+      )
+    : await konfirmasi(
+        "Batalkan penyesuaian " + fmtNum(pra.jumlah) + " baris?",
+        "Koreksi stok yang pernah ditulis untuk baris-baris ini ikut ditarik, jadi stoknya "
+          + "kembali seperti sebelum disesuaikan.",
+        "Ya, batalkan"
+      );
+  if(!ok) return;
+
+  setSaveStatus("saving");
+  try{
+    const res = await API.post("opname/massal.php", {
+      id: opnameSesiId,
+      penyesuaian: sesuaikan ? "Stok Disesuaikan" : "Tidak Disesuaikan",
+      q: opnameFilter.q, kategori: opnameFilter.kategori, hanya: opnameFilter.hanya
+    });
+    setSaveStatus("ok");
+    toast(res.pesan || "Tersimpan.");
+    refreshOpnameDetail();
+  }catch(e){ tampilGalat(e); }
+}
+
 async function isiMassalOpname(){
   const nama = await mintaTeks(
     "Isi petugas",
