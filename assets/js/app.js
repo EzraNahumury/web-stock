@@ -3923,7 +3923,7 @@ function renderOpnameDetail(){
     + '<select id="oiHanya" onchange="onOpnameItemFilter()">'
       + '<option value="semua">Semua barang</option>'
       + '<option value="belum">Belum dihitung</option>'
-      + '<option value="selisih">Ada selisih</option>'
+      + '<option value="selisih">Ada selisih (vs stok akhir)</option>'
       + '<option value="disesuaikan">Sudah disesuaikan</option>'
     + '</select>'
     + '<button type="button" class="btn ghost" id="oiMassal" onclick="isiMassalOpname()"'
@@ -4052,11 +4052,13 @@ async function refreshOpnameDetail(){
                    kaki:fmtNum(r.belum) + " belum dihitung" })
       + statCard({ label:"Berselisih", nilai:r.beda, ikon:"alert",
                    nada:r.beda > 0 ? "danger" : "", tone:r.beda > 0 ? "danger" : "",
-                   kaki:"hitung ≠ accurate" })
+                   kaki:"hitung ≠ stok akhir"
+                     + (r.beda_acc ? " · " + fmtNum(r.beda_acc) + " beda vs Accurate" : "") })
       + statCard({ label:"Jumlah selisih", nilai:Math.abs(r.total_selisih), ikon:"unit",
                    nada:r.total_selisih === 0 ? "" : "amber",
-                   kaki:r.total_selisih === 0 ? "seimbang"
-                        : (r.total_selisih > 0 ? "lebih di hitungan fisik" : "kurang di hitungan fisik") })
+                   kaki:r.total_selisih === 0 ? "stok sistem sudah sama dengan rak"
+                        : (r.total_selisih > 0 ? "lebih di rak daripada di sistem"
+                                               : "kurang di rak daripada di sistem") })
       + statCard({ label:"Disesuaikan", nilai:r.disesuaikan, ikon:"tag",
                    nada:r.disesuaikan > 0 ? "amber" : "",
                    kaki:"stok sudah dibetulkan" });
@@ -4084,7 +4086,13 @@ async function refreshOpnameDetail(){
     + '<td class="mono kartu-sub" data-label="SKU" style="font-size:11px; color:var(--slateLo)">' + esc(it.sku || "-") + '</td>'
     + '<td class="kartu-judul" data-label=""><div class="item-name">' + esc(it.nama) + '</div>'
       + '<div class="item-sub">' + esc(it.barcode || "-") + '</div></td>'
-    + '<td class="num" data-label="Stok akhir">' + fmtNum(it.stok_sistem) + '</td>'
+    /* Stok akhir yang BERLAKU SEKARANG, bukan salinan saat sesi dibuat.
+     * Selisih di kolom sebelah dihitung terhadap angka ini, jadi
+     * pengurangannya bisa dicocokkan dengan mata. */
+    + '<td class="num" data-label="Stok akhir">' + fmtNum(it.stok_akhir)
+      + (it.stok_akhir !== it.stok_sistem
+          ? '<div class="item-sub" style="font-family:Inter">saat dibuat ' + fmtNum(it.stok_sistem) + '</div>'
+          : '') + '</td>'
     /* Hitungan fisik tetap min=0 — tidak ada rak berisi minus tiga barang. */
     + '<td class="num" data-label="Stok hitung"><input type="number" class="sel-angka" id="oh' + it.id + '" min="0"'
       + ' inputmode="numeric"'
@@ -4105,8 +4113,15 @@ async function refreshOpnameDetail(){
     + '<td data-label="Kategori">' + (it.kategori
         ? '<span class="badge netral">' + esc(it.kategori) + '</span>'
         : '<span style="color:var(--slateLo); font-size:11px">-</span>') + '</td>'
+    /* Selisih terhadap STOK AKHIR: inilah yang dikoreksi penyesuaian stok,
+     * jadi inilah yang ditampilkan lebih dulu. */
     + '<td class="num" data-label="Selisih"><span id="sel' + it.id + '" class="' + kelasSelisih(it.selisih) + '">'
-      + teksSelisih(it.selisih) + '</span></td>'
+      + teksSelisih(it.selisih) + '</span>'
+      + '<div class="item-sub" style="font-family:Inter">vs stok akhir</div></td>'
+    /* Pemeriksaan silang terhadap Accurate, tetap dibawa karena gudang memang
+     * memakainya — ada tombol unggah PDF Accurate untuk mengisi kolomnya. */
+    + '<td class="num" data-label="Selisih Acc."><span id="selacc' + it.id + '" class="' + kelasSelisih(it.selisih_acc) + '">'
+      + teksSelisih(it.selisih_acc) + '</span></td>'
     + '<td data-label="Penyesuaian"><select class="sel-penyesuaian' + (it.disesuaikan ? ' ya' : '') + '" id="oy' + it.id + '"'
       + ' onchange="onPenyesuaianBerubah(' + it.id + ')"' + mati + '>'
       + opnamePenyesuaian.map(v => '<option value="' + esc(v) + '"'
@@ -4121,7 +4136,7 @@ async function refreshOpnameDetail(){
   ).join("");
 
   if(!d.rows.length){
-    baris = '<tr class="empty-row"><td colspan="11">Tidak ada barang pada penyaring ini.</td></tr>';
+    baris = '<tr class="empty-row"><td colspan="12">Tidak ada barang pada penyaring ini.</td></tr>';
   }
 
   wadah.innerHTML =
@@ -4130,7 +4145,11 @@ async function refreshOpnameDetail(){
       : terkunci
       ? '<div class="info-box">Laporan ini sudah ditandai <b>selesai</b>, jadi angkanya dikunci. '
         + 'Buka kembali statusnya bila memang perlu diubah.</div>'
-      : '<div class="info-box">Isi <b>stok hitung</b> dari hasil hitungan fisik dan <b>stok accurate</b> '
+      : '<div class="info-box"><b>Selisih = stok hitung &minus; stok akhir</b> — seberapa jauh stok '
+        + 'sistem meleset dari kenyataan di rak, dan itu pula yang dibetulkan oleh '
+        + '"Stok Disesuaikan". Kolom <b>Selisih Acc.</b> adalah pemeriksaan silang terhadap '
+        + 'Accurate (stok hitung &minus; stok accurate), bukan yang menggerakkan koreksi.<br><br>'
+        + 'Isi <b>stok hitung</b> dari hasil hitungan fisik dan <b>stok accurate</b> '
         + 'dari catatan Accurate — kolom itu boleh diisi angka minus, karena saldo pembukuan '
         + 'memang bisa minus. Angkanya tersimpan begitu kamu pindah dari kolomnya. '
         + 'Memilih <b>"Stok Disesuaikan"</b> langsung membetulkan stoknya: stok akhir '
@@ -4142,8 +4161,8 @@ async function refreshOpnameDetail(){
      * meminta "situs versi desktop" dan mencubit layar. */
     + '<div class="table-card"><table class="tabel-kartu" style="min-width:1320px"><thead><tr>'
     + ["SKU","Nama barang","Stok akhir","Stok hitung","Stok accurate","Dicek","Petugas",
-       "Kategori","Selisih barang","Penyesuaian","Ket."]
-        .map((h,i)=>'<th'+((i>=2&&i<=5)||i===8?' class="num"':'')+'>'+esc(h)+'</th>').join("")
+       "Kategori","Selisih","Selisih Acc.","Penyesuaian","Ket."]
+        .map((h,i)=>'<th'+((i>=2&&i<=5)||i===8||i===9?' class="num"':'')+'>'+esc(h)+'</th>').join("")
     + '</tr></thead><tbody>' + baris + '</tbody></table>'
     + paginationBar(d.total, d.page, d.total_pages, "opnameItemGoPage")
     + '</div>';
@@ -4157,6 +4176,11 @@ function kelasSelisih(v){
   if(v === null || v === undefined || v === 0) return "sel-nol";
   return v > 0 ? "sel-lebih" : "sel-kurang";
 }
+
+/* CATATAN: selisih satu baris TIDAK dihitung ulang di layar. Angkanya datang
+ * dari server (r.selisih), karena hanya server yang tahu stok yang berlaku
+ * sekarang — dan menghitungnya di dua tempat dengan dua rumus yang hampir sama
+ * adalah persis cara bug ini lahir. */
 
 /** Keterangan kecil di bawah dropdown penyesuaian. */
 function teksKoreksi(it){

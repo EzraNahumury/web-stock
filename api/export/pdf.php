@@ -759,6 +759,7 @@ switch ($jenis) {
             ['label' => 'Petugas',     'lebar' => 9,  'bungkus' => true],
             ['label' => 'Kategori',    'lebar' => 8,  'bungkus' => true],
             ['label' => 'Selisih',     'lebar' => 7,  'rata' => 'kanan'],
+            ['label' => 'Sel. Acc',    'lebar' => 7,  'rata' => 'kanan'],
             // "Tidak Disesuaikan" perlu 75 poin; dengan jarak sel 7 di kedua
             // sisi, lebar 10 hanya menyisakan 67 dan memotongnya.
             ['label' => 'Penyesuaian', 'lebar' => 12, 'bungkus' => true],
@@ -770,7 +771,14 @@ switch ($jenis) {
         foreach ($data as $r) {
             $h = $r['stok_hitung']   === null ? null : (int)$r['stok_hitung'];
             $a = $r['stok_accurate'] === null ? null : (int)$r['stok_accurate'];
-            $selisih = ($h !== null && $a !== null) ? $h - $a : null;
+            /* Selisih = stok hitung - stok akhir YANG BERLAKU SEKARANG;
+             * itulah yang dikoreksi "Stok Disesuaikan". i.stok_sistem adalah
+             * salinan saat sesi dibuat dan sudah bisa berbeda. */
+            $stokKini = $r['master_id'] !== null
+                ? stokAkhirItem((int)$r['master_id'])
+                : (int)$r['stok_sistem'];
+            $selisih    = $h !== null ? $h - $stokKini : null;
+            $selisihAcc = ($h !== null && $a !== null) ? $h - $a : null;
             if ($selisih !== null) {
                 $totalSelisih += $selisih;
                 if ($selisih !== 0) {
@@ -784,7 +792,7 @@ switch ($jenis) {
             $pdf->baris([
                 $r['sku'],
                 $r['nama'],
-                number_format((int)$r['stok_sistem'], 0, ',', '.'),
+                number_format($stokKini, 0, ',', '.'),
                 $h === null ? '-' : number_format($h, 0, ',', '.'),
                 $a === null ? '-' : number_format($a, 0, ',', '.'),
                 (int)$r['dicek'] === 1 ? ['Ya', [14, 128, 96]] : '',
@@ -794,6 +802,10 @@ switch ($jenis) {
                     ? '-'
                     : [($selisih > 0 ? '+' : '') . number_format($selisih, 0, ',', '.'),
                        $selisih === 0 ? null : ($selisih > 0 ? [199, 127, 14] : [178, 58, 46])],
+                $selisihAcc === null
+                    ? '-'
+                    : [($selisihAcc > 0 ? '+' : '') . number_format($selisihAcc, 0, ',', '.'),
+                       $selisihAcc === 0 ? null : ($selisihAcc > 0 ? [199, 127, 14] : [178, 58, 46])],
                 [$r['penyesuaian'], $disesuaikan ? [199, 127, 14] : [139, 155, 163]],
             ]);
         }

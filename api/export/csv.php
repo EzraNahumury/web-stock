@@ -142,7 +142,8 @@ switch ($jenis) {
 
         echo barisCsv([
             'SKU', 'Barcode', 'Nama barang', 'Kategori',
-            'Stok akhir', 'Stok hitung', 'Stok accurate', 'Selisih barang',
+            'Stok akhir', 'Stok saat opname dibuat', 'Stok hitung', 'Stok accurate',
+            'Selisih (hitung - stok akhir)', 'Selisih Accurate (hitung - accurate)',
             'Dicek', 'Petugas', 'Penyesuaian', 'Koreksi stok', 'Ket.',
         ]);
 
@@ -150,7 +151,14 @@ switch ($jenis) {
         foreach ($data as $r) {
             $h = $r['stok_hitung']   === null ? null : (int)$r['stok_hitung'];
             $a = $r['stok_accurate'] === null ? null : (int)$r['stok_accurate'];
-            $selisih = ($h !== null && $a !== null) ? $h - $a : null;
+            /* Selisih = stok hitung - stok akhir YANG BERLAKU SEKARANG;
+             * itulah yang dikoreksi. Salinan saat sesi dibuat ikut dikirim di
+             * kolomnya sendiri sebagai jejak audit. */
+            $stokKini = $r['master_id'] !== null
+                ? stokAkhirItem((int)$r['master_id'])
+                : (int)$r['stok_sistem'];
+            $selisih    = $h !== null ? $h - $stokKini : null;
+            $selisihAcc = ($h !== null && $a !== null) ? $h - $a : null;
             if ($selisih !== null) {
                 $totalSelisih += $selisih;
             }
@@ -169,10 +177,12 @@ switch ($jenis) {
                 $r['barcode'],
                 $r['nama'],
                 $r['kategori'],
+                $stokKini,
                 (int)$r['stok_sistem'],
                 $h === null ? '' : $h,
                 $a === null ? '' : $a,
                 $selisih === null ? '' : $selisih,
+                $selisihAcc === null ? '' : $selisihAcc,
                 (int)$r['dicek'] === 1 ? 'Ya' : 'Tidak',
                 $r['petugas'],
                 $r['penyesuaian'],

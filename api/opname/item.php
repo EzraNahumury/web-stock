@@ -141,11 +141,20 @@ if ($sesuaikan) {
     ]);
 }
 
-$selisih = ($hitung !== null && $accurate !== null) ? $hitung - $accurate : null;
-
 // Stok yang berlaku sesudah penyimpanan — dipakai layar untuk menunjukkan
 // hasil penyesuaiannya tanpa memuat ulang seluruh halaman.
 $stokKini = $item['master_id'] !== null ? stokAkhirItem((int)$item['master_id']) : null;
+
+/* Sama dengan api/opname/detail.php: selisih dihitung terhadap stok akhir YANG
+ * BERLAKU SEKARANG, bukan terhadap salinan saat sesi dibuat, dan bukan pula
+ * terhadap stok accurate. Rumusnya harus sama persis dengan yang di sana —
+ * kalau tidak, angkanya berubah sendiri begitu halamannya disegarkan.
+ *
+ * Dihitung SESUDAH transaksi: begitu barisnya disesuaikan, stok hidupnya sudah
+ * mengikuti hitungan fisik, jadi selisihnya memang nol. Itu yang benar. */
+$stokBanding = $stokKini !== null ? $stokKini : (int)$item['stok_sistem'];
+$selisih     = $hitung !== null ? $hitung - $stokBanding : null;
+$selisihAcc  = ($hitung !== null && $accurate !== null) ? $hitung - $accurate : null;
 
 $pesan = '';
 if ($sesuaikan) {
@@ -167,6 +176,7 @@ jsonOk([
     'petugas'       => $petugas,
     'catatan'       => $catatan,
     'selisih'       => $selisih,
+    'selisih_acc'   => $selisihAcc,
     'adj_jenis'     => $adj['jenis'],
     'adj_qty'       => $adj['qty'],
     'stok_kini'     => $stokKini,

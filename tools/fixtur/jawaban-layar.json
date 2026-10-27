@@ -375,7 +375,9 @@
         "selisih": 0,
         "disesuaikan": true,
         "adj_jenis": null,
-        "adj_qty": 0
+        "adj_qty": 0,
+        "selisih_acc": 0,
+        "stok_akhir": 0
       },
       {
         "id": 2,
@@ -384,17 +386,19 @@
         "barcode": "12132472",
         "nama": "AVA SKIPPING POLOS HITAM",
         "kategori": "ACC",
-        "stok_sistem": 68,
+        "stok_sistem": 70,
         "stok_hitung": 73,
         "stok_accurate": -3,
         "dicek": 0,
         "petugas": "",
         "penyesuaian": "Tidak Disesuaikan",
         "catatan": "",
-        "selisih": 76,
+        "selisih": 5,
         "disesuaikan": false,
         "adj_jenis": null,
-        "adj_qty": null
+        "adj_qty": null,
+        "selisih_acc": 76,
+        "stok_akhir": 68
       }
     ],
     "ringkas": {
@@ -402,8 +406,10 @@
       "dicek": 1,
       "belum": 54,
       "beda": 1,
-      "total_selisih": 76,
-      "disesuaikan": 1
+      "total_selisih": 5,
+      "disesuaikan": 1,
+      "beda_acc": 1,
+      "total_selisih_acc": 76
     },
     "kategori_options": [
       "ACC"

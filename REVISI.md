@@ -9,6 +9,70 @@ berubah**, dan **bagaimana memastikannya jalan**.
 
 ---
 
+## 27 Oktober 2026 (siang) — selisih stok opname dihitung dari angka yang salah
+
+### Permintaannya
+
+> untuk WMS AVA, stok opname, selisih itu = stok hitung − stok akhir
+
+Benar, dan yang terpasang bukan itu.
+
+### Dua kesalahan bertumpuk
+
+**Pertama: dibandingkan dengan Accurate, bukan dengan stok.** Kolom Selisih
+dihitung `stok hitung − stok accurate`, sedangkan yang dibetulkan oleh "Stok
+Disesuaikan" selalu `stok hitung − stok akhir`. Jadi **angka yang dilihat bukan
+angka yang dikerjakan tombolnya** — di gudang itu terbaca sebagai angka yang
+tidak bisa dipercaya, persis keluhannya.
+
+Efek sampingnya: baris yang kolom Accurate-nya kosong tidak punya selisih sama
+sekali, padahal selisihnya terhadap stok sistem sudah bisa dihitung sejak
+hitungan fisiknya diisi.
+
+**Kedua — dan ini ketahuan oleh uji, bukan oleh mata:** memperbaiki yang
+pertama saja masih salah. `opname_item.stok_sistem` adalah **salinan stok pada
+saat sesi opname DIBUAT**, bukan stok yang berlaku sekarang. Stok terus
+bergerak sesudah itu, sedangkan penyesuaian selalu membawa stok **hidup** ke
+angka hitungan. Ujinya langsung menolaknya:
+
+```
+GAGAL lebih di rak: selisih positif      dapat -9, harap 6
+```
+
+Stok hidup 7, salinannya 22. Koreksinya menulis +6; layar menampilkan −9. Satu
+rumus diperbaiki, selisihnya pindah tempat.
+
+### Yang dipasang
+
+**Selisih = stok hitung − stok akhir yang BERLAKU SEKARANG**, dihitung di
+server lewat subquery berkorelasi — sama persis dengan yang dipakai
+`sinkronPenyesuaianStok()`. Sesudah sebuah baris disesuaikan, selisihnya memang
+nol, dan itu yang benar.
+
+Kolom **Stok akhir** di layar kini juga menampilkan angka hidup itu, supaya
+pengurangannya bisa dicocokkan dengan mata. Bila sudah berbeda dari salinannya,
+salinannya disebut kecil di bawahnya (`saat dibuat 70`). Salinannya tetap
+tersimpan di basis data sebagai jejak audit dan punya kolom sendiri di unduhan
+Excel.
+
+**Pembanding Accurate tidak dibuang**, hanya dipindah ke kolom kedua,
+**Selisih Acc.** Gudang memang memakainya — ada tombol unggah PDF Accurate
+untuk mengisinya — jadi menghapusnya berarti membuang pemeriksaan silang yang
+sudah berjalan.
+
+Ikut diseragamkan ke rumus yang sama: kartu **Berselisih** dan **Jumlah
+selisih**, penyaring **"Ada selisih"**, hitungan selisih di daftar sesi, kolom
+di PDF, dan kolom di Excel. Satu rumus, satu tempat, enam pemakai.
+
+### Catatan rancangan
+
+Selisih satu baris **tidak dihitung ulang di layar**; angkanya selalu datang
+dari server. Hanya server yang tahu stok yang berlaku sekarang — dan
+menghitungnya di dua tempat dengan dua rumus yang hampir sama adalah persis
+cara bug ini lahir.
+
+---
+
 ## 27 Oktober 2026 — SKU terpotong, dan laporan yang memang dibawa ke Excel
 
 ### SKU terpotong

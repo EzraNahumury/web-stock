@@ -168,7 +168,19 @@ function filterOpnameItem(array $src, int $sesiId): array
     }
 
     if ($hanya === 'selisih') {
-        $where[] = 'i.stok_hitung IS NOT NULL AND i.stok_accurate IS NOT NULL AND i.stok_hitung <> i.stok_accurate';
+        /* Terhadap stok akhir YANG BERLAKU SEKARANG, sejalan dengan kolom
+         * Selisih di layar dan dengan apa yang dikerjakan penyesuaian stok.
+         * Subquery, bukan join: pemanggilnya menyusun WHERE-nya sendiri dan
+         * menambahkan join di sini akan menggandakan barisnya. */
+        $where[] = "i.stok_hitung IS NOT NULL AND i.stok_hitung <> (
+            CASE WHEN i.master_id IS NULL THEN i.stok_sistem ELSE (
+                SELECT m.stok_awal
+                     + COALESCE((SELECT SUM(jumlah) FROM barang_masuk
+                                  WHERE master_id = m.id AND deleted_at IS NULL), 0)
+                     - COALESCE((SELECT SUM(jumlah) FROM barang_keluar
+                                  WHERE master_id = m.id AND deleted_at IS NULL), 0)
+                  FROM master_barang m WHERE m.id = i.master_id
+            ) END)";
     } elseif ($hanya === 'belum') {
         $where[] = 'i.stok_hitung IS NULL';
     } elseif ($hanya === 'disesuaikan') {

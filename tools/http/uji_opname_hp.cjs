@@ -146,6 +146,10 @@ function petikTeksPdf(buf) {
   const kepala = barisC[iKepala].split(';');
   cek('SKU dan Nama barang kolom terpisah',
       [kepala[0], kepala[2]], ['SKU', 'Nama barang']);
+  cek('ada kolom salinan stok saat sesi dibuat', kepala[5], 'Stok saat opname dibuat');
+  cek('judul kolom selisih menyebut rumusnya',
+      [kepala[8], kepala[9]],
+      ['Selisih (hitung - stok akhir)', 'Selisih Accurate (hitung - accurate)']);
 
   const dataC = barisC[iKepala + 1].split(';');
   /* INILAH keluhannya: di hasil ubahan PDF, kolom SKU berisi "103286 AYRES" —
@@ -156,6 +160,8 @@ function petikTeksPdf(buf) {
       dataC[0].indexOf('SAIFENU') === -1 && dataC[2].indexOf('SAIFENU') === 0, true);
   cek('angka ditulis polos supaya Excel membacanya sebagai angka',
       /^-?\d*$/.test(dataC[4]), true);
+  cek('stok akhir dan salinannya dua kolom terpisah',
+      /^-?\d*$/.test(dataC[5]), true);
 
   cek('jenis tak dikenal ditolak',
       (await fetch(B + '/api/export/csv.php?jenis=ngawur', { headers: { Cookie: S.cookie } })).status, 404);
@@ -182,8 +188,77 @@ function petikTeksPdf(buf) {
   cek('nilainya tidak bergeser',
       nilai('SELECT stok_hitung FROM opname_item WHERE id = ' + itemId), semula.hitung);
 
+  /* Stok akhir YANG BERLAKU SEKARANG, bukan opname_item.stok_sistem — kolom itu
+     salinan saat sesi dibuat, dan stok sudah bergerak sesudahnya. Membandingkan
+     dengan salinannya adalah bug yang baru saja diperbaiki. */
+  const stokKini = Number(nilai("SELECT m.stok_awal"
+    + " + COALESCE((SELECT SUM(jumlah) FROM barang_masuk WHERE master_id = m.id AND deleted_at IS NULL),0)"
+    + " - COALESCE((SELECT SUM(jumlah) FROM barang_keluar WHERE master_id = m.id AND deleted_at IS NULL),0)"
+    + " FROM master_barang m JOIN opname_item i ON i.master_id = m.id WHERE i.id = " + itemId));
   r = await post(S, 'opname/item.php', { id: Number(itemId), stok_hitung: 5, stok_accurate: -12 });
-  cek('selisih dihitung terhadap accurate minus', r.body.selisih, 17);
+  cek('selisih dihitung terhadap STOK AKHIR yang berlaku', r.body.selisih, 5 - stokKini);
+  cek('pembanding Accurate dibawa terpisah', r.body.selisih_acc, 17);
+
+  console.log('\n=== B2. selisih = stok hitung - stok akhir ===');
+  /* INILAH yang diminta gudang, dan inilah yang dulu keliru: angka Selisih di
+     layar dihitung terhadap stok accurate, padahal yang dibetulkan "Stok
+     Disesuaikan" selalu stok hitung - stok akhir. Jadi angka yang dilihat
+     bukan angka yang dikerjakan. Uji ini menegaskan keduanya sama. */
+  const idB = Number(nilai('SELECT id FROM opname_item WHERE sesi_id = ' + sesiId
+    + ' AND master_id IS NOT NULL ORDER BY id LIMIT 1'));
+  const stokB = () => Number(nilai("SELECT m.stok_awal"
+    + " + COALESCE((SELECT SUM(jumlah) FROM barang_masuk WHERE master_id = m.id AND deleted_at IS NULL),0)"
+    + " - COALESCE((SELECT SUM(jumlah) FROM barang_keluar WHERE master_id = m.id AND deleted_at IS NULL),0)"
+    + " FROM master_barang m JOIN opname_item i ON i.master_id = m.id WHERE i.id = " + idB));
+
+  const bersihkanB = () => php("require 'includes/db.php';"
+    + "db()->exec(\"DELETE FROM barang_masuk WHERE keterangan = 'Penyesuaian Opname'\");"
+    + "db()->exec(\"DELETE FROM barang_keluar WHERE keterangan = 'Penyesuaian Opname'\");"
+    + "db()->exec(\"UPDATE opname_item SET stok_hitung=NULL, stok_accurate=NULL,"
+    + " penyesuaian='Tidak Disesuaikan', adj_jenis=NULL, adj_id=NULL, adj_qty=NULL"
+    + " WHERE sesi_id = " + sesiId + "\"); echo 'ok';");
+
+  bersihkanB();
+  const awalB = stokB();
+
+  // Lebih di rak daripada di sistem -> selisih positif.
+  r = await post(S, 'opname/item.php', { id: idB, stok_hitung: awalB + 6 });
+  cek('lebih di rak: selisih positif', r.body.selisih, 6);
+  cek('tanpa stok accurate pun selisihnya tetap terhitung', r.body.selisih !== null, true);
+  cek('pembanding Accurate kosong karena kolomnya kosong', r.body.selisih_acc, null);
+
+  // Angka yang ditampilkan HARUS sama dengan yang dikerjakan koreksinya.
+  r = await post(S, 'opname/item.php', { id: idB, penyesuaian: 'Stok Disesuaikan' });
+  cek('koreksinya sebesar selisih yang ditampilkan', r.body.adj_qty, 6);
+  cek('arahnya menambah stok', r.body.adj_jenis, 'masuk');
+  cek('stok jadi sama dengan hitungan rak', stokB(), awalB + 6);
+  let dd = await get(S, 'opname/detail.php?id=' + sesiId + '&q='
+    + encodeURIComponent(nilai('SELECT barcode FROM opname_item WHERE id = ' + idB)));
+  cek('sesudah dikoreksi selisihnya jadi nol', dd.body.rows[0].selisih, 0);
+
+  // Kurang di rak daripada di sistem -> selisih negatif, koreksinya keluar.
+  await post(S, 'opname/item.php', { id: idB, penyesuaian: 'Tidak Disesuaikan' });
+  const kurang = Math.max(0, awalB - 4);
+  r = await post(S, 'opname/item.php', { id: idB, stok_hitung: kurang });
+  cek('kurang di rak: selisih negatif', r.body.selisih, kurang - awalB);
+  r = await post(S, 'opname/item.php', { id: idB, penyesuaian: 'Stok Disesuaikan' });
+  cek('arahnya mengurangi stok', r.body.adj_jenis, 'keluar');
+  cek('stok mengikuti hitungan rak', stokB(), kurang);
+
+  console.log('\n--- ringkasan dan penyaring ikut rumus yang sama ---');
+  await post(S, 'opname/item.php', { id: idB, penyesuaian: 'Tidak Disesuaikan' });
+  dd = await get(S, 'opname/detail.php?id=' + sesiId);
+  const bedaSql = Number(nilai('SELECT COUNT(*) FROM opname_item WHERE sesi_id = ' + sesiId
+    + ' AND stok_hitung IS NOT NULL AND stok_hitung <> stok_sistem'));
+  cek('kartu Berselisih dihitung terhadap stok akhir', dd.body.ringkas.beda, bedaSql);
+  cek('pembanding Accurate dihitung terpisah', typeof dd.body.ringkas.beda_acc, 'number');
+  const saring = await get(S, 'opname/detail.php?id=' + sesiId + '&hanya=selisih');
+  cek('penyaring "Ada selisih" memakai rumus yang sama',
+      saring.body.rows.every(x => x.stok_hitung !== null && x.stok_hitung !== x.stok_sistem), true);
+  cek('jumlahnya cocok dengan kartunya', saring.body.total, bedaSql);
+
+  bersihkanB();
+  cek('stok kembali seperti semula', stokB(), awalB);
 
   /* ------------------------------------------------------------------ */
   console.log('\n=== C. centang semua ===');

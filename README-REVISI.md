@@ -280,6 +280,28 @@ sana bisa diketik apa adanya.
 **Stok hitung tetap tidak boleh minus.** Tidak ada rak berisi minus tiga barang;
 yang negatif di situ selalu salah ketik.
 
+### Selisih = stok hitung − stok akhir  *(baru 27 Oktober)*
+
+Dulu kolom Selisih dihitung terhadap **stok accurate**, padahal yang dibetulkan
+oleh "Stok Disesuaikan" selalu **stok akhir**. Jadi angka yang dilihat bukan
+angka yang dikerjakan tombolnya.
+
+Sekarang:
+
+| Kolom | Rumusnya | Gunanya |
+|---|---|---|
+| **Selisih** | stok hitung − stok akhir | seberapa jauh sistem meleset dari rak — **ini yang dikoreksi** |
+| **Selisih Acc.** | stok hitung − stok accurate | pemeriksaan silang terhadap pembukuan |
+
+Stok akhir yang dipakai adalah **yang berlaku sekarang**, bukan angka saat sesi
+opname dibuat — karena stok bisa bergerak di tengah hari opname, dan koreksinya
+selalu mengikuti stok terkini. Kalau keduanya sudah berbeda, angka saat sesi
+dibuat disebut kecil di bawah kolom Stok akhir.
+
+Artinya: **angka di kolom Selisih = persis jumlah yang akan ditambah atau
+dikurangi** kalau barisnya ditandai "Stok Disesuaikan". Sesudah dikoreksi,
+selisihnya jadi nol.
+
 ### Tombol massal
 
 | Tombol | Yang terjadi |
