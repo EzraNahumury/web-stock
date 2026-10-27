@@ -54,7 +54,8 @@ UJI_BASE=http://127.0.0.1:8100 node tools/http/uji_tersusul.cjs
 | `uji_accurate3.cjs` | Penanda Accurate tiga keadaan, dan "tidak masuk" yang tidak boleh terhitung sebagai "belum" |
 | `uji_deadstok.cjs` | Barang deadstok: mencatatnya tidak menggerakkan stok, hanya "dibuang" yang menggerakkan |
 | `uji_minimal.cjs` | Setel ambang stok minimal, satuan maupun massal |
-| `uji_opname_hp.cjs` | Nama barang di PDF opname, stok accurate minus, centang massal, penyesuaian massal |
+| `uji_opname_hp.cjs` | Nama & SKU di PDF opname, unduhan Excel, stok accurate minus, centang massal, penyesuaian massal |
+| `uji_pdf_lengkap.cjs` | Tiap sel di SELURUH laporan PDF: tidak ada yang terpotong |
 
 ## Aturan menulis suite di sini
 

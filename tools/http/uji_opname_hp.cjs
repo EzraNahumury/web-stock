@@ -102,6 +102,66 @@ function petikTeksPdf(buf) {
   cek('namanya dibungkus, bukan dipotong', barisNama.length >= 1, true);
 
   /* ------------------------------------------------------------------ */
+  console.log('\n=== A2. SKU panjang juga utuh ===');
+  /* SKU di katalog ini sampai 15 karakter dan 181 di antaranya memuat spasi
+     ("SFN 006 070 045"), jadi kolom selebar 8 memotongnya jadi "SFN 006 070...". */
+  const skuPanjang = php("require 'includes/db.php';"
+    + " echo (string)dbValue('SELECT sku FROM opname_item ORDER BY CHAR_LENGTH(sku) DESC LIMIT 1');");
+  console.log('  SKU terpanjang: ' + skuPanjang.length + ' karakter [' + skuPanjang + ']');
+  const resS = await fetch(B + '/api/export/pdf.php?jenis=opname&id=' + sesiId
+    + '&q=' + encodeURIComponent(skuPanjang), { headers: { Cookie: S.cookie } });
+  const bufS = Buffer.from(await resS.arrayBuffer());
+  const potS = petikTeksPdf(bufS);
+  cek('SKU terpanjang tergambar utuh', potS.indexOf(skuPanjang) >= 0, true);
+  cek('tidak ada satu pun sel berelipsis di laporan ini',
+      potS.filter(x => x.endsWith('...')).length, 0);
+
+  /* Batas kolom tegak. Pengubah PDF -> Excel yang tidak menemukannya terpaksa
+     menebak dari celah teks, dan tebakannya pernah menaruh kata pertama nama
+     barang di kolom SKU. */
+  const mentahS = bufS.toString('latin1');
+  const tegak = new Set();
+  const rg = /([\d.]+) ([\d.]+) m ([\d.]+) ([\d.]+) l S/g;
+  let g;
+  while ((g = rg.exec(mentahS)) !== null) {
+    if (Math.abs(Number(g[1]) - Number(g[3])) < 0.01) { tegak.add(Number(g[1]).toFixed(1)); }
+  }
+  cek('ada garis pemisah kolom', tegak.size >= 9, true);
+
+  console.log('\n=== A3. unduhan Excel: kolomnya sudah kolom ===');
+  /* Jawaban sebenarnya atas keluhan "AYRES masuk ke kolom SKU": berkas yang
+     tidak perlu diurai ulang sama sekali. */
+  const resC = await fetch(B + '/api/export/csv.php?jenis=opname&id=' + sesiId
+    + '&q=' + encodeURIComponent(skuPanjang.slice(0, 11)), { headers: { Cookie: S.cookie } });
+  const bufC = Buffer.from(await resC.arrayBuffer());
+  cek('HTTP', resC.status, 200);
+  cek('tipe berkasnya CSV', (resC.headers.get('content-type') || '').indexOf('text/csv') >= 0, true);
+  cek('diunduh, bukan dibuka di tab', (resC.headers.get('content-disposition') || '').indexOf('attachment') >= 0, true);
+  cek('ada BOM UTF-8', bufC[0] === 0xEF && bufC[1] === 0xBB && bufC[2] === 0xBF, true);
+
+  const barisC = bufC.slice(3).toString('utf8').split('\r\n');
+  cek('baris pertama arahan pemisah untuk Excel', barisC[0], 'sep=;');
+  const iKepala = barisC.findIndex(x => x.indexOf('SKU;') === 0);
+  cek('ada baris judul kolom', iKepala > 0, true);
+  const kepala = barisC[iKepala].split(';');
+  cek('SKU dan Nama barang kolom terpisah',
+      [kepala[0], kepala[2]], ['SKU', 'Nama barang']);
+
+  const dataC = barisC[iKepala + 1].split(';');
+  /* INILAH keluhannya: di hasil ubahan PDF, kolom SKU berisi "103286 AYRES" —
+     SKU ditambah kata pertama nama barangnya. Di sini kolom SKU berisi SKU,
+     titik. */
+  cek('kolom SKU berisi SKU saja', dataC[0], skuPanjang);
+  cek('merek tetap di kolom nama, tidak bocor ke SKU',
+      dataC[0].indexOf('SAIFENU') === -1 && dataC[2].indexOf('SAIFENU') === 0, true);
+  cek('angka ditulis polos supaya Excel membacanya sebagai angka',
+      /^-?\d*$/.test(dataC[4]), true);
+
+  cek('jenis tak dikenal ditolak',
+      (await fetch(B + '/api/export/csv.php?jenis=ngawur', { headers: { Cookie: S.cookie } })).status, 404);
+  cek('sesi tak ada ditolak',
+      (await fetch(B + '/api/export/csv.php?jenis=opname&id=999999', { headers: { Cookie: S.cookie } })).status, 404);
+
   console.log('\n=== B. stok accurate boleh minus, stok hitung tidak ===');
   const itemId = nilai('SELECT id FROM opname_item WHERE sesi_id = ' + sesiId
     + ' AND master_id IS NOT NULL ORDER BY id LIMIT 1');
@@ -246,6 +306,13 @@ function petikTeksPdf(buf) {
   op = await login('ujiop', sandi);
   cek('tanpa menu opname ditolak',
       (await post(op, 'opname/massal.php', { id: Number(sesiId), dicek: true })).status, 403);
+  /* menuLaporan() mengembalikan null untuk jenis tak terdaftar, dan endpoint
+     yang melewatkan pemeriksaan saat null bisa diunduh siapa pun yang login —
+     persis lubang yang pernah ditemukan pada laporan deadstok. */
+  cek('tanpa menu opname: unduhan PDF ditolak',
+      (await fetch(B + '/api/export/pdf.php?jenis=opname&id=' + sesiId, { headers: { Cookie: op.cookie } })).status, 403);
+  cek('tanpa menu opname: unduhan Excel ditolak',
+      (await fetch(B + '/api/export/csv.php?jenis=opname&id=' + sesiId, { headers: { Cookie: op.cookie } })).status, 403);
 
   console.log('\n=== Kembalikan keadaan semula ===');
   php("require 'includes/db.php';"

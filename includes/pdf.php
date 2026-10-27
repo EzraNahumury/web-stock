@@ -41,6 +41,14 @@ class PdfTabel
     /** @var float */ private $tinggiHalaman;
     /** @var float */ private $tepi = 26.0;
 
+    /* Jarak teks dari tepi selnya.
+     *
+     * Dinaikkan dari 4 ke 7 bukan demi tampilan, melainkan demi pengubah
+     * PDF -> Excel. Alat itu menebak batas kolom dari celah kosong di antara
+     * teks; dengan celah 8 poin (2 x 4) di antara dua sel berisi penuh, tebakan
+     * itu meleset dan kata pertama nama barang ikut masuk ke kolom SKU. */
+    private const PAD = 7.0;
+
     /** @var string[] isi stream tiap halaman */
     /** @var string[] */ private $halaman = [];
     /** @var string */ private $isi = '';
@@ -288,15 +296,43 @@ class PdfTabel
 
         $x = $this->tepi;
         foreach ($this->kolom as $k) {
-            $teks = $this->potong($k['label'], $k['lebar'] - 8, 8, true);
+            $teks = $this->potong($k['label'], $k['lebar'] - 2 * self::PAD, 8, true);
             $tx = $k['rata'] === 'kanan'
-                ? $x + $k['lebar'] - 4 - $this->lebarTeks($teks, 8, true)
-                : $x + 4;
+                ? $x + $k['lebar'] - self::PAD - $this->lebarTeks($teks, 8, true)
+                : $x + self::PAD;
             $this->teks($tx, $this->y - 12.5, $teks, 8, true, [40, 58, 66]);
             $x += $k['lebar'];
         }
+        $this->garisKolom($this->y, $tinggi, [180, 196, 202]);
         $this->y -= $tinggi;
         $this->garis($this->tepi, $this->y, $this->lebarHalaman - $this->tepi, $this->y, [180, 196, 202], 0.8);
+    }
+
+    /**
+     * Garis tegak pemisah kolom, setinggi satu baris.
+     *
+     * ADA KARENA LAPORANNYA DIUBAH KE EXCEL
+     * Tabel ini dulu hanya bergaris mendatar. Pengubah PDF -> Excel yang tidak
+     * menemukan garis tegak terpaksa menebak batas kolom dari celah kosong di
+     * antara teks — dan tebakannya meleset: SKU "103286" dan kata pertama nama
+     * barang "AYRES" berakhir di satu kolom yang sama. Dengan garisnya ada,
+     * alat itu mengikuti grid yang tergambar, bukan menebak.
+     *
+     * Garis terluar kiri-kanan sengaja dilewati: bingkai penuh membuat tabelnya
+     * terbaca berat, sedangkan yang dibutuhkan pengubahnya hanya batas antar
+     * kolom.
+     */
+    private function garisKolom(float $yAtas, float $tinggi, array $warna): void
+    {
+        $x = $this->tepi;
+        $akhir = count($this->kolom) - 1;
+        foreach ($this->kolom as $i => $k) {
+            $x += $k['lebar'];
+            if ($i === $akhir) {
+                break;
+            }
+            $this->garis($x, $yAtas, $x, $yAtas - $tinggi, $warna, 0.4);
+        }
     }
 
     /**
@@ -319,7 +355,7 @@ class PdfTabel
                 $warna = $isi[1] ?? null;
                 $isi = (string)($isi[0] ?? '');
             }
-            $lebarIsi = $k['lebar'] - 8;
+            $lebarIsi = $k['lebar'] - 2 * self::PAD;
             $potongan = $k['bungkus']
                 ? $this->bungkus((string)$isi, $lebarIsi, 8.5)
                 : [$this->potong((string)$isi, $lebarIsi, 8.5)];
@@ -339,14 +375,15 @@ class PdfTabel
             $yb = $this->y - 10.5;
             foreach ($siap[$i]['baris'] as $teks) {
                 $tx = $k['rata'] === 'kanan'
-                    ? $x + $k['lebar'] - 4 - $this->lebarTeks($teks, 8.5)
-                    : $x + 4;
+                    ? $x + $k['lebar'] - self::PAD - $this->lebarTeks($teks, 8.5)
+                    : $x + self::PAD;
                 $this->teks($tx, $yb, $teks, 8.5, false, $siap[$i]['warna']);
                 $yb -= 10.0;
             }
             $x += $k['lebar'];
         }
 
+        $this->garisKolom($this->y, $tinggi, [232, 238, 240]);
         $this->y -= $tinggi;
         $this->garis($this->tepi, $this->y, $this->lebarHalaman - $this->tepi, $this->y, [225, 232, 234], 0.4);
     }

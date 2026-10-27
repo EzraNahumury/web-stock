@@ -120,16 +120,16 @@ switch ($jenis) {
             'Status'   => $labelStatus[$status] ?? 'Semua',
             'Baris'    => count($data),
         ], [
-            ['label' => 'SKU',          'lebar' => 9],
-            ['label' => 'Barcode',      'lebar' => 11],
+            ['label' => 'SKU', 'lebar' => 9, 'bungkus' => true],
+            ['label' => 'Barcode', 'lebar' => 14, 'bungkus' => true],
             ['label' => 'Nama barang',  'lebar' => 30, 'bungkus' => true],
-            ['label' => 'Kategori',     'lebar' => 9],
+            ['label' => 'Kategori', 'lebar' => 9, 'bungkus' => true],
             ['label' => 'Awal',         'lebar' => 6,   'rata' => 'kanan'],
             ['label' => 'Masuk',        'lebar' => 6,   'rata' => 'kanan'],
             ['label' => 'Keluar',       'lebar' => 6,   'rata' => 'kanan'],
             ['label' => 'Akhir',        'lebar' => 6,   'rata' => 'kanan'],
             ['label' => 'Min.',         'lebar' => 6,   'rata' => 'kanan'],
-            ['label' => 'Status',       'lebar' => 11],
+            ['label' => 'Status', 'lebar' => 11, 'bungkus' => true],
         ]);
 
         $totalAkhir = 0;
@@ -195,16 +195,16 @@ switch ($jenis) {
         );
 
         $kolom = [
-            ['label' => 'Tanggal',     'lebar' => 9],
-            ['label' => 'Barcode',     'lebar' => 12],
+            ['label' => 'Tanggal', 'lebar' => 9, 'bungkus' => true],
+            ['label' => 'Barcode', 'lebar' => 14, 'bungkus' => true],
             ['label' => 'Nama barang', 'lebar' => 32, 'bungkus' => true],
             ['label' => $isKel ? 'Keluar' : 'Masuk', 'lebar' => 7, 'rata' => 'kanan'],
-            ['label' => 'Keterangan',  'lebar' => 12],
+            ['label' => 'Keterangan', 'lebar' => 12, 'bungkus' => true],
         ];
         if ($isKel) {
-            $kolom[] = ['label' => 'No. Pesanan', 'lebar' => 15];
+            $kolom[] = ['label' => 'No. Pesanan', 'lebar' => 15, 'bungkus' => true];
         }
-        $kolom[] = ['label' => 'Dicatat oleh', 'lebar' => 13];
+        $kolom[] = ['label' => 'Dicatat oleh', 'lebar' => 13, 'bungkus' => true];
 
         $pdf = new PdfTabel('lanskap');
         $pdf->siapkan($isKel ? 'Laporan Barang Keluar' : 'Laporan Barang Masuk', [
@@ -255,10 +255,10 @@ switch ($jenis) {
             'Kategori' => $f['kategori'] !== '' && $f['kategori'] !== 'Semua' ? $f['kategori'] : 'Semua',
             'Barang'   => count($data),
         ], [
-            ['label' => 'SKU',         'lebar' => 9],
-            ['label' => 'Barcode',     'lebar' => 12],
+            ['label' => 'SKU', 'lebar' => 9, 'bungkus' => true],
+            ['label' => 'Barcode', 'lebar' => 14, 'bungkus' => true],
             ['label' => 'Nama barang', 'lebar' => 32, 'bungkus' => true],
-            ['label' => 'Kategori',    'lebar' => 9],
+            ['label' => 'Kategori', 'lebar' => 9, 'bungkus' => true],
             ['label' => 'Stok awal',   'lebar' => 8, 'rata' => 'kanan'],
             ['label' => 'Stok masuk',  'lebar' => 8, 'rata' => 'kanan'],
             ['label' => 'Stok keluar', 'lebar' => 8, 'rata' => 'kanan'],
@@ -320,15 +320,15 @@ switch ($jenis) {
                 : 'Semua',
             'Baris'   => count($data),
         ], [
-            ['label' => 'Tanggal',        'lebar' => 8],
-            ['label' => 'Barcode lama',   'lebar' => 10],
-            ['label' => 'Produk lama',    'lebar' => 19],
-            ['label' => 'Barcode baru',   'lebar' => 10],
-            ['label' => 'Produk baru',    'lebar' => 19],
+            ['label' => 'Tanggal', 'lebar' => 8, 'bungkus' => true],
+            ['label' => 'Barcode lama', 'lebar' => 10, 'bungkus' => true],
+            ['label' => 'Produk lama', 'lebar' => 19, 'bungkus' => true],
+            ['label' => 'Barcode baru', 'lebar' => 10, 'bungkus' => true],
+            ['label' => 'Produk baru', 'lebar' => 19, 'bungkus' => true],
             ['label' => 'Qty',            'lebar' => 5, 'rata' => 'kanan'],
-            ['label' => 'Alasan',         'lebar' => 7],
-            ['label' => 'No. Pesanan',    'lebar' => 13],
-            ['label' => 'Oleh',           'lebar' => 9],
+            ['label' => 'Alasan', 'lebar' => 7, 'bungkus' => true],
+            ['label' => 'No. Pesanan', 'lebar' => 13, 'bungkus' => true],
+            ['label' => 'Oleh', 'lebar' => 9, 'bungkus' => true],
         ]);
 
         $totalUnit = 0;
@@ -369,13 +369,13 @@ switch ($jenis) {
             'Oleh'    => $oleh,
             'Baris'   => count($data),
         ], [
-            ['label' => 'SKU',          'lebar' => 10],
-            ['label' => 'Barcode',      'lebar' => 13],
+            ['label' => 'SKU', 'lebar' => 10, 'bungkus' => true],
+            ['label' => 'Barcode', 'lebar' => 14, 'bungkus' => true],
             ['label' => 'Nama barang',  'lebar' => 38, 'bungkus' => true],
             ['label' => 'Stok awal',    'lebar' => 8,  'rata' => 'kanan'],
             ['label' => 'Stok minimal', 'lebar' => 9,  'rata' => 'kanan'],
-            ['label' => 'Kategori',     'lebar' => 11],
-            ['label' => 'Barcode asli', 'lebar' => 11],
+            ['label' => 'Kategori', 'lebar' => 11, 'bungkus' => true],
+            ['label' => 'Barcode asli', 'lebar' => 11, 'bungkus' => true],
         ]);
         foreach ($data as $r) {
             $pdf->baris([
@@ -448,13 +448,13 @@ switch ($jenis) {
             'Modul'   => $entitas !== '' ? modulAktivitas($entitas) : 'Semua',
             'Baris'   => count($data),
         ], [
-            ['label' => 'Tanggal',   'lebar' => 8],
-            ['label' => 'Jam',       'lebar' => 6],
-            ['label' => 'Aktivitas', 'lebar' => 17],
-            ['label' => 'Rincian',   'lebar' => 32],
-            ['label' => 'Modul',     'lebar' => 10],
-            ['label' => 'Oleh',      'lebar' => 13],
-            ['label' => 'IP',        'lebar' => 9],
+            ['label' => 'Tanggal', 'lebar' => 8, 'bungkus' => true],
+            ['label' => 'Jam', 'lebar' => 6, 'bungkus' => true],
+            ['label' => 'Aktivitas', 'lebar' => 17, 'bungkus' => true],
+            ['label' => 'Rincian', 'lebar' => 32, 'bungkus' => true],
+            ['label' => 'Modul', 'lebar' => 10, 'bungkus' => true],
+            ['label' => 'Oleh', 'lebar' => 13, 'bungkus' => true],
+            ['label' => 'IP', 'lebar' => 9, 'bungkus' => true],
         ]);
 
         foreach ($data as $r) {
@@ -534,16 +534,16 @@ switch ($jenis) {
                 : ($accurate !== '' ? $accurate : 'Semua'),
             'Baris'   => count($data),
         ], [
-            ['label' => 'Tanggal',          'lebar' => 9],
-            ['label' => 'No. Pesanan',      'lebar' => 16],
-            ['label' => 'SKU',              'lebar' => 9],
+            ['label' => 'Tanggal', 'lebar' => 9, 'bungkus' => true],
+            ['label' => 'No. Pesanan', 'lebar' => 16, 'bungkus' => true],
+            ['label' => 'SKU', 'lebar' => 9, 'bungkus' => true],
             ['label' => 'Nama produk',      'lebar' => 25, 'bungkus' => true],
             ['label' => 'Qty',              'lebar' => 5, 'rata' => 'kanan'],
-            ['label' => 'Keterangan retur', 'lebar' => 14],
-            ['label' => 'Ket.',             'lebar' => 10],
+            ['label' => 'Keterangan retur', 'lebar' => 14, 'bungkus' => true],
+            ['label' => 'Ket.', 'lebar' => 10, 'bungkus' => true],
             // 11, bukan 8: "Tidak masuk" terpotong jadi "Tidak m…" di lebar 8.
-            ['label' => 'Accurate',         'lebar' => 11],
-            ['label' => 'Dicatat oleh',     'lebar' => 10],
+            ['label' => 'Accurate', 'lebar' => 11, 'bungkus' => true],
+            ['label' => 'Dicatat oleh', 'lebar' => 10, 'bungkus' => true],
         ]);
 
         /* Tiga keadaan penanda Accurate, dengan warnanya masing-masing.
@@ -658,14 +658,14 @@ switch ($jenis) {
             'Keadaan'  => $keadaan !== '' ? STATUS_DEADSTOK[$keadaan] : 'Semua',
             'Baris'    => count($data),
         ], [
-            ['label' => 'Tanggal',     'lebar' => 9],
-            ['label' => 'SKU',         'lebar' => 9],
+            ['label' => 'Tanggal', 'lebar' => 9, 'bungkus' => true],
+            ['label' => 'SKU', 'lebar' => 9, 'bungkus' => true],
             ['label' => 'Nama produk', 'lebar' => 27, 'bungkus' => true],
-            ['label' => 'Kategori',    'lebar' => 15],
+            ['label' => 'Kategori', 'lebar' => 15, 'bungkus' => true],
             ['label' => 'Qty',         'lebar' => 5, 'rata' => 'kanan'],
-            ['label' => 'Keadaan',     'lebar' => 12],
-            ['label' => 'Ket.',        'lebar' => 13],
-            ['label' => 'Dicatat oleh', 'lebar' => 10],
+            ['label' => 'Keadaan', 'lebar' => 12, 'bungkus' => true],
+            ['label' => 'Ket.', 'lebar' => 13, 'bungkus' => true],
+            ['label' => 'Dicatat oleh', 'lebar' => 10, 'bungkus' => true],
         ]);
 
         $unitTertahan = 0;
@@ -725,23 +725,11 @@ switch ($jenis) {
             exit('Sesi opname tidak ditemukan.');
         }
 
-        $where  = ['i.sesi_id = ?'];
-        $params = [$sesiId];
-        if ($q !== '') {
-            $where[] = '(i.nama LIKE ? OR i.sku LIKE ? OR i.barcode LIKE ?)';
-            $pola = polaLike($q);
-            array_push($params, $pola, $pola, $pola);
-        }
-        if ($kategori !== '' && $kategori !== 'Semua') {
-            $where[] = 'i.kategori = ?';
-            $params[] = $kategori;
-        }
-
-        $data = dbAll(
-            'SELECT * FROM opname_item i WHERE ' . implode(' AND ', $where)
-            . ' ORDER BY i.kategori, i.nama, i.id',
-            $params
-        );
+        /* Query-nya dipakai bersama ekspor Excel di api/export/csv.php, supaya
+         * kedua unduhan tidak pernah berisi baris yang berbeda untuk sesi yang
+         * sama. Lihat dataLaporanOpname() di includes/opname.php. */
+        require_once __DIR__ . '/../../includes/opname.php';
+        $data = dataLaporanOpname($sesiId, $q, $kategori);
 
         $pdf = new PdfTabel('lanskap');
         $pdf->siapkan($sesi['nama'], [
@@ -753,18 +741,27 @@ switch ($jenis) {
                 : ($sesi['kategori'] !== '' ? $sesi['kategori'] : 'Semua'),
             'Baris'    => count($data),
         ], [
-            ['label' => 'SKU',            'lebar' => 8],
+            /* SKU di katalog ini sampai 15 karakter dan 181 di antaranya
+             * memuat spasi ("SFN 006 070 045"), jadi lebar 8 memotongnya jadi
+             * "SFN 006 070...". Dilebarkan, dan tetap dibungkus sebagai jaring
+             * pengaman kalau kelak ada SKU yang lebih panjang lagi. */
+            ['label' => 'SKU',         'lebar' => 12, 'bungkus' => true],
             // Dilebarkan DAN dibungkus: 63% nama barang di katalog ini lebih
             // dari 28 karakter, jadi melebarkan saja tidak pernah cukup.
-            ['label' => 'Nama barang',    'lebar' => 27, 'bungkus' => true],
-            ['label' => 'Stok akhir',     'lebar' => 7,  'rata' => 'kanan'],
-            ['label' => 'Stok hitung',    'lebar' => 7,  'rata' => 'kanan'],
-            ['label' => 'Stok accurate',  'lebar' => 7,  'rata' => 'kanan'],
-            ['label' => 'Dicek',          'lebar' => 5],
-            ['label' => 'Petugas',        'lebar' => 9],
-            ['label' => 'Kategori',       'lebar' => 7],
-            ['label' => 'Selisih barang', 'lebar' => 7,  'rata' => 'kanan'],
-            ['label' => 'Penyesuaian',    'lebar' => 11],
+            ['label' => 'Nama barang', 'lebar' => 26, 'bungkus' => true],
+            /* Judul kolom angka sengaja dipendekkan. Judulnya dibaca sekali;
+             * isinya dibaca 181 kali. Nama kolom selengkapnya tetap ada di
+             * unduhan Excel, yang memang dipakai untuk mengolahnya lagi. */
+            ['label' => 'Stok',        'lebar' => 7,  'rata' => 'kanan'],
+            ['label' => 'Hitung',      'lebar' => 7,  'rata' => 'kanan'],
+            ['label' => 'Accurate',    'lebar' => 7,  'rata' => 'kanan'],
+            ['label' => 'Dicek', 'lebar' => 5, 'bungkus' => true],
+            ['label' => 'Petugas',     'lebar' => 9,  'bungkus' => true],
+            ['label' => 'Kategori',    'lebar' => 8,  'bungkus' => true],
+            ['label' => 'Selisih',     'lebar' => 7,  'rata' => 'kanan'],
+            // "Tidak Disesuaikan" perlu 75 poin; dengan jarak sel 7 di kedua
+            // sisi, lebar 10 hanya menyisakan 67 dan memotongnya.
+            ['label' => 'Penyesuaian', 'lebar' => 12, 'bungkus' => true],
         ]);
 
         $totalSelisih   = 0;

@@ -300,6 +300,7 @@ function petaEndpoint(): array
 
         // Menu yang dibutuhkan ditentukan dari parameter jenis-nya.
         'export/pdf.php'          => ['@ekspor',    false],
+        'export/csv.php'          => ['@ekspor',    false],
     ];
 }
 

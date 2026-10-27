@@ -113,6 +113,41 @@ function sinkronPenyesuaianStok(PDO $pdo, array $item, bool $sesuaikan): array
  * @param  int   $sesiId
  * @return array{where:string, params:array, hanya:string, kategori:string, q:string}
  */
+/**
+ * Baris laporan satu sesi opname, untuk diunduh.
+ *
+ * Dipakai BERSAMA oleh ekspor PDF dan ekspor Excel. Sengaja satu fungsi: dua
+ * salinan query yang sama akan menyimpang cepat atau lambat, dan selisihnya
+ * muncul sebagai laporan PDF dan laporan Excel yang isinya berbeda untuk sesi
+ * yang sama — jenis selisih yang paling sulit dipercaya ketika ketahuan.
+ *
+ * Penyaringnya sengaja hanya q dan kategori, sama seperti yang dipakai kedua
+ * tombol unduh di layar.
+ *
+ * @return array<int,array<string,mixed>>
+ */
+function dataLaporanOpname(int $sesiId, string $q, string $kategori): array
+{
+    $where  = ['i.sesi_id = ?'];
+    $params = [$sesiId];
+
+    if ($q !== '') {
+        $where[] = '(i.nama LIKE ? OR i.sku LIKE ? OR i.barcode LIKE ?)';
+        $pola = polaLike($q);
+        array_push($params, $pola, $pola, $pola);
+    }
+    if ($kategori !== '' && $kategori !== 'Semua') {
+        $where[] = 'i.kategori = ?';
+        $params[] = $kategori;
+    }
+
+    return dbAll(
+        'SELECT * FROM opname_item i WHERE ' . implode(' AND ', $where)
+        . ' ORDER BY i.kategori, i.nama, i.id',
+        $params
+    );
+}
+
 function filterOpnameItem(array $src, int $sesiId): array
 {
     $q        = ambilStr($src, 'q', 100);

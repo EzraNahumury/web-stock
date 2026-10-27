@@ -9,6 +9,102 @@ berubah**, dan **bagaimana memastikannya jalan**.
 
 ---
 
+## 27 Oktober 2026 — SKU terpotong, dan laporan yang memang dibawa ke Excel
+
+### SKU terpotong
+
+Perbaikan 25 Oktober membungkus kolom **Nama barang**, tapi kolom **SKU**
+dibiarkan selebar 8. SKU di katalog ini sampai **15 karakter** dan **181 di
+antaranya memuat spasi** (`SFN 006 070 045`), sehingga kolomnya hanya memuat
+sekitar 58 poin dari 66 poin yang dibutuhkan — dan laporan SAIFENU jadi memuat
+belasan baris `SFN 006 070...` yang tidak bisa dibedakan.
+
+Dilebarkan jadi 12 **dan** dibungkus, sebagai jaring pengaman kalau kelak ada
+SKU yang lebih panjang lagi.
+
+### "AYRES" masuk ke kolom SKU saat dikonversi ke Excel
+
+Ini akibat PDF-nya **tidak punya garis pemisah kolom**. Pengubah PDF → Excel
+yang tidak menemukan garis terpaksa menebak batas kolom dari celah kosong di
+antara teks — dan tebakannya meleset: SKU `103286` dan kata pertama nama barang
+`AYRES` berakhir di satu kolom yang sama.
+
+Dua hal diperbaiki di `PdfTabel`:
+
+1. **Jarak teks dari tepi sel dinaikkan 4 → 7 poin.** Dengan celah 8 poin di
+   antara dua sel berisi penuh, pengubahnya tidak punya cukup bukti untuk
+   melihat batas.
+2. **Garis tegak pemisah kolom digambar.** Ini sinyal paling andal yang dibaca
+   pengubah PDF → Excel: ia mengikuti grid yang tergambar, bukan menebak.
+
+Hasilnya sekarang tidak bisa disalahartikan: teks SKU berakhir di x≈99, garis
+pemisahnya di x≈124, dan teks nama mulai di x≈131.
+
+### Unduh Excel — jawaban sebenarnya
+
+Memperbaiki PDF membuat tebakannya jauh lebih mudah, **tapi ia tetap tebakan.**
+Karena alur kerjanya memang PDF → Excel, langkah menebaknya dihapus sama
+sekali: tombol **Unduh Excel** di layar Laporan stok opname.
+
+Kolomnya sudah kolom sejak awal, angkanya sudah angka, dan tidak ada yang perlu
+diurai ulang. Berkasnya CSV — bukan `.xlsx`, karena `.xlsx` adalah arsip ZIP
+berisi beberapa XML dan membuatnya tanpa pustaka luar berarti menulis penyusun
+ZIP sendiri. Tiga hal membuat CSV-nya tetap rapi di Excel:
+
+| | Gunanya |
+|---|---|
+| **BOM UTF-8** | huruf beraksen tidak jadi karakter aneh |
+| **baris `sep=;`** | arahan khusus Excel; dengan ini Excel memakai titik koma apa pun kesetelan wilayahnya, jadi tidak ada lagi seluruh baris menumpuk di satu kolom |
+| **angka polos** | tanpa pemisah ribuan, supaya Excel membacanya sebagai angka yang bisa dijumlahkan |
+
+Ada satu kolom yang tidak ada di PDF: **Koreksi stok**, bertanda — positif
+berarti stok ditambah, negatif dikurangi. Justru itu yang paling dicari ketika
+laporannya dibuka lagi di Excel.
+
+Query-nya **dipakai bersama** ekspor PDF lewat `dataLaporanOpname()`, supaya
+kedua unduhan tidak pernah berisi baris yang berbeda untuk sesi yang sama.
+
+### Yang ketemu saat diaudit: empat laporan lain juga terpotong
+
+Daripada mengira-ngira lebar kolom, dibuat pemeriksa yang membaca kembali isi
+tiap PDF dan menghitung sel yang berakhir elipsis. Hasilnya:
+
+| Laporan | Sel terpotong |
+|---|---|
+| Dashboard | 395 |
+| Log aktivitas | 369 |
+| Riwayat | 215 |
+| Master barang | 185 |
+| **Total** | **1.164** |
+
+Tidak satu pun pernah dilaporkan — yang terpotong memang tidak terlihat sebagai
+galat, ia terlihat seperti laporan biasa. Penyebabnya sama: barcode 16 karakter
+dan SKU berspasi di kolom yang terlalu sempit.
+
+Diperbaiki dengan satu aturan, bukan tambal satu per satu: **kolom teks
+dibungkus, kolom angka tidak.** 39 kolom teks di seluruh laporan ditandai
+sekaligus, kolom Barcode dilebarkan supaya tidak terpenggal di tengah karakter,
+dan judul kolom angka di laporan opname dipendekkan (`Stok hitung` → `Hitung`)
+karena judul dibaca sekali sedangkan isinya dibaca 181 kali.
+
+Sesudahnya: **nol sel terpotong di 11 laporan.** Pemeriksanya jadi alat tetap,
+[tools/http/uji_pdf_lengkap.cjs](tools/http/uji_pdf_lengkap.cjs), supaya ini
+tidak bisa kembali diam-diam.
+
+### Satu regresi yang saya buat sendiri
+
+Menaikkan jarak sel 4 → 7 poin memakan 6 poin ruang teks, dan kolom
+**Penyesuaian** jadi memuat `Tidak Disesuaik...`. Ketahuan oleh pemeriksa yang
+sama, bukan oleh mata. Lebarnya dikembalikan ke 12 dan ikut dibungkus.
+
+### Satu lagi dari uji
+
+`tools/uji_menu.php` menolak commit ini sampai `api/export/csv.php` didaftarkan
+di `petaEndpoint()`. Endpoint di bawah `api/` yang belum terdaftar akan ditolak
+500 — persis jaring yang memang dipasang untuk itu.
+
+---
+
 ## 25 Oktober 2026 — laporan stok opname: PDF, HP, dan isi massal
 
 Lima hal, semuanya di Laporan stok opname.

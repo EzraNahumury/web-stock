@@ -221,6 +221,12 @@ catatan yang sudah tersimpan dan menghapus tetap khusus admin.
 
 ## Laporan stok opname
 
+### Nama barang DAN SKU di PDF sudah utuh
+
+**Juga diperbaiki 27 Oktober:** kolom SKU dulu ikut terpotong jadi
+`SFN 006 070...` — SKU di katalog ini sampai 15 karakter dan 181 di antaranya
+memuat spasi. Sekarang utuh.
+
 ### Nama barang di PDF sudah utuh
 
 **908 dari 1.435 nama** di katalog ini lebih dari 28 karakter, terpanjang 93 —
@@ -236,6 +242,23 @@ sesudah   AYRES Jersey Bola Negara Argentina Dewasa Kaos
 Berlaku untuk **semua laporan PDF**, bukan hanya opname. Laporan penuh 1.435
 baris jadi 49 halaman (sebelumnya ±39) — sepuluh halaman tambahan untuk nama
 yang bisa dibaca.
+
+### Unduh Excel  *(baru 27 Oktober)*
+
+Tombol **Unduh Excel** di sebelah Unduh PDF. Berkasnya langsung rapi di Excel —
+**tidak perlu lagi mengubah PDF ke Excel.**
+
+Itu yang menyelesaikan masalah "AYRES masuk ke kolom SKU": pengubah PDF selalu
+*menebak* di mana batas kolomnya, dan tebakannya bisa meleset. Berkas ini sudah
+berkolom sejak awal, jadi tidak ada yang perlu ditebak. Angkanya pun sudah
+berupa angka, jadi bisa langsung dijumlahkan di Excel.
+
+Ada satu kolom tambahan yang tidak ada di PDF: **Koreksi stok** — bertanda,
+positif berarti stok ditambah, negatif dikurangi.
+
+> PDF-nya tetap diperbaiki juga (kolom lebih lebar, garis pemisah kolom), jadi
+> kalau tetap ingin mengubah PDF ke Excel hasilnya sekarang jauh lebih rapi.
+> Tapi Unduh Excel yang paling aman.
 
 ### Bisa diisi dari HP
 

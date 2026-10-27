@@ -3943,6 +3943,13 @@ function renderOpnameDetail(){
       + '<input type="file" accept="application/pdf,.pdf" id="oiAccurateFile"'
       + ' style="display:none" onchange="unggahPdfAccurate(event)"></label>'
     + '<a class="btn ghost" id="oiUnduh" href="#">' + svgIcon("download") + 'Unduh PDF</a>'
+    /* Laporan ini memang dibawa ke Excel. Mengubah PDF ke Excel selalu menebak
+     * batas kolom — dan tebakannya pernah menaruh kata pertama nama barang di
+     * kolom SKU. Berkas ini sudah berkolom sejak awal, jadi tidak ada yang
+     * perlu ditebak. */
+    + '<a class="btn ghost" id="oiUnduhXls" href="#"'
+      + ' title="Berkas CSV yang langsung rapi di Excel — tanpa perlu mengubah PDF">'
+      + svgIcon("download") + 'Unduh Excel</a>'
     + '</div>'
     + '<div class="stat-row" id="oiRingkas"></div>'
     + '<div id="oiHasil"></div>';
@@ -4021,11 +4028,19 @@ async function refreshOpnameDetail(){
   const selHanya = $("oiHanya");
   if(selHanya) selHanya.value = opnameFilter.hanya;
 
+  /* Keduanya memakai penyaring yang sama persis, dan di server keduanya
+   * memakai query yang sama pula — jadi PDF dan Excel tidak pernah berisi baris
+   * yang berbeda untuk sesi yang sama. */
+  const saring = "&id=" + encodeURIComponent(opnameSesiId)
+    + "&q=" + encodeURIComponent(opnameFilter.q)
+    + "&kategori=" + encodeURIComponent(opnameFilter.kategori);
   const unduh = $("oiUnduh");
   if(unduh){
-    unduh.href = "api/export/pdf.php?jenis=opname&id=" + encodeURIComponent(opnameSesiId)
-      + "&q=" + encodeURIComponent(opnameFilter.q)
-      + "&kategori=" + encodeURIComponent(opnameFilter.kategori);
+    unduh.href = "api/export/pdf.php?jenis=opname" + saring;
+  }
+  const unduhXls = $("oiUnduhXls");
+  if(unduhXls){
+    unduhXls.href = "api/export/csv.php?jenis=opname" + saring;
   }
 
   const r = d.ringkas;
