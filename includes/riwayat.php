@@ -27,17 +27,76 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/helpers.php';
 
-/** Baca dan bersihkan penyaring riwayat dari $_GET. */
+/**
+ * Sesi stok opname terakhir yang sudah DITUTUP.
+ *
+ * Dipakai sebagai titik mulai "sejak opname terakhir". Yang masih berjalan
+ * sengaja tidak dihitung: angkanya belum selesai, dan memakainya sebagai
+ * patokan berarti patokannya bisa bergerak sendiri.
+ *
+ * @return ?array{id:int, nama:string, periode:string, tanggal:string}
+ */
+function opnameTerakhirDitutup(): ?array
+{
+    $s = dbOne(
+        "SELECT id, nama, periode, tanggal FROM opname_sesi
+          WHERE status = 'selesai' AND deleted_at IS NULL
+          ORDER BY tanggal DESC, id DESC LIMIT 1"
+    );
+    if ($s === null) {
+        return null;
+    }
+    return [
+        'id'       => (int)$s['id'],
+        'nama'     => (string)$s['nama'],
+        'periode'  => (string)$s['periode'],
+        'tanggal'  => (string)$s['tanggal'],
+    ];
+}
+
+/**
+ * Baca dan bersihkan penyaring riwayat dari $_GET.
+ *
+ * BASIS "SEJAK OPNAME TERAKHIR"
+ * Gudang ingin melihat stok awal yang mengikuti hasil stok opname, supaya
+ * selisih bulan berikutnya mudah ditelusuri. Tidak ada yang perlu dihapus
+ * untuk itu: rekap ini memang sudah menghitung stok awal sebagai "stok awal
+ * master + seluruh mutasi SEBELUM tanggal mulai". Cukup tanggal mulainya
+ * diarahkan ke sehari sesudah opname terakhir ditutup, dan kolom Stok awal
+ * otomatis berisi keadaan pada penutupan opname itu.
+ *
+ * Tanggal mulainya diisikan di sini, bukan di layar, supaya ekspor PDF dan
+ * layar memakai patokan yang sama persis — dan supaya labelnya ("hasil opname
+ * OKTOBER 2026") tidak pernah menyebut sesi yang berbeda dari yang dihitung.
+ */
 function filterRiwayat(array $src): array
 {
     $dari   = trim((string)($src['dari'] ?? ''));
     $sampai = trim((string)($src['sampai'] ?? ''));
+    $basis  = ambilStr($src, 'basis', 20) === 'opname' ? 'opname' : '';
+
+    $opname = null;
+    if ($basis === 'opname') {
+        $opname = opnameTerakhirDitutup();
+        if ($opname === null) {
+            // Belum ada opname yang ditutup; tidak ada patokan, jadi kembali
+            // ke tampilan biasa alih-alih memberi angka yang mengada-ada.
+            $basis = '';
+        } else {
+            $dari = date('Y-m-d', strtotime($opname['tanggal'] . ' +1 day'));
+            // Rentang akhirnya dibiarkan terbuka: yang dicari justru keadaan
+            // sampai sekarang.
+            $sampai = '';
+        }
+    }
 
     return [
         'q'        => ambilStr($src, 'q', 100),
         'kategori' => ambilStr($src, 'kategori', 30),
         'dari'     => ($dari !== '' && ambilTanggal(['d' => $dari], 'd') !== null) ? $dari : '',
         'sampai'   => ($sampai !== '' && ambilTanggal(['d' => $sampai], 'd') !== null) ? $sampai : '',
+        'basis'    => $basis,
+        'opname'   => $opname,
     ];
 }
 

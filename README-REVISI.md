@@ -348,6 +348,28 @@ karena "Stok Disesuaikan" bekerja pada angka itu.
 Kalau laporannya **dibuka kembali** untuk diperbaiki, angkanya hidup lagi
 mengikuti stok terkini, lalu dibekukan ulang saat ditutup lagi.
 
+## Riwayat: "Sejak opname terakhir"  *(baru 21 November)*
+
+Dropdown baru di toolbar Riwayat, di sebelah kategori:
+
+| Pilihan | Stok awal berisi |
+|---|---|
+| Sejak awal | stok awal master (seperti biasa) |
+| **Sejak opname terakhir** | **keadaan saat opname terakhir ditutup** |
+
+Masuk dan keluar lalu hanya menghitung pergerakan **sesudah** opname itu, jadi
+selisih bulan berjalan langsung kelihatan. **Stok akhirnya tetap sama** dengan
+stok yang berlaku sekarang — yang berubah hanya dari mana hitungannya berangkat.
+
+**Tidak ada transaksi yang dihapus.** Riwayat lengkapnya tetap utuh; tinggal
+pilih "Sejak awal" untuk melihat semuanya lagi.
+
+Patokannya selalu laporan opname yang sudah ditandai **selesai** — yang masih
+berjalan angkanya belum selesai. Keterangannya disebut di atas tabel, lengkap
+dengan periode dan tanggalnya, dan Unduh PDF-nya ikut.
+
+Kalau mengetik tanggal sendiri, patokan opname otomatis dilepas.
+
 ## Siapa boleh apa
 
 | Tindakan | Hanya-baca | Operator | Admin |

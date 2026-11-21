@@ -9,6 +9,40 @@ berubah**, dan **bagaimana memastikannya jalan**.
 
 ---
 
+### Stok awal mengikuti hasil opname — tanpa menghapus apa pun
+
+Permintaan ketiga, sesudah dipilih jalannya. `stok_akhir = stok_awal + masuk −
+keluar`, jadi menyetel stok awal ke hasil opname **tanpa** menghapus transaksi
+sebelumnya melipatgandakan stok; menghapusnya berarti membuang riwayat dan
+tidak bisa dibatalkan. Gudang memilih jalan yang tidak menghapus apa pun.
+
+Ternyata tidak perlu aritmetika baru sama sekali. Rekap Riwayat memang sudah
+menghitung stok awal sebagai *"stok awal master + seluruh mutasi SEBELUM
+tanggal mulai"* — cukup tanggal mulainya diarahkan ke sehari sesudah opname
+terakhir yang ditutup:
+
+| Pilihan | Stok awal berisi |
+|---|---|
+| Sejak awal | stok awal master (seperti sebelumnya) |
+| **Sejak opname terakhir** | **keadaan saat opname itu ditutup** |
+
+Masuk dan keluar lalu hanya menghitung pergerakan sesudah tanggal itu, dan
+**Stok akhir tetap sama dengan stok yang berlaku sekarang** — angkanya cocok,
+hanya titik berangkatnya yang berbeda. Tidak ada satu baris pun yang dihapus.
+
+Tanggal mulainya ditentukan **di server**, bukan di layar, supaya layar dan
+ekspor PDF memakai patokan yang sama persis dan labelnya tidak pernah menyebut
+sesi yang berbeda dari yang dihitung. Yang dipakai hanya sesi berstatus
+**selesai**: yang masih berjalan angkanya belum selesai, dan patokan yang bisa
+bergerak sendiri bukan patokan.
+
+Mengetik tanggal sendiri melepas patokan opname — kalau tidak, tanggal yang
+diketik diam-diam diabaikan server dan orangnya tidak pernah tahu kenapa.
+Kalau belum ada opname yang ditutup, pilihannya dimatikan beserta keterangannya,
+bukan dibiarkan diam-diam kembali ke "sejak awal".
+
+---
+
 ## 21 November 2026 — cari lewat SKU, PDF ikut pencarian, laporan lama dibekukan
 
 ### Barang masuk / keluar bisa dicari lewat nama dan SKU katalog

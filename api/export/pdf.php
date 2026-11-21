@@ -234,9 +234,17 @@ switch ($jenis) {
         $pdf->siapkan('Riwayat Keluar Masuk Barang', [
             'Dicetak'  => $waktu,
             'Oleh'     => $oleh,
-            'Periode'  => ($f['dari'] !== '' || $f['sampai'] !== '')
-                ? (($f['dari'] !== '' ? $f['dari'] : 'awal') . ' s/d ' . ($f['sampai'] !== '' ? $f['sampai'] : 'kini'))
-                : 'Sejak awal',
+            /* Pada basis "sejak opname terakhir", yang disebut sesinya — bukan
+             * tanggalnya saja. Laporan yang hanya menulis "01/11 s/d kini"
+             * tidak memberi tahu dari hasil hitungan mana angkanya berangkat. */
+            'Periode'  => $f['basis'] === 'opname' && $f['opname'] !== null
+                ? 'Sejak opname ' . ($f['opname']['periode'] !== ''
+                    ? $f['opname']['periode']
+                    : $f['opname']['nama'])
+                  . ' (ditutup ' . date('d/m/Y', strtotime($f['opname']['tanggal'])) . ')'
+                : (($f['dari'] !== '' || $f['sampai'] !== '')
+                    ? (($f['dari'] !== '' ? $f['dari'] : 'awal') . ' s/d ' . ($f['sampai'] !== '' ? $f['sampai'] : 'kini'))
+                    : 'Sejak awal'),
             'Kategori' => $f['kategori'] !== '' && $f['kategori'] !== 'Semua' ? $f['kategori'] : 'Semua',
             'Barang'   => count($data),
         ], [

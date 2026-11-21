@@ -2336,25 +2336,35 @@ function konfirmasiIsi(judul, isiHtml, labelYa){
 /* ================================================================== */
 /* Riwayat — gabungan barang masuk dan keluar                         */
 /* ================================================================== */
-let riwayatFilter = { q:"", dari:"", sampai:"", kategori:"Semua", page:1 };
+let riwayatFilter = { q:"", dari:"", sampai:"", kategori:"Semua", basis:"", page:1 };
 
 function renderRiwayat(){
   let html = '<div class="toolbar">'
     + '<div class="search-wrap">' + svgIcon("search")
       + '<input type="text" id="rwCari" placeholder="Cari nama barang, SKU, atau barcode&hellip;" oninput="onRiwayatCari()"></div>'
     + '<select id="rwKategori" onchange="onRiwayatFilter()"><option value="Semua">Semua kategori</option></select>'
-    + '<div class="daterange">Dari <input type="date" id="rwDari" onchange="onRiwayatFilter()">'
+    /* Titik mulai hitungannya. "Sejak opname terakhir" membuat kolom Stok awal
+     * berisi keadaan pada penutupan opname terakhir — yang diminta gudang untuk
+     * menelusuri selisih bulan berikutnya. Tidak ada transaksi yang dihapus;
+     * yang berubah hanya dari mana hitungannya berangkat. */
+    + '<select id="rwBasis" onchange="onRiwayatBasis()">'
+      + '<option value="">Sejak awal</option>'
+      + '<option value="opname">Sejak opname terakhir</option>'
+      + '</select>'
+    + '<div class="daterange" id="rwRentang">Dari <input type="date" id="rwDari" onchange="onRiwayatFilter()">'
       + ' s/d <input type="date" id="rwSampai" onchange="onRiwayatFilter()"></div>'
     + '<button type="button" class="btn ghost" onclick="resetRiwayat()">' + svgIcon("x") + 'Reset</button>'
     + '<a class="btn ghost" id="rwUnduh" href="api/export/pdf.php?jenis=riwayat">' + svgIcon("download") + 'Unduh PDF</a>'
     + '</div>'
     + '<div class="stat-row" id="rwRingkas"></div>'
+    + '<div id="rwPatokan"></div>'
     + '<div id="rwHasil"></div>';
 
   $("content").innerHTML = html;
   $("rwCari").value   = riwayatFilter.q;
   $("rwDari").value   = riwayatFilter.dari;
   $("rwSampai").value = riwayatFilter.sampai;
+  $("rwBasis").value  = riwayatFilter.basis;
   refreshRiwayat();
 }
 
@@ -2370,13 +2380,34 @@ function onRiwayatFilter(){
   riwayatFilter.dari     = $("rwDari").value;
   riwayatFilter.sampai   = $("rwSampai").value;
   riwayatFilter.page     = 1;
+  /* Mengisi tanggal sendiri berarti memilih rentangnya sendiri, jadi
+   * patokan opname dilepas — kalau tidak, tanggal yang diketik diam-diam
+   * diabaikan server dan orangnya tidak pernah tahu kenapa. */
+  if(riwayatFilter.dari || riwayatFilter.sampai){
+    riwayatFilter.basis = "";
+    if($("rwBasis")) $("rwBasis").value = "";
+  }
+  refreshRiwayat();
+}
+
+/** Titik mulai hitungan: sejak awal, atau sejak opname terakhir ditutup. */
+function onRiwayatBasis(){
+  riwayatFilter.basis = $("rwBasis").value;
+  riwayatFilter.page  = 1;
+  if(riwayatFilter.basis === "opname"){
+    // Tanggalnya ditentukan server dari sesi opname itu sendiri.
+    riwayatFilter.dari = "";
+    riwayatFilter.sampai = "";
+    $("rwDari").value = ""; $("rwSampai").value = "";
+  }
   refreshRiwayat();
 }
 
 function resetRiwayat(){
-  riwayatFilter = { q:"", dari:"", sampai:"", kategori:"Semua", page:1 };
+  riwayatFilter = { q:"", dari:"", sampai:"", kategori:"Semua", basis:"", page:1 };
   $("rwCari").value = ""; $("rwKategori").value = "Semua";
   $("rwDari").value = ""; $("rwSampai").value = "";
+  if($("rwBasis")) $("rwBasis").value = "";
   refreshRiwayat();
 }
 
@@ -2391,7 +2422,7 @@ async function refreshRiwayat(){
     d = await API.get("riwayat/list.php", {
       q: riwayatFilter.q, kategori: riwayatFilter.kategori,
       dari: riwayatFilter.dari, sampai: riwayatFilter.sampai,
-      page: riwayatFilter.page
+      basis: riwayatFilter.basis, page: riwayatFilter.page
     });
   }catch(e){ tampilGalat(e); return; }
 
@@ -2412,8 +2443,36 @@ async function refreshRiwayat(){
     unduh.href = "api/export/pdf.php?jenis=riwayat"
       + "&q=" + encodeURIComponent(riwayatFilter.q)
       + "&kategori=" + encodeURIComponent(riwayatFilter.kategori)
+      + "&basis=" + encodeURIComponent(riwayatFilter.basis)
       + "&dari=" + encodeURIComponent(riwayatFilter.dari)
       + "&sampai=" + encodeURIComponent(riwayatFilter.sampai);
+  }
+
+  /* Pilihan "sejak opname terakhir" hanya ditawarkan bila memang ada opname
+   * yang sudah ditutup — menawarkan patokan yang tidak ada hanya menghasilkan
+   * tampilan yang diam-diam kembali ke "sejak awal". */
+  const selBasis = $("rwBasis");
+  if(selBasis) selBasis.disabled = !d.ada_opname;
+
+  /* Patokannya disebut apa adanya, dari jawaban server — bukan disusun ulang
+   * di layar. Kalau servernya memakai sesi yang berbeda (misal ada opname baru
+   * ditutup), labelnya ikut berubah sendiri. */
+  const patokan = $("rwPatokan");
+  if(patokan){
+    if(d.basis === "opname" && d.opname){
+      patokan.innerHTML = '<div class="info-box"><b>Stok awal = keadaan saat opname '
+        + esc(d.opname.periode || d.opname.nama) + ' ditutup</b> ('
+        + esc(fmtDate(d.opname.tanggal)) + '). Kolom masuk dan keluar hanya menghitung '
+        + 'pergerakan sejak ' + esc(fmtDate(d.dari)) + '. '
+        + 'Tidak ada transaksi yang dihapus — yang berubah hanya dari mana hitungannya '
+        + 'berangkat, jadi kolom Stok akhir tetap sama dengan stok yang berlaku sekarang.</div>';
+    }else if(selBasis && selBasis.disabled){
+      patokan.innerHTML = '<div class="info-box">Belum ada laporan stok opname yang ditandai '
+        + '<b>selesai</b>, jadi belum ada patokan "sejak opname terakhir". Tutup salah satu '
+        + 'laporan opname untuk memakainya.</div>';
+    }else{
+      patokan.innerHTML = "";
+    }
   }
 
   const ringkas = $("rwRingkas");

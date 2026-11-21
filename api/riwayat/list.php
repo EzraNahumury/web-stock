@@ -6,7 +6,11 @@
  * kategori yang dipilih ikut tampil meski tidak bergerak sama sekali,
  * karena "tidak bergerak" juga jawaban yang dicari saat menutup periode.
  *
- * Parameter: q, kategori, dari, sampai, page
+ * Parameter: q, kategori, dari, sampai, page, basis (kosong|opname)
+ *
+ * basis=opname memulai hitungan dari sehari sesudah stok opname terakhir yang
+ * sudah ditutup, sehingga kolom Stok awal berisi keadaan pada penutupan opname
+ * itu. Tidak ada transaksi yang dihapus — yang berubah hanya titik mulainya.
  */
 
 declare(strict_types=1);
@@ -37,4 +41,11 @@ jsonOk([
     'total_keluar'     => $jumlah['keluar'],
     'total_akhir'      => $jumlah['akhir'],
     'kategori_options' => daftarKategori(),
+    // Patokan yang benar-benar dipakai, supaya labelnya di layar tidak pernah
+    // menyebut sesi yang berbeda dari yang dihitung.
+    'basis'            => $f['basis'],
+    'opname'           => $f['opname'],
+    'dari'             => $f['dari'],
+    // Supaya layar bisa menawarkan pilihannya hanya bila memang ada patokan.
+    'ada_opname'       => opnameTerakhirDitutup() !== null,
 ] + $meta);

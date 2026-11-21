@@ -215,7 +215,62 @@ const TANDA = 'UJICB';
   cek('stok akhir kembali mengikuti stok hidup', b.stok_akhir, awal + 45);
   cek('selisihnya ikut hidup lagi', b.selisih, (awal + 5) - (awal + 45));
 
+  /* ------------------------------------------------------------------ */
+  console.log('\n=== D. Riwayat "sejak opname terakhir" ===');
+  /* Yang diminta: stok awal mengikuti hasil opname, supaya selisih bulan
+     berikutnya mudah ditelusuri. Dikerjakan TANPA menghapus transaksi apa pun
+     — yang berubah hanya titik mulai hitungannya. */
+  php("require 'includes/db.php'; db()->prepare('UPDATE opname_sesi SET status = ?, tanggal = ? WHERE id = ?')"
+    + "->execute(['selesai','2026-11-20'," + sesiId + "]); echo 'ok';");
+
+  const skuB = nilai('SELECT sku FROM master_barang WHERE id = ' + masterB);
+  let rw = await get(S, 'riwayat/list.php?basis=opname&q=' + encodeURIComponent(skuB));
+  cek('HTTP', rw.status, 200);
+  cek('server memakai patokan opname', rw.body.basis, 'opname');
+  cek('menyebut sesi yang dipakai', rw.body.opname.id, sesiId);
+  cek('hitungan mulai sehari sesudah opname ditutup', rw.body.dari, '2026-11-21');
+
+  const brs = rw.body.rows[0];
+  cek('stok akhir tetap sama dengan stok sebenarnya', brs.stok_akhir, stokB());
+  cek('awal + masuk - keluar = akhir',
+      brs.stok_awal + brs.masuk - brs.keluar, brs.stok_akhir);
+
+  /* Satu transaksi SESUDAH tanggal opname harus muncul di kolom Masuk, bukan
+     terlipat ke dalam stok awal. */
+  php("require 'includes/db.php';"
+    + "db()->prepare('INSERT INTO barang_masuk (tanggal, master_id, barcode, nama, jumlah, keterangan)"
+    + " VALUES (?,?,?,?,?,?)')->execute(['2026-11-25'," + masterB + ",'x','x',9,'" + TANDA + "']); echo 'ok';");
+  rw = await get(S, 'riwayat/list.php?basis=opname&q=' + encodeURIComponent(skuB));
+  const brs2 = rw.body.rows[0];
+  cek('transaksi sesudah opname masuk kolom Masuk', brs2.masuk, brs.masuk + 9);
+  cek('stok awalnya TIDAK ikut bergeser', brs2.stok_awal, brs.stok_awal);
+  cek('akhirnya tetap cocok dengan stok sebenarnya', brs2.stok_akhir, stokB());
+
+  console.log('\n--- tanpa patokan opname: tampilan lama ---');
+  const rwLama = await get(S, 'riwayat/list.php?q=' + encodeURIComponent(skuB));
+  cek('basis kosong', rwLama.body.basis, '');
+  cek('stok awal kembali stok awal master',
+      rwLama.body.rows[0].stok_awal,
+      Number(nilai('SELECT stok_awal FROM master_barang WHERE id = ' + masterB)));
+  cek('akhirnya sama saja', rwLama.body.rows[0].stok_akhir, brs2.stok_akhir);
+
+  console.log('\n--- unduhan PDF ikut patokannya ---');
+  res = await fetch(B + '/api/export/pdf.php?jenis=riwayat&basis=opname&q='
+    + encodeURIComponent(skuB), { headers: { Cookie: S.cookie } });
+  buf = Buffer.from(await res.arrayBuffer());
+  teks = petikTeksPdf(buf).join(' ').replace(/\s+/g, ' ');
+  cek('PDF keluar', buf.slice(0, 4).toString(), '%PDF');
+  cek('kepala laporan menyebut sesi opnamenya', teks.indexOf('Sejak opname') >= 0, true);
+
+  console.log('\n--- belum ada opname ditutup: pilihannya tidak dipaksakan ---');
+  php("require 'includes/db.php'; db()->exec(\"UPDATE opname_sesi SET status = 'draft'\"); echo 'ok';");
+  rw = await get(S, 'riwayat/list.php?basis=opname');
+  cek('kembali ke tampilan biasa, bukan galat', [rw.status, rw.body.basis], [200, '']);
+  cek('layar diberi tahu tidak ada patokan', rw.body.ada_opname, false);
+
   console.log('\n=== Kembalikan keadaan semula ===');
+  php("require 'includes/db.php'; db()->prepare('UPDATE opname_sesi SET tanggal = ? WHERE id = ?')"
+    + "->execute(['" + sesiLama.tanggal + "'," + sesiId + "]); echo 'ok';");
   bersihkan();
   php("require 'includes/db.php';"
     + "db()->exec(\"DELETE FROM activity_log WHERE entitas = 'opname'\"); echo 'ok';");
