@@ -172,7 +172,7 @@ function filterOpnameItem(array $src, int $sesiId): array
          * Selisih di layar dan dengan apa yang dikerjakan penyesuaian stok.
          * Subquery, bukan join: pemanggilnya menyusun WHERE-nya sendiri dan
          * menambahkan join di sini akan menggandakan barisnya. */
-        $where[] = "i.stok_hitung IS NOT NULL AND i.stok_hitung <> (
+        $where[] = "i.stok_hitung IS NOT NULL AND i.stok_hitung <> COALESCE(i.stok_tutup,
             CASE WHEN i.master_id IS NULL THEN i.stok_sistem ELSE (
                 SELECT m.stok_awal
                      + COALESCE((SELECT SUM(jumlah) FROM barang_masuk

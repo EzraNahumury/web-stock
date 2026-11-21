@@ -26,33 +26,49 @@ function konfigTransaksi(string $jenis): array
 }
 
 /**
- * Daftar transaksi berpaginasi.
+ * Penyaring daftar barang masuk / barang keluar.
  *
- * Memperbaiki audit F1: prototipe memotong di 200 baris tanpa paginasi dan
- * tanpa keterangan, sehingga riwayat lama tampak hilang.
+ * DIPAKAI BERSAMA layar dan ekspor PDF. Dua salinan aturan pencarian yang sama
+ * akan menyimpang cepat atau lambat, dan selisihnya muncul sebagai "yang
+ * terlihat di layar berbeda dengan yang tercetak di PDF" — tepat pada laporan
+ * yang dipakai mencocokkan barang.
+ *
+ * @param  array $src  $_GET milik pemanggil
+ * @param  bool  $keluar  barang keluar punya kolom no_pesanan
+ * @return array{where:string, join:string, params:array, q:string, dari:string,
+ *               sampai:string, keterangan:string}
  */
-function daftarTransaksi(string $jenis): void
+function filterTransaksi(array $src, bool $keluar): array
 {
-    $cfg   = konfigTransaksi($jenis);
-    $tabel = $cfg['tabel'];
-
-    $q      = ambilStr($_GET, 'q', 100);
-    $dari   = trim((string)($_GET['dari'] ?? ''));
-    $sampai = trim((string)($_GET['sampai'] ?? ''));
-    $page   = ambilHalaman();
+    $q          = ambilStr($src, 'q', 100);
+    $dari       = trim((string)($src['dari'] ?? ''));
+    $sampai     = trim((string)($src['sampai'] ?? ''));
+    $keterangan = ambilStr($src, 'keterangan', 50);
 
     $where  = ['t.deleted_at IS NULL'];
     $params = [];
 
     if ($q !== '') {
         $pola = polaLike($q);
-        if ($cfg['keluar']) {
-            $where[] = '(t.nama LIKE ? OR t.barcode LIKE ? OR t.no_pesanan LIKE ?)';
-            array_push($params, $pola, $pola, $pola);
-        } else {
-            $where[] = '(t.nama LIKE ? OR t.barcode LIKE ?)';
-            array_push($params, $pola, $pola);
+
+        /* DICARI JUGA LEWAT MASTER.
+         *
+         * Baris transaksi menyimpan nama APA ADANYA dari picking list PDF —
+         * panjang, kadang dengan embel-embel varian — sedangkan orang gudang
+         * mencari dengan nama pendek dan SKU yang ada di katalog. Tanpa
+         * menjangkau master, mencari "KAOS KAKI AQUILA" tidak menemukan baris
+         * yang namanya tertulis panjang, dan SKU tidak bisa dicari sama sekali
+         * karena tabel transaksi memang tidak punya kolomnya. */
+        $kolom = ['t.nama', 't.barcode', 'm.nama', 'm.sku'];
+        if ($keluar) {
+            $kolom[] = 't.no_pesanan';
         }
+        $potong = [];
+        foreach ($kolom as $k) {
+            $potong[] = $k . ' LIKE ?';
+            $params[] = $pola;
+        }
+        $where[] = '(' . implode(' OR ', $potong) . ')';
     }
     if ($dari !== '' && ambilTanggal(['d' => $dari], 'd') !== null) {
         $where[] = 't.tanggal >= ?';
@@ -68,15 +84,48 @@ function daftarTransaksi(string $jenis): void
      * Dicocokkan apa adanya, bukan dibatasi daftar pilihan yang berlaku
      * sekarang: catatan lama bisa memakai keterangan yang sejak itu dihapus
      * dari Master, dan justru baris seperti itulah yang paling perlu dicari. */
-    $keterangan = ambilStr($_GET, 'keterangan', 50);
     if ($keterangan !== '') {
         $where[] = 't.keterangan = ?';
         $params[] = $keterangan;
     }
 
-    $sqlWhere = 'WHERE ' . implode(' AND ', $where);
+    return [
+        'where' => 'WHERE ' . implode(' AND ', $where),
+        /* Selalu di-join, bukan hanya saat mencari: COUNT, SUM, dan daftarnya
+         * harus memakai bentuk SQL yang sama persis, kalau tidak angkanya bisa
+         * berbeda dari barisnya. master_id menunjuk kunci utama, jadi join ini
+         * tidak pernah menggandakan baris. */
+        'join'       => ' LEFT JOIN master_barang m ON m.id = t.master_id',
+        'params'     => $params,
+        'q'          => $q,
+        'dari'       => $dari,
+        'sampai'     => $sampai,
+        'keterangan' => $keterangan,
+    ];
+}
 
-    $total  = (int)dbValue("SELECT COUNT(*) FROM $tabel t $sqlWhere", $params);
+/**
+ * Daftar transaksi berpaginasi.
+ *
+ * Memperbaiki audit F1: prototipe memotong di 200 baris tanpa paginasi dan
+ * tanpa keterangan, sehingga riwayat lama tampak hilang.
+ */
+function daftarTransaksi(string $jenis): void
+{
+    $cfg   = konfigTransaksi($jenis);
+    $tabel = $cfg['tabel'];
+    $page  = ambilHalaman();
+
+    $f          = filterTransaksi($_GET, (bool)$cfg['keluar']);
+    $sqlWhere   = $f['where'];
+    $sqlJoin    = $f['join'];
+    $params     = $f['params'];
+    $q          = $f['q'];
+    $dari       = $f['dari'];
+    $sampai     = $f['sampai'];
+    $keterangan = $f['keterangan'];
+
+    $total  = (int)dbValue("SELECT COUNT(*) FROM $tabel t $sqlJoin $sqlWhere", $params);
     $meta   = metaPaginasi($total, $page);
     $offset = ($meta['page'] - 1) * PAGE_SIZE;
 
@@ -84,8 +133,10 @@ function daftarTransaksi(string $jenis): void
 
     $rows = dbAll(
         "SELECT t.id, t.tanggal, t.barcode, t.nama, t.jumlah, t.keterangan,
-                t.master_id, t.created_at, u.nama_lengkap AS oleh $kolomExtra
+                t.master_id, t.created_at, u.nama_lengkap AS oleh,
+                m.sku AS sku, m.nama AS nama_master $kolomExtra
            FROM $tabel t
+           $sqlJoin
            LEFT JOIN users u ON u.id = t.user_id
          $sqlWhere
          ORDER BY t.tanggal DESC, t.id DESC
@@ -103,7 +154,10 @@ function daftarTransaksi(string $jenis): void
     }
     unset($r);
 
-    $totalJumlah = (int)dbValue("SELECT COALESCE(SUM(t.jumlah),0) FROM $tabel t $sqlWhere", $params);
+    $totalJumlah = (int)dbValue(
+        "SELECT COALESCE(SUM(t.jumlah),0) FROM $tabel t $sqlJoin $sqlWhere",
+        $params
+    );
 
     /* Pilihan untuk dropdown penyaring: gabungan daftar yang berlaku sekarang
      * dan keterangan yang benar-benar ada di data. Yang sudah dihapus dari

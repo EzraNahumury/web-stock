@@ -154,9 +154,14 @@ switch ($jenis) {
             /* Selisih = stok hitung - stok akhir YANG BERLAKU SEKARANG;
              * itulah yang dikoreksi. Salinan saat sesi dibuat ikut dikirim di
              * kolomnya sendiri sebagai jejak audit. */
-            $stokKini = $r['master_id'] !== null
-                ? stokAkhirItem((int)$r['master_id'])
-                : (int)$r['stok_sistem'];
+            /* Angka beku menang bila sesinya sudah ditutup; lihat sql/024.
+             * Tanpa ini laporan bulan lalu yang diunduh ulang akan memuat stok
+             * bulan ini, dan tidak bisa dipakai menelusuri selisih antarbulan. */
+            $stokKini = $r['stok_tutup'] !== null
+                ? (int)$r['stok_tutup']
+                : ($r['master_id'] !== null
+                    ? stokAkhirItem((int)$r['master_id'])
+                    : (int)$r['stok_sistem']);
             $selisih    = $h !== null ? $h - $stokKini : null;
             $selisihAcc = ($h !== null && $a !== null) ? $h - $a : null;
             if ($selisih !== null) {

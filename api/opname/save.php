@@ -55,13 +55,63 @@ if ($id > 0) {
         jsonError('Sesi opname tidak ditemukan.', 404);
     }
 
-    dbExec(
-        'UPDATE opname_sesi SET nama = ?, periode = ?, tanggal = ?, status = ?, catatan = ?
-          WHERE id = ?',
-        [$nama, $periode, $tanggal, $status, $catatan, $id]
-    );
+    /* --- Membekukan angkanya saat sesi ditutup --------------------------
+     *
+     * Selama sesinya berjalan, kolom "Stok akhir" menampilkan stok yang
+     * BERLAKU SEKARANG — harus begitu, karena penyesuaian stok membawa stok
+     * hidup ke angka hitungan fisik, jadi selisih yang ditampilkan mesti
+     * dihitung terhadap angka yang sama.
+     *
+     * Begitu ditutup, laporannya berubah sifat: ia jadi dokumen bulan itu.
+     * Kalau angkanya ikut bergeser, membukanya bulan depan tidak bisa dipakai
+     * menelusuri selisih antarbulan — padahal justru itu gunanya disimpan.
+     * Jadi stok yang berlaku saat penutupan disalin sekali ke stok_tutup, dan
+     * sesudah itu laporannya membaca salinan itu.
+     *
+     * Dibuka kembali -> salinannya dihapus, laporannya hidup lagi. Tanpa itu,
+     * sesi yang dibuka untuk diperbaiki akan menampilkan angka beku sementara
+     * koreksinya bekerja pada stok hidup — persis ketidakcocokan yang hendak
+     * dihindari. */
+    $tutupSekarang = $status === 'selesai' && $lama['status'] !== 'selesai';
+    $bukaLagi      = $status !== 'selesai' && $lama['status'] === 'selesai';
 
-    catatAktivitas('update', 'opname', $id, ['nama' => $nama, 'periode' => $periode]);
+    dbTransaksi(static function (PDO $pdo) use (
+        $id, $nama, $periode, $tanggal, $status, $catatan, $tutupSekarang, $bukaLagi
+    ) {
+        $pdo->prepare(
+            'UPDATE opname_sesi SET nama = ?, periode = ?, tanggal = ?, status = ?, catatan = ?
+              WHERE id = ?'
+        )->execute([$nama, $periode, $tanggal, $status, $catatan, $id]);
+
+        if ($tutupSekarang) {
+            /* Satu UPDATE untuk seluruh baris sesi ini. Barang yang tidak
+             * terhubung ke master memakai salinan awalnya: tidak ada stok
+             * hidup yang bisa dihitung untuknya, dan memang tidak pernah bisa
+             * disesuaikan juga. */
+            $pdo->prepare(
+                "UPDATE opname_item i
+                    LEFT JOIN master_barang m ON m.id = i.master_id
+                      SET i.stok_tutup = CASE WHEN i.master_id IS NULL THEN i.stok_sistem ELSE (
+                              m.stok_awal
+                              + COALESCE((SELECT SUM(jumlah) FROM barang_masuk
+                                           WHERE master_id = m.id AND deleted_at IS NULL), 0)
+                              - COALESCE((SELECT SUM(jumlah) FROM barang_keluar
+                                           WHERE master_id = m.id AND deleted_at IS NULL), 0)
+                          ) END
+                    WHERE i.sesi_id = ?"
+            )->execute([$id]);
+        } elseif ($bukaLagi) {
+            $pdo->prepare('UPDATE opname_item SET stok_tutup = NULL WHERE sesi_id = ?')
+                ->execute([$id]);
+        }
+    });
+
+    catatAktivitas('update', 'opname', $id, array_filter([
+        'nama'    => $nama,
+        'periode' => $periode,
+        'aksi'    => $tutupSekarang ? 'tutup sesi, angkanya dibekukan'
+            : ($bukaLagi ? 'buka kembali sesi, angkanya hidup lagi' : ''),
+    ], static function ($v) { return $v !== ''; }));
 
     jsonOk([
         'id'    => $id,

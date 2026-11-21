@@ -156,48 +156,30 @@ switch ($jenis) {
         $tabel = $jenis === 'masuk' ? 'barang_masuk' : 'barang_keluar';
         $isKel = $jenis === 'keluar';
 
-        $where  = ['t.deleted_at IS NULL'];
-        $params = [];
-        if ($q !== '') {
-            $pola = polaLike($q);
-            if ($isKel) {
-                $where[] = '(t.nama LIKE ? OR t.barcode LIKE ? OR t.no_pesanan LIKE ?)';
-                array_push($params, $pola, $pola, $pola);
-            } else {
-                $where[] = '(t.nama LIKE ? OR t.barcode LIKE ?)';
-                array_push($params, $pola, $pola);
-            }
-        }
-        if ($dari !== '' && ambilTanggal(['d' => $dari], 'd') !== null) {
-            $where[] = 't.tanggal >= ?';
-            $params[] = $dari;
-        }
-        if ($sampai !== '' && ambilTanggal(['d' => $sampai], 'd') !== null) {
-            $where[] = 't.tanggal <= ?';
-            $params[] = $sampai;
-        }
-        // Penyaring keterangan — sama dengan di layar, supaya laporan yang
-        // diunduh memuat persis yang sedang dilihat.
-        $ketSaring = ambilStr($_GET, 'keterangan', 50);
-        if ($ketSaring !== '') {
-            $where[] = 't.keterangan = ?';
-            $params[] = $ketSaring;
-        }
-        $sqlWhere = 'WHERE ' . implode(' AND ', $where);
-        $extra = $isKel ? ', t.no_pesanan' : '';
+        /* Penyaring yang SAMA PERSIS dengan layarnya — satu fungsi, dua
+         * pemakai. Lihat filterTransaksi() di includes/transaksi.php. */
+        require_once __DIR__ . '/../../includes/transaksi.php';
+        $f         = filterTransaksi($_GET, $isKel);
+        $sqlWhere  = $f['where'];
+        $params    = $f['params'];
+        $ketSaring = $f['keterangan'];
+        $extra     = $isKel ? ', t.no_pesanan' : '';
 
         $data = dbAll(
             "SELECT t.tanggal, t.barcode, t.nama, t.jumlah, t.keterangan,
-                    u.nama_lengkap AS oleh $extra
-               FROM $tabel t LEFT JOIN users u ON u.id = t.user_id
+                    u.nama_lengkap AS oleh, m.sku AS sku $extra
+               FROM $tabel t
+               " . $f['join'] . "
+               LEFT JOIN users u ON u.id = t.user_id
              $sqlWhere ORDER BY t.tanggal DESC, t.id DESC",
             $params
         );
 
         $kolom = [
             ['label' => 'Tanggal', 'lebar' => 9, 'bungkus' => true],
-            ['label' => 'Barcode', 'lebar' => 14, 'bungkus' => true],
-            ['label' => 'Nama barang', 'lebar' => 32, 'bungkus' => true],
+            ['label' => 'SKU', 'lebar' => 11, 'bungkus' => true],
+            ['label' => 'Barcode', 'lebar' => 13, 'bungkus' => true],
+            ['label' => 'Nama barang', 'lebar' => 30, 'bungkus' => true],
             ['label' => $isKel ? 'Keluar' : 'Masuk', 'lebar' => 7, 'rata' => 'kanan'],
             ['label' => 'Keterangan', 'lebar' => 12, 'bungkus' => true],
         ];
@@ -222,6 +204,9 @@ switch ($jenis) {
             $totalJumlah += (int)$r['jumlah'];
             $sel = [
                 date('d/m/Y', strtotime($r['tanggal'])),
+                // SKU diambil dari master: tabel transaksi tidak menyimpannya,
+                // padahal itu yang dipakai mencocokkan barang di gudang.
+                (string)($r['sku'] ?? '-'),
                 $r['barcode'],
                 $r['nama'],
                 number_format((int)$r['jumlah'], 0, ',', '.'),
@@ -774,9 +759,14 @@ switch ($jenis) {
             /* Selisih = stok hitung - stok akhir YANG BERLAKU SEKARANG;
              * itulah yang dikoreksi "Stok Disesuaikan". i.stok_sistem adalah
              * salinan saat sesi dibuat dan sudah bisa berbeda. */
-            $stokKini = $r['master_id'] !== null
-                ? stokAkhirItem((int)$r['master_id'])
-                : (int)$r['stok_sistem'];
+            /* Angka beku menang bila sesinya sudah ditutup; lihat sql/024.
+             * Tanpa ini laporan bulan lalu yang diunduh ulang akan memuat stok
+             * bulan ini, dan tidak bisa dipakai menelusuri selisih antarbulan. */
+            $stokKini = $r['stok_tutup'] !== null
+                ? (int)$r['stok_tutup']
+                : ($r['master_id'] !== null
+                    ? stokAkhirItem((int)$r['master_id'])
+                    : (int)$r['stok_sistem']);
             $selisih    = $h !== null ? $h - $stokKini : null;
             $selisihAcc = ($h !== null && $a !== null) ? $h - $a : null;
             if ($selisih !== null) {

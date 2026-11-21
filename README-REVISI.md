@@ -325,6 +325,29 @@ massalnya keliru, **Batal sesuaikan** membatalkannya massal juga.
 
 ---
 
+## Barang masuk & keluar  *(baru 21 November)*
+
+**Pencariannya sekarang menjangkau katalog.** Baris transaksi menyimpan nama
+panjang dari picking list, sedangkan Anda mencari dengan nama pendek atau SKU.
+Sekarang keduanya ketemu — dan SKU punya kolom sendiri di tabelnya.
+
+**Unduh PDF mengikuti yang dicari.** Dulu tautannya hanya ikut dropdown
+keterangan dan tanggal, tidak ikut kotak pencarian, jadi hasil unduhannya
+seluruh transaksi. Sekarang: cari dulu, baru tekan Unduh PDF — isinya persis
+yang terlihat. Berlaku juga sesudah pindah tab lalu kembali.
+
+## Laporan stok opname yang sudah ditutup  *(baru 21 November)*
+
+Begitu sebuah laporan ditandai **selesai**, **angka Stok akhirnya dibekukan**
+pada keadaan saat itu. Membukanya bulan depan tetap menunjukkan angka yang
+sama, jadi bisa dipakai menelusuri selisih antarbulan.
+
+Selama masih berjalan, Stok akhir tetap mengikuti stok terkini — harus begitu,
+karena "Stok Disesuaikan" bekerja pada angka itu.
+
+Kalau laporannya **dibuka kembali** untuk diperbaiki, angkanya hidup lagi
+mengikuti stok terkini, lalu dibekukan ulang saat ditutup lagi.
+
 ## Siapa boleh apa
 
 | Tindakan | Hanya-baca | Operator | Admin |

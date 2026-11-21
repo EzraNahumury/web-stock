@@ -68,17 +68,22 @@ $offset = ($meta['page'] - 1) * PAGE_SIZE;
  *
  * Barang yang tidak terhubung ke master memakai salinannya, karena tidak ada
  * yang bisa dihitung — dan memang tidak bisa disesuaikan juga. */
-$sqlStokHidup = 'CASE WHEN i.master_id IS NULL THEN i.stok_sistem ELSE '
+/* i.stok_tutup diisi sekali saat sesinya ditandai selesai, dan dikosongkan
+ * lagi bila dibuka kembali. Dengan COALESCE di depan, SELURUH pembacanya
+ * memakai satu bentuk yang sama tanpa perlu memeriksa status sesinya —
+ * satu cabang yang terlupa di salah satu pembaca sudah cukup untuk membuat
+ * angkanya berbeda antara layar dan laporan. Lihat sql/024. */
+$sqlStokHidup = 'COALESCE(i.stok_tutup, CASE WHEN i.master_id IS NULL THEN i.stok_sistem ELSE '
     . '(m.stok_awal'
     . '  + COALESCE((SELECT SUM(jumlah) FROM barang_masuk'
     . '              WHERE master_id = m.id AND deleted_at IS NULL), 0)'
     . '  - COALESCE((SELECT SUM(jumlah) FROM barang_keluar'
     . '              WHERE master_id = m.id AND deleted_at IS NULL), 0))'
-    . ' END';
+    . ' END)';
 
 $rows = dbAll(
     "SELECT i.id, i.master_id, i.sku, i.barcode, i.nama, i.kategori,
-            i.stok_sistem, i.stok_hitung, i.stok_accurate, i.dicek,
+            i.stok_sistem, i.stok_tutup, i.stok_hitung, i.stok_accurate, i.dicek,
             i.penyesuaian, i.adj_jenis, i.adj_qty, i.petugas, i.catatan,
             $sqlStokHidup AS stok_akhir
        FROM opname_item i
@@ -95,6 +100,8 @@ foreach ($rows as &$r) {
     $r['stok_sistem']   = (int)$r['stok_sistem'];
     // Yang dipakai layar sebagai kolom "Stok akhir".
     $r['stok_akhir']    = (int)$r['stok_akhir'];
+    // Terisi berarti sesinya sudah ditutup dan angkanya beku.
+    $r['stok_tutup']    = $r['stok_tutup'] === null ? null : (int)$r['stok_tutup'];
     $r['stok_hitung']   = $r['stok_hitung']   === null ? null : (int)$r['stok_hitung'];
     $r['stok_accurate'] = $r['stok_accurate'] === null ? null : (int)$r['stok_accurate'];
     $r['dicek']         = (int)$r['dicek'] === 1;

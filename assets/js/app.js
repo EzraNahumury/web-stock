@@ -1034,7 +1034,7 @@ function renderTransaksiTab(kind){
   }
 
   html += '<div class="toolbar">'
-    + '<div class="search-wrap">' + svgIcon("search") + '<input type="text" id="'+kind+'Cari" placeholder="Cari nama, barcode' + (kind==="keluar"?", no. pesanan":"") + '…" oninput="onTrxSearchInput(\''+kind+'\')"></div>'
+    + '<div class="search-wrap">' + svgIcon("search") + '<input type="text" id="'+kind+'Cari" placeholder="Cari nama, SKU, barcode' + (kind==="keluar"?", no. pesanan":"") + '…" oninput="onTrxSearchInput(\''+kind+'\')"></div>'
     + '<select id="'+kind+'FKet" onchange="onTrxFilterChange(\''+kind+'\')">'
       + '<option value="">Semua keterangan</option></select>'
     + '<div class="daterange">Dari <input type="date" id="'+kind+'Dari" onchange="onTrxFilterChange(\''+kind+'\')">'
@@ -1052,6 +1052,7 @@ function renderTransaksiTab(kind){
   $(kind+"Cari").value   = f.q;
   $(kind+"Dari").value   = f.dari;
   $(kind+"Sampai").value = f.sampai;
+  samakanTautanUnduhTrx(kind);
 
   renderTransaksiTable(kind);
   if(kind === "keluar" && bisaTulis){
@@ -1060,9 +1061,32 @@ function renderTransaksiTab(kind){
   }
 }
 
+/**
+ * Samakan tautan "Unduh PDF" dengan penyaring yang sedang berlaku.
+ *
+ * ADA KARENA PDF-NYA DULU MENGABAIKAN PENCARIAN
+ * Tautannya hanya diperbarui oleh onTrxFilterChange — yang dipanggil dropdown
+ * keterangan dan kolom tanggal, TAPI BUKAN oleh kotak pencarian. Jadi mencari
+ * sebuah barang lalu menekan Unduh PDF menghasilkan laporan seluruh transaksi,
+ * bukan yang dicari. Sekarang satu fungsi ini dipanggil dari ketiga tempat:
+ * saat layar digambar, saat mengetik di pencarian, dan saat penyaring lain
+ * berubah.
+ */
+function samakanTautanUnduhTrx(kind){
+  const ex = $(kind+"Export");
+  if(!ex) return;
+  const f = trxFilters[kind];
+  ex.href = "api/export/pdf.php?jenis=" + kind
+    + "&q=" + encodeURIComponent(f.q || "")
+    + "&keterangan=" + encodeURIComponent(f.keterangan || "")
+    + "&dari=" + encodeURIComponent(f.dari || "")
+    + "&sampai=" + encodeURIComponent(f.sampai || "");
+}
+
 const onTrxSearchInput = debounce(function(kind){
   trxFilters[kind].q = $(kind+"Cari").value;
   trxFilters[kind].page = 1;
+  samakanTautanUnduhTrx(kind);
   renderTransaksiTable(kind);
 }, 300);
 
@@ -1073,10 +1097,7 @@ function onTrxFilterChange(kind){
   f.sampai = $(kind+"Sampai").value;
   f.keterangan = $(kind+"FKet") ? $(kind+"FKet").value : "";
   f.page   = 1;
-  const ex = $(kind+"Export");
-  if(ex) ex.href = "api/export/pdf.php?jenis="+kind+"&q="+encodeURIComponent(f.q)
-      + "&keterangan="+encodeURIComponent(f.keterangan)
-      + "&dari="+encodeURIComponent(f.dari)+"&sampai="+encodeURIComponent(f.sampai);
+  samakanTautanUnduhTrx(kind);
   renderTransaksiTable(kind);
 }
 function trxGoPageMasuk(p){ trxFilters.masuk.page = p; renderTransaksiTable("masuk"); }
@@ -1263,7 +1284,14 @@ async function renderTransaksiTable(kind){
   let body = data.rows.map(r =>
     '<tr>'
     + '<td style="white-space:nowrap">'+fmtDate(r.tanggal)+'</td>'
-    + '<td style="font-weight:500">'+esc(r.nama)+(r.master_id===null?'<span class="flag-gen">TAK DIKENAL</span>':'')+'</td>'
+    /* Nama di baris ini apa adanya dari picking list — sering panjang.
+     * Nama pendek dari katalog disebut di bawahnya bila memang berbeda, karena
+     * itulah nama yang dipakai orang gudang untuk mengenali barangnya. */
+    + '<td style="font-weight:500">'+esc(r.nama)+(r.master_id===null?'<span class="flag-gen">TAK DIKENAL</span>':'')
+      + (r.nama_master && r.nama_master !== r.nama
+          ? '<div class="item-sub" style="font-family:Inter">'+esc(r.nama_master)+'</div>' : '')
+      + '</td>'
+    + '<td class="mono" style="font-size:11.5px; color:var(--slate)">'+esc(r.sku || "-")+'</td>'
     + '<td class="mono" style="font-size:11.5px; color:var(--slate)">'+esc(r.barcode)+'</td>'
     + '<td style="font-weight:600">'+fmtNum(r.jumlah)+'</td>'
     + '<td style="color:var(--slate)">'+esc(r.keterangan)+'</td>'
@@ -1275,13 +1303,14 @@ async function renderTransaksiTable(kind){
     + '</tr>'
   ).join("");
 
-  const kolomJml = (showPesanan ? 8 : 7) - (bolehHapus() ? 0 : 1);
+  // +1 kolom SKU.
+  const kolomJml = (showPesanan ? 9 : 8) - (bolehHapus() ? 0 : 1);
   if(data.rows.length===0) body = '<tr class="empty-row"><td colspan="'+kolomJml+'">Belum ada catatan.</td></tr>';
 
-  const headers = ["Tanggal","Barang","Barcode",jumlahLabel,"Keterangan"]
+  const headers = ["Tanggal","Barang","SKU","Barcode",jumlahLabel,"Keterangan"]
     .concat(showPesanan?["No. Pesanan"]:[]).concat(["Oleh"]).concat(bolehHapus()?[""]:[]);
 
-  wadah.innerHTML = '<div class="table-card"><table style="min-width:720px"><thead><tr>'
+  wadah.innerHTML = '<div class="table-card"><table style="min-width:800px"><thead><tr>'
     + headers.map(h=>'<th>'+h+'</th>').join("")
     + '</tr></thead><tbody>'+body+'</tbody></table>'
     + '<div class="pagination"><span>' + fmtNum(data.total) + ' catatan · total ' + jumlahLabel.toLowerCase()
@@ -4090,9 +4119,11 @@ async function refreshOpnameDetail(){
      * Selisih di kolom sebelah dihitung terhadap angka ini, jadi
      * pengurangannya bisa dicocokkan dengan mata. */
     + '<td class="num" data-label="Stok akhir">' + fmtNum(it.stok_akhir)
-      + (it.stok_akhir !== it.stok_sistem
-          ? '<div class="item-sub" style="font-family:Inter">saat dibuat ' + fmtNum(it.stok_sistem) + '</div>'
-          : '') + '</td>'
+      + (it.stok_tutup !== null && it.stok_tutup !== undefined
+          ? '<div class="item-sub" style="font-family:Inter">beku saat ditutup</div>'
+          : (it.stok_akhir !== it.stok_sistem
+              ? '<div class="item-sub" style="font-family:Inter">saat dibuat ' + fmtNum(it.stok_sistem) + '</div>'
+              : '')) + '</td>'
     /* Hitungan fisik tetap min=0 — tidak ada rak berisi minus tiga barang. */
     + '<td class="num" data-label="Stok hitung"><input type="number" class="sel-angka" id="oh' + it.id + '" min="0"'
       + ' inputmode="numeric"'
@@ -4144,7 +4175,10 @@ async function refreshOpnameDetail(){
       ? '<div class="info-box">Akun ini hanya bisa melihat, jadi angkanya tidak bisa diisi.</div>'
       : terkunci
       ? '<div class="info-box">Laporan ini sudah ditandai <b>selesai</b>, jadi angkanya dikunci. '
-        + 'Buka kembali statusnya bila memang perlu diubah.</div>'
+        + '<b>Stok akhirnya dibekukan</b> pada keadaan saat laporan ditutup, jadi membukanya '
+        + 'bulan depan tetap menunjukkan angka yang sama — itulah yang dipakai menelusuri '
+        + 'selisih antarbulan. Buka kembali statusnya bila memang perlu diubah; angkanya '
+        + 'akan hidup lagi mengikuti stok terkini.</div>'
       : '<div class="info-box"><b>Selisih = stok hitung &minus; stok akhir</b> — seberapa jauh stok '
         + 'sistem meleset dari kenyataan di rak, dan itu pula yang dibetulkan oleh '
         + '"Stok Disesuaikan". Kolom <b>Selisih Acc.</b> adalah pemeriksaan silang terhadap '

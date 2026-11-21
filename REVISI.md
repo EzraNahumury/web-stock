@@ -9,6 +9,82 @@ berubah**, dan **bagaimana memastikannya jalan**.
 
 ---
 
+## 21 November 2026 — cari lewat SKU, PDF ikut pencarian, laporan lama dibekukan
+
+### Barang masuk / keluar bisa dicari lewat nama dan SKU katalog
+
+Baris transaksi menyimpan nama **apa adanya dari picking list PDF** — panjang,
+kadang berembel-embel varian — sedangkan orang gudang mencari dengan nama
+pendek dan SKU dari katalog. Pencarian yang hanya menjangkau `t.nama` dan
+`t.barcode` karena itu sering tidak menemukan apa-apa, dan **SKU tidak bisa
+dicari sama sekali** karena tabel transaksi memang tidak punya kolomnya.
+
+Sekarang pencariannya ikut menjangkau master: `m.nama` dan `m.sku`. SKU-nya
+juga ditampilkan sebagai kolom tersendiri, dan nama pendek katalog disebut di
+bawah nama panjangnya bila keduanya berbeda.
+
+### Unduh PDF ikut yang dicari
+
+Tautan "Unduh PDF" hanya diperbarui oleh `onTrxFilterChange` — yang dipanggil
+dropdown keterangan dan kolom tanggal, **tapi bukan oleh kotak pencarian**.
+Jadi mencari sebuah barang lalu menekan Unduh PDF menghasilkan laporan seluruh
+transaksi, bukan yang dicari.
+
+Satu fungsi `samakanTautanUnduhTrx()` sekarang dipanggil dari ketiga tempat:
+saat layar digambar, saat mengetik di pencarian, dan saat penyaring lain
+berubah. Yang terakhir itu penting juga — pindah tab lalu kembali dulu membuat
+tautannya kembali polos padahal penyaringnya masih terpasang.
+
+Logika penyaringnya sendiri dulu **disalin** di layar dan di ekspor PDF.
+Dipindah ke satu fungsi `filterTransaksi()`, dipakai keduanya — dua salinan
+aturan pencarian akan menyimpang cepat atau lambat, dan selisihnya muncul
+sebagai "yang di layar berbeda dengan yang tercetak". Kolom SKU ikut masuk ke
+PDF-nya.
+
+### Laporan stok opname yang sudah ditutup tidak berubah lagi
+
+Permintaannya: laporan bulan lalu yang sudah dibuat, qty stok akhirnya jangan
+berubah, supaya bisa dipakai menelusuri selisih bulan berikutnya.
+
+Ini berpasangan dengan perubahan 27 Oktober, yang membuat kolom Stok akhir
+mengikuti **stok hidup**. Itu benar selama sesinya berjalan — penyesuaian stok
+membawa stok hidup ke angka hitungan, jadi selisih yang ditampilkan harus
+dihitung terhadap angka yang sama. Tapi begitu ditutup, laporannya berubah
+sifat: ia jadi dokumen bulan itu.
+
+Kolom baru `opname_item.stok_tutup` ([sql/024](sql/024_opname_stok_tutup.sql))
+menyimpan stok yang berlaku **pada saat sesinya ditandai selesai**:
+
+| Keadaan sesi | `stok_tutup` | Yang dibaca laporan |
+|---|---|---|
+| Berjalan (draft) | kosong | stok hidup |
+| **Ditutup (selesai)** | **diisi sekali** | **angka beku** |
+| Dibuka kembali | dikosongkan | stok hidup lagi |
+
+Seluruh pembacanya memakai satu bentuk yang sama, `COALESCE(i.stok_tutup,
+<stok hidup>)`, tanpa memeriksa status sesinya di tiap tempat — satu cabang
+yang terlupa di salah satu pembaca sudah cukup untuk membuat angkanya berbeda
+antara layar dan laporan. Layar, kartu ringkasan, penyaring "Ada selisih",
+unduhan PDF, dan unduhan Excel semuanya ikut.
+
+Dibuka kembali, angkanya hidup lagi — tanpa itu, sesi yang dibuka untuk
+diperbaiki akan menampilkan angka beku sementara koreksinya bekerja pada stok
+hidup, persis ketidakcocokan yang hendak dihindari.
+
+**Bedanya dengan `stok_sistem`:** `stok_sistem` adalah salinan stok saat sesi
+**dibuat** (sebelum dihitung); `stok_tutup` adalah stok saat sesi **ditutup**
+(sesudah koreksinya ditulis). Yang pertama menerangkan dari mana berangkat,
+yang kedua di mana berhenti. Keduanya disimpan.
+
+### Belum dikerjakan: stok awal mengikuti hasil opname
+
+Permintaan ketiga menunggu keputusan, karena jawabannya menghapus riwayat dan
+itu tidak bisa dibatalkan. Keterangannya ada di balasan saya; ringkasnya:
+`stok_akhir = stok_awal + masuk − keluar`, jadi menyetel stok awal ke hasil
+opname **tanpa** menghapus transaksi sebelumnya akan melipatgandakan stok.
+
+---
+
 ## 27 Oktober 2026 (siang) — selisih stok opname dihitung dari angka yang salah
 
 ### Permintaannya
