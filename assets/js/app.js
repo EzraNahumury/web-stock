@@ -4182,7 +4182,9 @@ async function refreshOpnameDetail(){
      * terkini, dan salinan saat dibuat disebut bila sudah bergeser. */
     + '<td class="num" data-label="Stok akhir">' + fmtNum(it.stok_akhir)
       + (!it.beku && it.stok_akhir !== it.stok_sistem
-          ? '<div class="item-sub" style="font-family:Inter">saat dibuat ' + fmtNum(it.stok_sistem) + '</div>'
+          ? '<div class="item-sub" style="font-family:Inter" title="Stok yang dipegang sistem '
+            + 'ketika laporan opname ini dibuat. Angka di atas adalah stok hari ini.">'
+            + 'saat laporan dibuat: ' + fmtNum(it.stok_sistem) + '</div>'
           : '') + '</td>'
     /* Hitungan fisik tetap min=0 — tidak ada rak berisi minus tiga barang. */
     + '<td class="num" data-label="Stok hitung"><input type="number" class="sel-angka" id="oh' + it.id + '" min="0"'
