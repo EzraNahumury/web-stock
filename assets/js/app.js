@@ -4177,15 +4177,11 @@ async function refreshOpnameDetail(){
     /* Stok akhir yang BERLAKU SEKARANG, bukan salinan saat sesi dibuat.
      * Selisih di kolom sebelah dihitung terhadap angka ini, jadi
      * pengurangannya bisa dicocokkan dengan mata. */
-    /* Sesi yang sudah ditutup: angkanya MEMANG stok saat laporan dibuat, jadi
-     * tidak perlu disebut lagi di bawahnya. Yang masih berjalan: angkanya stok
-     * terkini, dan salinan saat dibuat disebut bila sudah bergeser. */
-    + '<td class="num" data-label="Stok akhir">' + fmtNum(it.stok_akhir)
-      + (!it.beku && it.stok_akhir !== it.stok_sistem
-          ? '<div class="item-sub" style="font-family:Inter" title="Stok yang dipegang sistem '
-            + 'ketika laporan opname ini dibuat. Angka di atas adalah stok hari ini.">'
-            + 'saat laporan dibuat: ' + fmtNum(it.stok_sistem) + '</div>'
-          : '') + '</td>'
+    /* Hanya angkanya. Salinan "saat laporan dibuat" pernah disebut di bawahnya
+     * dan diminta dihapus: selama laporannya berjalan yang berlaku memang stok
+     * terkini, dan sesudah ditutup angka itu sendirilah yang tampil — jadi di
+     * kedua keadaan barisan kedua itu hanya menambah keramaian. */
+    + '<td class="num" data-label="Stok akhir">' + fmtNum(it.stok_akhir) + '</td>'
     /* Hitungan fisik tetap min=0 — tidak ada rak berisi minus tiga barang. */
     + '<td class="num" data-label="Stok hitung"><input type="number" class="sel-angka" id="oh' + it.id + '" min="0"'
       + ' inputmode="numeric"'
@@ -4310,12 +4306,14 @@ async function onPenyesuaianBerubah(id){
 
   const baris = opnameRows.find(x => x.id === id);
   const nama = baris ? baris.nama : "barang ini";
-  const kini = baris ? baris.stok_sistem : null;
+  // Stok yang berlaku sekarang — itulah yang digeser koreksinya, bukan
+  // salinan saat laporan dibuat.
+  const kini = baris ? baris.stok_akhir : null;
 
   const ya = await konfirmasi(
     "Sesuaikan stok " + nama + "?",
     "Stok akhir barang ini akan diubah menjadi " + fmtNum(hitung) + " mengikuti hitungan fisik"
-    + (kini !== null ? " (menurut sistem saat laporan dibuat: " + fmtNum(kini) + ")" : "")
+    + (kini !== null ? " (menurut sistem sekarang: " + fmtNum(kini) + ")" : "")
     + ". Koreksinya dicatat sebagai barang masuk atau keluar berketerangan "
     + '"Penyesuaian Opname" dan langsung terlihat di Dashboard dan Riwayat.',
     "Sesuaikan stok"
