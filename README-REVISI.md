@@ -348,35 +348,6 @@ karena "Stok Disesuaikan" bekerja pada angka itu.
 Kalau laporannya **dibuka kembali** untuk diperbaiki, angkanya hidup lagi
 mengikuti stok terkini, lalu dibekukan ulang saat ditutup lagi.
 
-## Laporan stok opname: satu patokan  *(22 November)*
-
-**Kolom Stok akhir = stok pada tanggal laporan itu dibuat.** Selalu — baik
-laporannya masih berjalan maupun sudah ditutup. Angka itu tidak ikut bergerak
-sepanjang periode berjalan, dan laporan bulan lalu tetap menunjukkan angka
-bulan lalu.
-
-**Selisih = stok hitung − stok akhir**, dan itulah yang ditulis sebagai koreksi
-kalau Anda memilih "Stok Disesuaikan".
-
-### Yang berubah pada koreksinya
-
-Dulu stok dipaksa menjadi **persis** angka hitungan fisik. Itu menghapus barang
-yang masuk atau keluar sesudah penghitungan:
-
-| | 22 Nov | 23 Nov | 24 Nov tekan "Stok Disesuaikan" |
-|---|---|---|---|
-| Sistem | 38 | — | |
-| Dihitung | 33 | — | selisih −5 |
-| 4 pcs masuk | — | stok 42 | |
-| **Dulu** | | | stok dipaksa 33 — **4 pcs lenyap** |
-| **Sekarang** | | | stok digeser −5 → **37**, benar |
-
-### Selisih tetap, tidak jadi nol
-
-Sesudah dikoreksi, kolom Selisih **tetap** menunjukkan −5. Itu fakta laporan
-tersebut: sistem meleset 5 pada tanggal itu. Bahwa sudah dibetulkan terbaca di
-kolom **Penyesuaian**.
-
 ## Laporan opname yang sudah ditutup  *(diperbaiki 22 November)*
 
 Begitu sebuah laporan ditandai **selesai**, kolom **Stok akhir** menunjukkan

@@ -723,6 +723,8 @@ switch ($jenis) {
          * sama. Lihat dataLaporanOpname() di includes/opname.php. */
         require_once __DIR__ . '/../../includes/opname.php';
         $data = dataLaporanOpname($sesiId, $q, $kategori);
+        // Lihat api/opname/detail.php: pembandingnya ikut status sesinya.
+        $bekuSesi = ($sesi['status'] ?? '') === 'selesai';
 
         $pdf = new PdfTabel('lanskap');
         $pdf->siapkan($sesi['nama'], [
@@ -767,9 +769,15 @@ switch ($jenis) {
             /* Selisih = stok hitung - stok akhir YANG BERLAKU SEKARANG;
              * itulah yang dikoreksi "Stok Disesuaikan". i.stok_sistem adalah
              * salinan saat sesi dibuat dan sudah bisa berbeda. */
-            /* Patokan laporan: stok pada tanggal laporan ini dibuat. Sama
-             * persis dengan layarnya — lihat api/opname/detail.php. */
-            $stokKini = (int)$r['stok_sistem'];
+            /* Sesi yang sudah ditutup memakai stok SAAT LAPORAN DIBUAT; yang
+             * masih berjalan memakai stok yang berlaku sekarang. Sama persis
+             * dengan layarnya — lihat api/opname/detail.php. Tanpa ini laporan
+             * bulan lalu yang diunduh ulang memuat stok bulan ini. */
+            $stokKini = $bekuSesi
+                ? (int)$r['stok_sistem']
+                : ($r['master_id'] !== null
+                    ? stokAkhirItem((int)$r['master_id'])
+                    : (int)$r['stok_sistem']);
             $selisih    = $h !== null ? $h - $stokKini : null;
             $selisihAcc = ($h !== null && $a !== null) ? $h - $a : null;
             if ($selisih !== null) {

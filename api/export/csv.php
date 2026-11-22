@@ -107,6 +107,8 @@ switch ($jenis) {
         // Query yang sama persis dengan ekspor PDF-nya. Lihat
         // dataLaporanOpname() di includes/opname.php.
         $data = dataLaporanOpname($sesiId, $q, $kategori);
+        // Lihat api/opname/detail.php: pembandingnya ikut status sesinya.
+        $bekuSesi = ($sesi['status'] ?? '') === 'selesai';
 
         catatAktivitas('ekspor', 'laporan', null, array_filter([
             'jenis'    => 'opname (excel)',
@@ -142,8 +144,7 @@ switch ($jenis) {
 
         echo barisCsv([
             'SKU', 'Barcode', 'Nama barang', 'Kategori',
-            'Stok akhir (saat laporan dibuat)', 'Stok saat laporan ditutup',
-            'Stok hitung', 'Stok accurate',
+            'Stok akhir', 'Stok saat opname dibuat', 'Stok hitung', 'Stok accurate',
             'Selisih (hitung - stok akhir)', 'Selisih Accurate (hitung - accurate)',
             'Dicek', 'Petugas', 'Penyesuaian', 'Koreksi stok', 'Ket.',
         ]);
@@ -155,9 +156,15 @@ switch ($jenis) {
             /* Selisih = stok hitung - stok akhir YANG BERLAKU SEKARANG;
              * itulah yang dikoreksi. Salinan saat sesi dibuat ikut dikirim di
              * kolomnya sendiri sebagai jejak audit. */
-            /* Patokan laporan: stok pada tanggal laporan ini dibuat. Sama
-             * persis dengan layarnya — lihat api/opname/detail.php. */
-            $stokKini = (int)$r['stok_sistem'];
+            /* Sesi yang sudah ditutup memakai stok SAAT LAPORAN DIBUAT; yang
+             * masih berjalan memakai stok yang berlaku sekarang. Sama persis
+             * dengan layarnya — lihat api/opname/detail.php. Tanpa ini laporan
+             * bulan lalu yang diunduh ulang memuat stok bulan ini. */
+            $stokKini = $bekuSesi
+                ? (int)$r['stok_sistem']
+                : ($r['master_id'] !== null
+                    ? stokAkhirItem((int)$r['master_id'])
+                    : (int)$r['stok_sistem']);
             $selisih    = $h !== null ? $h - $stokKini : null;
             $selisihAcc = ($h !== null && $a !== null) ? $h - $a : null;
             if ($selisih !== null) {
@@ -179,8 +186,7 @@ switch ($jenis) {
                 $r['nama'],
                 $r['kategori'],
                 $stokKini,
-                // Kosong selama laporannya masih berjalan.
-                $r['stok_tutup'] === null ? '' : (int)$r['stok_tutup'],
+                (int)$r['stok_sistem'],
                 $h === null ? '' : $h,
                 $a === null ? '' : $a,
                 $selisih === null ? '' : $selisih,

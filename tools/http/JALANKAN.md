@@ -56,7 +56,6 @@ UJI_BASE=http://127.0.0.1:8100 node tools/http/uji_tersusul.cjs
 | `uji_minimal.cjs` | Setel ambang stok minimal, satuan maupun massal |
 | `uji_opname_hp.cjs` | Nama & SKU di PDF opname, unduhan Excel, stok accurate minus, centang massal, penyesuaian massal |
 | `uji_pdf_lengkap.cjs` | Tiap sel di SELURUH laporan PDF: tidak ada yang terpotong |
-| `uji_patokan_opname.cjs` | Satu patokan laporan opname: Stok akhir = stok saat laporan dibuat, dan koreksi sebesar selisihnya |
 | `uji_cari_beku.cjs` | Cari barang masuk/keluar lewat nama & SKU katalog, PDF ikut pencarian, dan laporan opname yang ditutup angkanya beku |
 
 ## Aturan menulis suite di sini

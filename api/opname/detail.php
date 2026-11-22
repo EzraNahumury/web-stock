@@ -43,9 +43,15 @@ unset($sesi['user_id'], $sesi['deleted_at']);
 
 $page = ambilHalaman();
 
+/* Sesi yang sudah ditutup memakai angka beku; yang masih berjalan memakai stok
+ * yang berlaku sekarang. Ditentukan sekali di sini lalu dibawa ke mana-mana,
+ * supaya penyaring, daftar, dan ringkasannya tidak mungkin memakai pembanding
+ * yang berbeda. Alasan lengkapnya di bawah, pada $sqlStokHidup. */
+$bekuSesi = ($sesi['status'] ?? '') === 'selesai';
+
 // Penyaringnya dibangun di includes/opname.php supaya layar, pengisian
 // massal, dan ekspor PDF tidak mungkin menyaring baris yang berbeda.
-$f        = filterOpnameItem($_GET, $id);
+$f        = filterOpnameItem($_GET, $id, $bekuSesi);
 $sqlWhere = $f['where'];
 $params   = $f['params'];
 
@@ -53,24 +59,50 @@ $total  = (int)dbValue("SELECT COUNT(*) FROM opname_item i $sqlWhere", $params);
 $meta   = metaPaginasi($total, $page);
 $offset = ($meta['page'] - 1) * PAGE_SIZE;
 
-/* PATOKAN LAPORAN: stok pada tanggal laporan opname ini DIBUAT.
+/* STOK AKHIR YANG BERLAKU SEKARANG, bukan i.stok_sistem.
  *
- * Satu patokan untuk semua keadaan — masih berjalan maupun sudah ditutup.
- * Gudang menerangkannya begini: laporan opname adalah potret bertanggal, dan
- * pergerakan sesudahnya menumpuk di atasnya, bukan menggeser patokannya.
+ * i.stok_sistem adalah salinan stok pada saat sesi opname DIBUAT. Stok terus
+ * bergerak sesudah itu — barang masuk, pesanan keluar — sementara penyesuaian
+ * selalu membawa stok YANG BERLAKU SEKARANG ke angka hitungan fisik. Selisih
+ * yang dihitung terhadap salinan lama karena itu tetap berbeda dari koreksi
+ * yang akan dikerjakan tombolnya, dan itulah yang membuat angkanya tidak bisa
+ * dipercaya.
  *
- * i.stok_sistem disalin sekali saat sesi dibuat dan tidak pernah berubah, jadi
- * kolom Stok akhir tidak ikut bergerak sepanjang periode berjalan, dan laporan
- * bulan lalu tetap menunjukkan angka bulan lalu.
+ * Salinannya tetap disimpan di basis data sebagai jejak audit, dan ikut
+ * dikirim sebagai stok_sistem; yang ditampilkan di kolom "Stok akhir" adalah
+ * angka hidup ini.
  *
- * Koreksi "Stok Disesuaikan" memakai patokan yang sama (lihat
- * sinkronPenyesuaianStok di includes/opname.php), sehingga angka Selisih di
- * layar SELALU sama dengan koreksi yang benar-benar ditulis. Itu yang dulu
- * tidak terpenuhi dan membuat angkanya tidak bisa dipercaya.
+ * Barang yang tidak terhubung ke master memakai salinannya, karena tidak ada
+ * yang bisa dihitung — dan memang tidak bisa disesuaikan juga. */
+/* ANGKA PEMBANDING: tergantung sesinya masih berjalan atau sudah ditutup.
  *
- * Tanpa cabang dan tanpa subquery: cukup satu kolom. Itulah untungnya satu
- * aturan — tidak ada cabang yang bisa terlupa di salah satu pembaca. */
-$sqlStokHidup = 'i.stok_sistem';
+ * SESI BERJALAN -> stok yang BERLAKU SEKARANG.
+ *   Selama dihitung, "Stok Disesuaikan" membawa stok hidup ke angka hitungan
+ *   fisik. Selisih yang ditampilkan harus dihitung terhadap angka yang sama,
+ *   kalau tidak angka di layar bukan angka yang dikerjakan tombolnya.
+ *
+ * SESI DITUTUP -> stok SAAT LAPORAN DIBUAT (i.stok_sistem).
+ *   Laporan yang sudah ditutup berhenti jadi alat kerja dan jadi dokumen:
+ *   "sistem bilang sekian, kami hitung sekian, selisihnya sekian". Angka
+ *   pembandingnya adalah stok yang dipegang sistem SAAT DIHITUNG — bukan stok
+ *   hari ini, dan bukan pula stok sesudah koreksinya ditulis.
+ *
+ *   i.stok_sistem disalin sekali saat sesi dibuat dan tidak pernah berubah,
+ *   jadi laporan lama pun langsung benar tanpa perlu diperbaiki satu per satu.
+ *
+ * Dulu yang dibekukan stok saat DITUTUP (i.stok_tutup). Itu stok SESUDAH
+ * koreksi, sehingga Selisih yang tampil tidak sama dengan koreksi yang
+ * benar-benar ditulis — dan laporan yang ditutup sebelum kolom itu ada tidak
+ * punya angka beku sama sekali, jadi tetap ikut bergerak. */
+$sqlStokHidup = $bekuSesi
+    ? 'i.stok_sistem'
+    : ('CASE WHEN i.master_id IS NULL THEN i.stok_sistem ELSE '
+        . '(m.stok_awal'
+        . '  + COALESCE((SELECT SUM(jumlah) FROM barang_masuk'
+        . '              WHERE master_id = m.id AND deleted_at IS NULL), 0)'
+        . '  - COALESCE((SELECT SUM(jumlah) FROM barang_keluar'
+        . '              WHERE master_id = m.id AND deleted_at IS NULL), 0))'
+        . ' END');
 
 $rows = dbAll(
     "SELECT i.id, i.master_id, i.sku, i.barcode, i.nama, i.kategori,
@@ -78,6 +110,7 @@ $rows = dbAll(
             i.penyesuaian, i.adj_jenis, i.adj_qty, i.petugas, i.catatan,
             $sqlStokHidup AS stok_akhir
        FROM opname_item i
+       LEFT JOIN master_barang m ON m.id = i.master_id
      $sqlWhere
      ORDER BY i.kategori, i.nama, i.id
      LIMIT " . PAGE_SIZE . " OFFSET $offset",
@@ -91,6 +124,8 @@ foreach ($rows as &$r) {
     // Yang dipakai layar sebagai kolom "Stok akhir".
     $r['stok_akhir']    = (int)$r['stok_akhir'];
     $r['stok_tutup']    = $r['stok_tutup'] === null ? null : (int)$r['stok_tutup'];
+    // Dipakai layar untuk tahu angkanya beku atau masih hidup.
+    $r['beku']          = $bekuSesi;
     $r['stok_hitung']   = $r['stok_hitung']   === null ? null : (int)$r['stok_hitung'];
     $r['stok_accurate'] = $r['stok_accurate'] === null ? null : (int)$r['stok_accurate'];
     $r['dicek']         = (int)$r['dicek'] === 1;
@@ -137,6 +172,7 @@ $ring = dbOne(
             COALESCE(SUM(CASE WHEN i.stok_hitung IS NOT NULL AND i.stok_accurate IS NOT NULL
                           THEN i.stok_hitung - i.stok_accurate ELSE 0 END), 0) AS total_selisih_acc
        FROM opname_item i
+       LEFT JOIN master_barang m ON m.id = i.master_id
       WHERE i.sesi_id = ?",
     [PENYESUAIAN_DISESUAIKAN, $id]
 );

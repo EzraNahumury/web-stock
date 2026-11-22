@@ -67,20 +67,8 @@ function sinkronPenyesuaianStok(PDO $pdo, array $item, bool $sesuaikan): array
         return $kosong;
     }
 
-    /* Langkah 2 & 3: selisih terhadap PATOKAN LAPORAN, yaitu stok pada
-     * tanggal laporan opname itu dibuat.
-     *
-     * Dulu dihitung terhadap stok yang berlaku sekarang, sehingga stok barang
-     * dipaksa menjadi persis angka hitungan fisik — dan itu menghapus
-     * pergerakan yang terjadi SESUDAH penghitungan. Barang yang masuk tanggal
-     * 23 ikut lenyap ketika koreksi hasil hitungan tanggal 22 ditekan tanggal
-     * 24.
-     *
-     * Sekarang yang ditulis sebesar selisihnya saja, lalu menumpuk di atas stok
-     * yang berlaku. Itu juga yang membuat angka Selisih di layar sama persis
-     * dengan koreksi yang benar-benar ditulis. */
-    $patokan = (int)$item['stok_sistem'];
-    $delta   = $hitung - $patokan;
+    // Langkah 2 & 3: stok yang berlaku sekarang, lalu selisihnya.
+    $delta = $hitung - stokAkhirItem($masterId);
     if ($delta === 0) {
         // Sudah sama. Tidak ada baris yang perlu ditulis, dan koreksi lama
         // sudah dibatalkan di langkah 1.
@@ -160,7 +148,7 @@ function dataLaporanOpname(int $sesiId, string $q, string $kategori): array
     );
 }
 
-function filterOpnameItem(array $src, int $sesiId): array
+function filterOpnameItem(array $src, int $sesiId, bool $bekuSesi = false): array
 {
     $q        = ambilStr($src, 'q', 100);
     $kategori = ambilStr($src, 'kategori', 30);
@@ -180,10 +168,23 @@ function filterOpnameItem(array $src, int $sesiId): array
     }
 
     if ($hanya === 'selisih') {
-        /* Pembandingnya sama persis dengan kolom Selisih di layar: stok pada
-         * tanggal laporan dibuat. Satu kolom, tanpa subquery dan tanpa cabang
-         * — itulah untungnya satu patokan untuk semua keadaan. */
-        $where[] = 'i.stok_hitung IS NOT NULL AND i.stok_hitung <> i.stok_sistem';
+        /* Pembandingnya sama persis dengan kolom Selisih di layar: stok saat
+         * laporan dibuat bila sesinya sudah ditutup, stok yang berlaku
+         * sekarang bila masih berjalan. Lihat api/opname/detail.php.
+         *
+         * Subquery, bukan join: pemanggilnya menyusun WHERE-nya sendiri dan
+         * menambahkan join di sini akan menggandakan barisnya. */
+        $where[] = $bekuSesi
+            ? 'i.stok_hitung IS NOT NULL AND i.stok_hitung <> i.stok_sistem'
+            : "i.stok_hitung IS NOT NULL AND i.stok_hitung <> (
+            CASE WHEN i.master_id IS NULL THEN i.stok_sistem ELSE (
+                SELECT m.stok_awal
+                     + COALESCE((SELECT SUM(jumlah) FROM barang_masuk
+                                  WHERE master_id = m.id AND deleted_at IS NULL), 0)
+                     - COALESCE((SELECT SUM(jumlah) FROM barang_keluar
+                                  WHERE master_id = m.id AND deleted_at IS NULL), 0)
+                  FROM master_barang m WHERE m.id = i.master_id
+            ) END)";
     } elseif ($hanya === 'belum') {
         $where[] = 'i.stok_hitung IS NULL';
     } elseif ($hanya === 'disesuaikan') {

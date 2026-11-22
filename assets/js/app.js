@@ -4177,10 +4177,15 @@ async function refreshOpnameDetail(){
     /* Stok akhir yang BERLAKU SEKARANG, bukan salinan saat sesi dibuat.
      * Selisih di kolom sebelah dihitung terhadap angka ini, jadi
      * pengurangannya bisa dicocokkan dengan mata. */
-    /* Angkanya MEMANG stok pada tanggal laporan ini dibuat, baik laporannya
-     * masih berjalan maupun sudah ditutup — jadi tidak ada lagi angka kedua
-     * yang perlu disebut di bawahnya. */
-    + '<td class="num" data-label="Stok akhir">' + fmtNum(it.stok_akhir) + '</td>'
+    /* Sesi yang sudah ditutup: angkanya MEMANG stok saat laporan dibuat, jadi
+     * tidak perlu disebut lagi di bawahnya. Yang masih berjalan: angkanya stok
+     * terkini, dan salinan saat dibuat disebut bila sudah bergeser. */
+    + '<td class="num" data-label="Stok akhir">' + fmtNum(it.stok_akhir)
+      + (!it.beku && it.stok_akhir !== it.stok_sistem
+          ? '<div class="item-sub" style="font-family:Inter" title="Stok yang dipegang sistem '
+            + 'ketika laporan opname ini dibuat. Angka di atas adalah stok hari ini.">'
+            + 'saat laporan dibuat: ' + fmtNum(it.stok_sistem) + '</div>'
+          : '') + '</td>'
     /* Hitungan fisik tetap min=0 — tidak ada rak berisi minus tiga barang. */
     + '<td class="num" data-label="Stok hitung"><input type="number" class="sel-angka" id="oh' + it.id + '" min="0"'
       + ' inputmode="numeric"'
@@ -4232,21 +4237,22 @@ async function refreshOpnameDetail(){
       ? '<div class="info-box">Akun ini hanya bisa melihat, jadi angkanya tidak bisa diisi.</div>'
       : terkunci
       ? '<div class="info-box">Laporan ini sudah ditandai <b>selesai</b>, jadi angkanya dikunci. '
-        + 'Buka kembali statusnya bila memang perlu diubah.</div>'
-      : '<div class="info-box">Kolom <b>Stok akhir</b> adalah stok pada <b>tanggal laporan ini '
-        + 'dibuat</b>, dan tidak ikut bergerak sepanjang periode berjalan — itulah patokan '
-        + 'laporan ini. <b>Selisih = stok hitung &minus; stok akhir</b>, yaitu seberapa jauh '
-        + 'stok sistem meleset dari kenyataan di rak pada tanggal itu. Kolom <b>Selisih Acc.</b> '
-        + 'adalah pemeriksaan silang terhadap Accurate (stok hitung &minus; stok accurate), '
-        + 'bukan yang menggerakkan koreksi.<br><br>'
+        + 'Kolom <b>Stok akhir</b> menunjukkan stok yang dipegang sistem <b>saat laporan ini '
+        + 'dibuat</b> — bukan stok hari ini. Itulah angka pembanding hitungan fisiknya, dan '
+        + 'karena tidak pernah berubah, laporan ini tetap bisa dipakai menelusuri selisih '
+        + 'antarbulan. Buka kembali statusnya bila memang perlu diubah; angkanya akan hidup '
+        + 'lagi mengikuti stok terkini.</div>'
+      : '<div class="info-box"><b>Selisih = stok hitung &minus; stok akhir</b> — seberapa jauh stok '
+        + 'sistem meleset dari kenyataan di rak, dan itu pula yang dibetulkan oleh '
+        + '"Stok Disesuaikan". Kolom <b>Selisih Acc.</b> adalah pemeriksaan silang terhadap '
+        + 'Accurate (stok hitung &minus; stok accurate), bukan yang menggerakkan koreksi.<br><br>'
         + 'Isi <b>stok hitung</b> dari hasil hitungan fisik dan <b>stok accurate</b> '
         + 'dari catatan Accurate — kolom itu boleh diisi angka minus, karena saldo pembukuan '
         + 'memang bisa minus. Angkanya tersimpan begitu kamu pindah dari kolomnya. '
-        + 'Memilih <b>"Stok Disesuaikan"</b> langsung membetulkan stoknya: stok barang itu '
-        + 'digeser <b>sebesar selisihnya</b>, lewat satu baris Barang masuk atau Barang keluar '
-        + 'berketerangan "Penyesuaian Opname" — jadi koreksinya ikut terbaca di Riwayat, bukan '
-        + 'berubah diam-diam. Barang yang masuk atau keluar sesudah tanggal laporan ini tetap '
-        + 'terhitung, tidak ikut terhapus oleh koreksinya.</div>')
+        + 'Memilih <b>"Stok Disesuaikan"</b> langsung membetulkan stoknya: stok akhir '
+        + 'barang itu mengikuti stok hitung, lewat satu baris Barang masuk atau Barang '
+        + 'keluar berketerangan "Penyesuaian Opname" — jadi koreksinya ikut terbaca di '
+        + 'Riwayat, bukan berubah diam-diam.</div>')
     /* tabel-kartu: di layar sempit tabel ini berubah jadi tumpukan kartu,
      * supaya laporan stok opname bisa diisi langsung dari HP tanpa harus
      * meminta "situs versi desktop" dan mencubit layar. */
