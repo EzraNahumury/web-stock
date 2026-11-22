@@ -43,6 +43,71 @@ bukan dibiarkan diam-diam kembali ke "sejak awal".
 
 ---
 
+## 22 November 2026 — angka yang dibekukan ternyata angka yang salah
+
+### Laporannya
+
+> stock akhir bulan lalu yang sudah dibuat, contoh AVO ANKLE ANTI SLIP L stock
+> akhirnya 38, terus sekarang november ada pengeluaran jadi 37, harusnya data
+> di laporan stok opname oktober datanya tetap dong, 38
+
+Benar. Pembekuan kemarin memakai stok **saat laporan DITUTUP**, dan itu salah
+dalam dua hal sekaligus:
+
+1. Laporan yang sudah ditutup **sebelum** kolom `stok_tutup` ada tidak punya
+   angka beku sama sekali, jadi tetap mengikuti stok terkini — tepat yang
+   dikeluhkan.
+2. Bahkan kalau terisi, stok saat ditutup adalah stok **sesudah** koreksinya
+   ditulis. Padahal laporan opname itu dokumen pembanding: *"sistem bilang
+   sekian, kami hitung sekian, selisihnya sekian"*. Angka pembandingnya adalah
+   stok yang dipegang sistem **saat dihitung**.
+
+### Buktinya ada di layar gudang sendiri
+
+Empat baris pertama laporan AVO Oktober, dengan pembanding `stok_sistem`
+(kolom "saat dibuat"):
+
+| Barang | saat dibuat | hitung | selisih yang tampil | hitung − saat dibuat | koreksi yang ditulis |
+|---|---|---|---|---|---|
+| ANKLE L | 38 | 33 | −4 | **−5** | stok −5 |
+| ANKLE M | 65 | 62 | +6 | **−3** | stok −3 |
+| ANKLE S | 29 | 41 | +10 | **+12** | stok +12 |
+| ANKLE XL | 41 | 38 | −7 | **−3** | stok −3 |
+
+Empat dari empat: dengan pembanding yang benar, kolom **Selisih jadi sama
+persis dengan koreksi yang benar-benar ditulis** ke Barang masuk/keluar.
+Dengan pembanding yang dipakai kemarin, tidak satu pun cocok.
+
+### Yang dipasang
+
+| Keadaan sesi | Pembanding kolom Stok akhir |
+|---|---|
+| Berjalan | stok yang **berlaku sekarang** — karena "Stok Disesuaikan" bekerja pada angka itu |
+| **Ditutup** | stok **saat laporan dibuat** (`opname_item.stok_sistem`) |
+
+`stok_sistem` disalin sekali saat sesi dibuat dan tidak pernah berubah, jadi
+**laporan lama langsung benar tanpa perlu diperbaiki satu per satu** — tidak
+ada backfill, tidak ada kolom baru.
+
+Ditentukan sekali di `api/opname/detail.php` lalu dibawa ke penyaring, daftar,
+ringkasan, PDF, dan Excel. Satu cabang yang terlupa di salah satu pembaca sudah
+cukup untuk membuat angkanya berbeda antara layar dan laporan.
+
+`stok_tutup` dari kemarin tidak dipakai lagi sebagai angka tampil. Kolomnya
+dibiarkan: isinya tetap dicatat saat sesi ditutup, dan itu keterangan yang sah
+(posisi stok pada penutupan), hanya bukan angka pembanding.
+
+### Satu hal dari ujinya
+
+Uji sempat menolak dengan `dapat -10, harap 5`. Itu harapan ujinya yang terlalu
+kuat, bukan kodenya: identitas "selisih = koreksi" hanya berlaku bila stok tidak
+bergerak antara sesi dibuat dan penyesuaiannya ditekan. Di basis data uji,
+sesinya dibuat lama sekali dan stoknya sudah bergeser; di gudang keduanya
+bersamaan. Ujinya sekarang menyiapkan keadaan itu lebih dulu, supaya yang diuji
+memang keadaan yang dialami gudang.
+
+---
+
 ## 21 November 2026 — cari lewat SKU, PDF ikut pencarian, laporan lama dibekukan
 
 ### Barang masuk / keluar bisa dicari lewat nama dan SKU katalog

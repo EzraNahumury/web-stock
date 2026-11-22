@@ -152,10 +152,17 @@ const TANDA = 'UJICB';
     return r.body.rows[0];
   };
 
+  // Nilai asli stok_sistem, supaya bisa dikembalikan di akhir.
+  const sistemAsli = Number(nilai('SELECT stok_sistem FROM opname_item WHERE id = ' + idB));
+
   const bersihkan = () => php("require 'includes/db.php';"
     + "db()->exec(\"DELETE FROM barang_masuk WHERE keterangan = 'Penyesuaian Opname'\");"
     + "db()->exec(\"DELETE FROM barang_keluar WHERE keterangan = 'Penyesuaian Opname'\");"
     + "db()->exec(\"DELETE FROM barang_masuk WHERE keterangan = '" + TANDA + "'\");"
+    + "db()->exec(\"DELETE FROM barang_keluar WHERE keterangan = '" + TANDA + "'\");"
+    // stok_sistem sempat disamakan dengan stok hidup di bagian C; dikembalikan
+    // supaya basis data uji benar-benar pulih seperti sebelum suite jalan.
+    + "db()->exec('UPDATE opname_item SET stok_sistem = " + sistemAsli + " WHERE id = " + idB + "');"
     + "db()->exec(\"UPDATE opname_item SET stok_hitung=NULL, stok_accurate=NULL, stok_tutup=NULL,"
     + " penyesuaian='Tidak Disesuaikan', adj_jenis=NULL, adj_id=NULL, adj_qty=NULL"
     + " WHERE sesi_id = " + sesiId + "\");"
@@ -163,6 +170,12 @@ const TANDA = 'UJICB';
 
   bersihkan();
   const awal = stokB();
+  /* Sesi yang BARU dibuat menyalin stok saat itu ke stok_sistem. Di basis data
+     uji, sesinya dibuat lama sekali dan stoknya sudah bergerak sejak itu, jadi
+     salinannya disamakan dulu — kalau tidak, yang diuji bukan keadaan yang
+     dialami gudang, dan identitas "selisih = koreksi" tidak berlaku. */
+  php("require 'includes/db.php'; db()->exec('UPDATE opname_item SET stok_sistem = "
+    + awal + " WHERE id = " + idB + "'); echo 'ok';");
   console.log('  stok awal barang uji: ' + awal);
 
   await post(S, 'opname/item.php', { id: idB, stok_hitung: awal + 5 });
@@ -174,26 +187,47 @@ const TANDA = 'UJICB';
   cek('sesi berjalan: selisih nol sesudah dikoreksi', b.selisih, 0);
 
   console.log('\n--- ditutup ---');
+  /* SKENARIO GUDANG, 22 November:
+     Laporan Oktober ditutup. Bulan November barangnya keluar. Laporan Oktober
+     harus tetap menunjukkan angka Oktober — bukan ikut bergerak.
+
+     Yang dibekukan adalah stok SAAT LAPORAN DIBUAT, bukan saat ditutup:
+     laporan opname itu dokumen pembanding, dan angka pembandingnya adalah stok
+     yang dipegang sistem ketika barangnya dihitung. Buktinya, dengan angka itu
+     kolom Selisih jadi sama persis dengan koreksi yang benar-benar ditulis. */
+  const sistemB = Number(nilai('SELECT stok_sistem FROM opname_item WHERE id = ' + idB));
   let r = await post(S, 'opname/save.php', {
     id: sesiId, nama: sesiLama.nama, periode: sesiLama.periode,
     tanggal: sesiLama.tanggal, status: 'selesai', catatan: sesiLama.catatan || ''
   });
   cek('HTTP', r.status, 200);
+
   b = await barisOpname();
-  cek('angkanya dibekukan', b.stok_tutup, awal + 5);
-  cek('stok akhir memakai angka beku', b.stok_akhir, awal + 5);
+  cek('baris ditandai beku', b.beku, true);
+  cek('stok akhir = stok saat laporan DIBUAT', b.stok_akhir, sistemB);
+  cek('selisih = hitung - stok saat dibuat', b.selisih, (awal + 5) - sistemB);
+  /* Inilah yang membuat laporannya bisa dipercaya: angka Selisih sama dengan
+     koreksi yang benar-benar ditulis ke Barang masuk/keluar. */
+  const koreksi = Number(nilai("SELECT CASE WHEN adj_jenis = 'keluar' THEN -adj_qty ELSE adj_qty END"
+    + " FROM opname_item WHERE id = " + idB));
+  cek('SELISIH = KOREKSI YANG BENAR-BENAR DITULIS', b.selisih, koreksi);
 
   console.log('\n--- stok bergerak sesudah laporan ditutup ---');
   php("require 'includes/db.php';"
-    + "db()->prepare('INSERT INTO barang_masuk (tanggal, master_id, barcode, nama, jumlah, keterangan)"
-    + " VALUES (?,?,?,?,?,?)')->execute(['2026-11-21'," + masterB + ",'x','x',40,'" + TANDA + "']); echo 'ok';");
-  cek('stok sekarang memang sudah berubah', stokB(), awal + 45);
+    + "db()->prepare('INSERT INTO barang_keluar (tanggal, master_id, barcode, nama, jumlah, keterangan)"
+    + " VALUES (?,?,?,?,?,?)')->execute(['2026-11-22'," + masterB + ",'x','x',1,'" + TANDA + "']); echo 'ok';");
+  cek('stok sekarang memang sudah berubah', stokB(), awal + 4);
   b = await barisOpname();
-  cek('LAPORAN TIDAK IKUT BERUBAH', b.stok_akhir, awal + 5);
-  cek('selisihnya pun tetap nol', b.selisih, 0);
+  cek('LAPORAN TIDAK IKUT BERUBAH', b.stok_akhir, sistemB);
+  cek('selisihnya pun tetap', b.selisih, koreksi);
 
   let dd = await get(S, 'opname/detail.php?id=' + sesiId);
-  cek('kartu Jumlah selisih ikut beku', typeof dd.body.ringkas.total_selisih, 'number');
+  cek('kartu Berselisih ikut pembanding yang sama', dd.body.ringkas.beda,
+      Number(nilai('SELECT COUNT(*) FROM opname_item WHERE sesi_id = ' + sesiId
+        + ' AND stok_hitung IS NOT NULL AND stok_hitung <> stok_sistem')));
+  const saring = await get(S, 'opname/detail.php?id=' + sesiId + '&hanya=selisih');
+  cek('penyaring "Ada selisih" ikut pembanding yang sama',
+      saring.body.rows.every(x => x.stok_hitung !== null && x.stok_hitung !== x.stok_sistem), true);
 
   console.log('\n--- unduhannya ikut beku ---');
   res = await fetch(B + '/api/export/csv.php?jenis=opname&id=' + sesiId + '&q='
@@ -202,7 +236,16 @@ const TANDA = 'UJICB';
   const csv = Buffer.from(await res.arrayBuffer()).slice(3).toString('utf8').split('\r\n');
   const iK = csv.findIndex(x => x.indexOf('SKU;') === 0);
   const kolom = csv[iK + 1].split(';');
-  cek('Excel memuat stok akhir yang beku', Number(kolom[4]), awal + 5);
+  cek('Excel memuat stok akhir yang beku', Number(kolom[4]), sistemB);
+  cek('Excel memuat selisih yang sama', Number(kolom[8]), koreksi);
+
+  res = await fetch(B + '/api/export/pdf.php?jenis=opname&id=' + sesiId + '&q='
+    + encodeURIComponent(nilai('SELECT barcode FROM opname_item WHERE id = ' + idB)),
+    { headers: { Cookie: S.cookie } });
+  buf = Buffer.from(await res.arrayBuffer());
+  cek('PDF keluar', buf.slice(0, 4).toString(), '%PDF');
+  cek('PDF memuat angka beku, bukan stok hari ini',
+      petikTeksPdf(buf).indexOf(String(sistemB)) >= 0, true);
 
   console.log('\n--- dibuka kembali: hidup lagi ---');
   r = await post(S, 'opname/save.php', {
@@ -211,9 +254,23 @@ const TANDA = 'UJICB';
   });
   cek('HTTP', r.status, 200);
   b = await barisOpname();
-  cek('angka bekunya dihapus', b.stok_tutup, null);
-  cek('stok akhir kembali mengikuti stok hidup', b.stok_akhir, awal + 45);
-  cek('selisihnya ikut hidup lagi', b.selisih, (awal + 5) - (awal + 45));
+  cek('tidak lagi beku', b.beku, false);
+  cek('stok akhir kembali mengikuti stok terkini', b.stok_akhir, stokB());
+  cek('selisihnya ikut hidup lagi', b.selisih, (awal + 5) - stokB());
+
+  console.log('\n--- laporan yang ditutup SEBELUM fitur ini ada ---');
+  /* stok_tutup kosong, karena ditutup sebelum kolomnya ada. Pembandingnya
+     tetap benar: yang dipakai stok_sistem, yang memang selalu terisi. */
+  php("require 'includes/db.php';"
+    + "db()->prepare('UPDATE opname_sesi SET status = ? WHERE id = ?')->execute(['selesai'," + sesiId + "]);"
+    + "db()->exec('UPDATE opname_item SET stok_tutup = NULL WHERE sesi_id = " + sesiId + "'); echo 'ok';");
+  b = await barisOpname();
+  cek('tanpa stok_tutup pun angkanya tetap beku', b.stok_akhir, sistemB);
+  cek('dan selisihnya tetap', b.selisih, koreksi);
+  await post(S, 'opname/save.php', {
+    id: sesiId, nama: sesiLama.nama, periode: sesiLama.periode,
+    tanggal: sesiLama.tanggal, status: 'draft', catatan: sesiLama.catatan || ''
+  });
 
   /* ------------------------------------------------------------------ */
   console.log('\n=== D. Riwayat "sejak opname terakhir" ===');

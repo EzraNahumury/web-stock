@@ -152,12 +152,10 @@ $stokKini = $item['master_id'] !== null ? stokAkhirItem((int)$item['master_id'])
  *
  * Dihitung SESUDAH transaksi: begitu barisnya disesuaikan, stok hidupnya sudah
  * mengikuti hitungan fisik, jadi selisihnya memang nol. Itu yang benar. */
-/* Angka beku menang bila ada — sesi yang sudah ditutup memang tidak bisa
- * sampai ke sini (ditolak di atas), tapi aturannya ditulis sama dengan
- * detail.php supaya tidak ada dua jawaban untuk satu pertanyaan. */
-$stokBanding = $item['stok_tutup'] !== null
-    ? (int)$item['stok_tutup']
-    : ($stokKini !== null ? $stokKini : (int)$item['stok_sistem']);
+/* Selalu stok yang berlaku sekarang: sesi yang sudah ditutup ditolak di atas,
+ * jadi baris yang sampai ke sini pasti milik sesi yang masih berjalan — dan
+ * untuk sesi berjalan pembandingnya memang stok hidup. */
+$stokBanding = $stokKini !== null ? $stokKini : (int)$item['stok_sistem'];
 $selisih     = $hitung !== null ? $hitung - $stokBanding : null;
 $selisihAcc  = ($hitung !== null && $accurate !== null) ? $hitung - $accurate : null;
 

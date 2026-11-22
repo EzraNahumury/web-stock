@@ -148,7 +148,7 @@ function dataLaporanOpname(int $sesiId, string $q, string $kategori): array
     );
 }
 
-function filterOpnameItem(array $src, int $sesiId): array
+function filterOpnameItem(array $src, int $sesiId, bool $bekuSesi = false): array
 {
     $q        = ambilStr($src, 'q', 100);
     $kategori = ambilStr($src, 'kategori', 30);
@@ -168,11 +168,15 @@ function filterOpnameItem(array $src, int $sesiId): array
     }
 
     if ($hanya === 'selisih') {
-        /* Terhadap stok akhir YANG BERLAKU SEKARANG, sejalan dengan kolom
-         * Selisih di layar dan dengan apa yang dikerjakan penyesuaian stok.
+        /* Pembandingnya sama persis dengan kolom Selisih di layar: stok saat
+         * laporan dibuat bila sesinya sudah ditutup, stok yang berlaku
+         * sekarang bila masih berjalan. Lihat api/opname/detail.php.
+         *
          * Subquery, bukan join: pemanggilnya menyusun WHERE-nya sendiri dan
          * menambahkan join di sini akan menggandakan barisnya. */
-        $where[] = "i.stok_hitung IS NOT NULL AND i.stok_hitung <> COALESCE(i.stok_tutup,
+        $where[] = $bekuSesi
+            ? 'i.stok_hitung IS NOT NULL AND i.stok_hitung <> i.stok_sistem'
+            : "i.stok_hitung IS NOT NULL AND i.stok_hitung <> (
             CASE WHEN i.master_id IS NULL THEN i.stok_sistem ELSE (
                 SELECT m.stok_awal
                      + COALESCE((SELECT SUM(jumlah) FROM barang_masuk

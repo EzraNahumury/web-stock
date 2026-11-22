@@ -43,9 +43,15 @@ unset($sesi['user_id'], $sesi['deleted_at']);
 
 $page = ambilHalaman();
 
+/* Sesi yang sudah ditutup memakai angka beku; yang masih berjalan memakai stok
+ * yang berlaku sekarang. Ditentukan sekali di sini lalu dibawa ke mana-mana,
+ * supaya penyaring, daftar, dan ringkasannya tidak mungkin memakai pembanding
+ * yang berbeda. Alasan lengkapnya di bawah, pada $sqlStokHidup. */
+$bekuSesi = ($sesi['status'] ?? '') === 'selesai';
+
 // Penyaringnya dibangun di includes/opname.php supaya layar, pengisian
 // massal, dan ekspor PDF tidak mungkin menyaring baris yang berbeda.
-$f        = filterOpnameItem($_GET, $id);
+$f        = filterOpnameItem($_GET, $id, $bekuSesi);
 $sqlWhere = $f['where'];
 $params   = $f['params'];
 
@@ -68,18 +74,35 @@ $offset = ($meta['page'] - 1) * PAGE_SIZE;
  *
  * Barang yang tidak terhubung ke master memakai salinannya, karena tidak ada
  * yang bisa dihitung — dan memang tidak bisa disesuaikan juga. */
-/* i.stok_tutup diisi sekali saat sesinya ditandai selesai, dan dikosongkan
- * lagi bila dibuka kembali. Dengan COALESCE di depan, SELURUH pembacanya
- * memakai satu bentuk yang sama tanpa perlu memeriksa status sesinya —
- * satu cabang yang terlupa di salah satu pembaca sudah cukup untuk membuat
- * angkanya berbeda antara layar dan laporan. Lihat sql/024. */
-$sqlStokHidup = 'COALESCE(i.stok_tutup, CASE WHEN i.master_id IS NULL THEN i.stok_sistem ELSE '
-    . '(m.stok_awal'
-    . '  + COALESCE((SELECT SUM(jumlah) FROM barang_masuk'
-    . '              WHERE master_id = m.id AND deleted_at IS NULL), 0)'
-    . '  - COALESCE((SELECT SUM(jumlah) FROM barang_keluar'
-    . '              WHERE master_id = m.id AND deleted_at IS NULL), 0))'
-    . ' END)';
+/* ANGKA PEMBANDING: tergantung sesinya masih berjalan atau sudah ditutup.
+ *
+ * SESI BERJALAN -> stok yang BERLAKU SEKARANG.
+ *   Selama dihitung, "Stok Disesuaikan" membawa stok hidup ke angka hitungan
+ *   fisik. Selisih yang ditampilkan harus dihitung terhadap angka yang sama,
+ *   kalau tidak angka di layar bukan angka yang dikerjakan tombolnya.
+ *
+ * SESI DITUTUP -> stok SAAT LAPORAN DIBUAT (i.stok_sistem).
+ *   Laporan yang sudah ditutup berhenti jadi alat kerja dan jadi dokumen:
+ *   "sistem bilang sekian, kami hitung sekian, selisihnya sekian". Angka
+ *   pembandingnya adalah stok yang dipegang sistem SAAT DIHITUNG — bukan stok
+ *   hari ini, dan bukan pula stok sesudah koreksinya ditulis.
+ *
+ *   i.stok_sistem disalin sekali saat sesi dibuat dan tidak pernah berubah,
+ *   jadi laporan lama pun langsung benar tanpa perlu diperbaiki satu per satu.
+ *
+ * Dulu yang dibekukan stok saat DITUTUP (i.stok_tutup). Itu stok SESUDAH
+ * koreksi, sehingga Selisih yang tampil tidak sama dengan koreksi yang
+ * benar-benar ditulis — dan laporan yang ditutup sebelum kolom itu ada tidak
+ * punya angka beku sama sekali, jadi tetap ikut bergerak. */
+$sqlStokHidup = $bekuSesi
+    ? 'i.stok_sistem'
+    : ('CASE WHEN i.master_id IS NULL THEN i.stok_sistem ELSE '
+        . '(m.stok_awal'
+        . '  + COALESCE((SELECT SUM(jumlah) FROM barang_masuk'
+        . '              WHERE master_id = m.id AND deleted_at IS NULL), 0)'
+        . '  - COALESCE((SELECT SUM(jumlah) FROM barang_keluar'
+        . '              WHERE master_id = m.id AND deleted_at IS NULL), 0))'
+        . ' END');
 
 $rows = dbAll(
     "SELECT i.id, i.master_id, i.sku, i.barcode, i.nama, i.kategori,
@@ -100,8 +123,9 @@ foreach ($rows as &$r) {
     $r['stok_sistem']   = (int)$r['stok_sistem'];
     // Yang dipakai layar sebagai kolom "Stok akhir".
     $r['stok_akhir']    = (int)$r['stok_akhir'];
-    // Terisi berarti sesinya sudah ditutup dan angkanya beku.
     $r['stok_tutup']    = $r['stok_tutup'] === null ? null : (int)$r['stok_tutup'];
+    // Dipakai layar untuk tahu angkanya beku atau masih hidup.
+    $r['beku']          = $bekuSesi;
     $r['stok_hitung']   = $r['stok_hitung']   === null ? null : (int)$r['stok_hitung'];
     $r['stok_accurate'] = $r['stok_accurate'] === null ? null : (int)$r['stok_accurate'];
     $r['dicek']         = (int)$r['dicek'] === 1;

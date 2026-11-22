@@ -4177,12 +4177,13 @@ async function refreshOpnameDetail(){
     /* Stok akhir yang BERLAKU SEKARANG, bukan salinan saat sesi dibuat.
      * Selisih di kolom sebelah dihitung terhadap angka ini, jadi
      * pengurangannya bisa dicocokkan dengan mata. */
+    /* Sesi yang sudah ditutup: angkanya MEMANG stok saat laporan dibuat, jadi
+     * tidak perlu disebut lagi di bawahnya. Yang masih berjalan: angkanya stok
+     * terkini, dan salinan saat dibuat disebut bila sudah bergeser. */
     + '<td class="num" data-label="Stok akhir">' + fmtNum(it.stok_akhir)
-      + (it.stok_tutup !== null && it.stok_tutup !== undefined
-          ? '<div class="item-sub" style="font-family:Inter">beku saat ditutup</div>'
-          : (it.stok_akhir !== it.stok_sistem
-              ? '<div class="item-sub" style="font-family:Inter">saat dibuat ' + fmtNum(it.stok_sistem) + '</div>'
-              : '')) + '</td>'
+      + (!it.beku && it.stok_akhir !== it.stok_sistem
+          ? '<div class="item-sub" style="font-family:Inter">saat dibuat ' + fmtNum(it.stok_sistem) + '</div>'
+          : '') + '</td>'
     /* Hitungan fisik tetap min=0 — tidak ada rak berisi minus tiga barang. */
     + '<td class="num" data-label="Stok hitung"><input type="number" class="sel-angka" id="oh' + it.id + '" min="0"'
       + ' inputmode="numeric"'
@@ -4234,10 +4235,11 @@ async function refreshOpnameDetail(){
       ? '<div class="info-box">Akun ini hanya bisa melihat, jadi angkanya tidak bisa diisi.</div>'
       : terkunci
       ? '<div class="info-box">Laporan ini sudah ditandai <b>selesai</b>, jadi angkanya dikunci. '
-        + '<b>Stok akhirnya dibekukan</b> pada keadaan saat laporan ditutup, jadi membukanya '
-        + 'bulan depan tetap menunjukkan angka yang sama — itulah yang dipakai menelusuri '
-        + 'selisih antarbulan. Buka kembali statusnya bila memang perlu diubah; angkanya '
-        + 'akan hidup lagi mengikuti stok terkini.</div>'
+        + 'Kolom <b>Stok akhir</b> menunjukkan stok yang dipegang sistem <b>saat laporan ini '
+        + 'dibuat</b> — bukan stok hari ini. Itulah angka pembanding hitungan fisiknya, dan '
+        + 'karena tidak pernah berubah, laporan ini tetap bisa dipakai menelusuri selisih '
+        + 'antarbulan. Buka kembali statusnya bila memang perlu diubah; angkanya akan hidup '
+        + 'lagi mengikuti stok terkini.</div>'
       : '<div class="info-box"><b>Selisih = stok hitung &minus; stok akhir</b> — seberapa jauh stok '
         + 'sistem meleset dari kenyataan di rak, dan itu pula yang dibetulkan oleh '
         + '"Stok Disesuaikan". Kolom <b>Selisih Acc.</b> adalah pemeriksaan silang terhadap '

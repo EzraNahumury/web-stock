@@ -348,6 +348,22 @@ karena "Stok Disesuaikan" bekerja pada angka itu.
 Kalau laporannya **dibuka kembali** untuk diperbaiki, angkanya hidup lagi
 mengikuti stok terkini, lalu dibekukan ulang saat ditutup lagi.
 
+## Laporan opname yang sudah ditutup  *(diperbaiki 22 November)*
+
+Begitu sebuah laporan ditandai **selesai**, kolom **Stok akhir** menunjukkan
+stok yang dipegang sistem **saat laporan itu dibuat** — bukan stok hari ini.
+
+Itulah angka pembanding hitungan fisiknya, dan karena tidak pernah berubah,
+laporan Oktober tetap menunjukkan angka Oktober meski stoknya sudah bergerak di
+November. Dengan angka itu pula kolom **Selisih** sama persis dengan koreksi
+yang benar-benar ditulis ke Barang masuk/keluar.
+
+Selama laporannya **masih berjalan**, Stok akhir mengikuti stok terkini — harus
+begitu, karena "Stok Disesuaikan" bekerja pada angka itu.
+
+> Laporan lama tidak perlu diapa-apakan. Angkanya sudah tersimpan sejak laporan
+> itu dibuat, jadi begitu pembaruan ini terpasang, semuanya langsung benar.
+
 ## Riwayat: "Sejak opname terakhir"  *(baru 21 November)*
 
 Dropdown baru di toolbar Riwayat, di sebelah kategori:
