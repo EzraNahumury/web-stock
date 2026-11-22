@@ -40,19 +40,11 @@ $rows = dbAll(
             s.created_at, u.nama_lengkap AS oleh,
             (SELECT COUNT(*) FROM opname_item i WHERE i.sesi_id = s.id) AS jml_item,
             (SELECT COUNT(*) FROM opname_item i WHERE i.sesi_id = s.id AND i.dicek = 1) AS jml_dicek,
-            /* Selisih terhadap stok akhir yang berlaku sekarang: itulah yang
-               perlu dikoreksi. Dihitung lewat join ke master supaya angkanya
-               sama dengan yang terlihat saat sesinya dibuka. */
+            /* Selisih terhadap patokan laporan, sama dengan yang terlihat
+               saat sesinya dibuka. Lihat api/opname/detail.php. */
             (SELECT COUNT(*) FROM opname_item i
-                             LEFT JOIN master_barang m ON m.id = i.master_id
                        WHERE i.sesi_id = s.id AND i.stok_hitung IS NOT NULL
-                         AND i.stok_hitung <> (CASE WHEN i.master_id IS NULL THEN i.stok_sistem
-                             ELSE (m.stok_awal
-                                 + COALESCE((SELECT SUM(jumlah) FROM barang_masuk
-                                              WHERE master_id = m.id AND deleted_at IS NULL), 0)
-                                 - COALESCE((SELECT SUM(jumlah) FROM barang_keluar
-                                              WHERE master_id = m.id AND deleted_at IS NULL), 0))
-                             END)) AS jml_selisih,
+                         AND i.stok_hitung <> i.stok_sistem) AS jml_selisih,
             (SELECT COUNT(*) FROM opname_item i WHERE i.sesi_id = s.id
                               AND i.penyesuaian = ?) AS jml_disesuaikan
        FROM opname_sesi s

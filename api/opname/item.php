@@ -152,10 +152,11 @@ $stokKini = $item['master_id'] !== null ? stokAkhirItem((int)$item['master_id'])
  *
  * Dihitung SESUDAH transaksi: begitu barisnya disesuaikan, stok hidupnya sudah
  * mengikuti hitungan fisik, jadi selisihnya memang nol. Itu yang benar. */
-/* Selalu stok yang berlaku sekarang: sesi yang sudah ditutup ditolak di atas,
- * jadi baris yang sampai ke sini pasti milik sesi yang masih berjalan — dan
- * untuk sesi berjalan pembandingnya memang stok hidup. */
-$stokBanding = $stokKini !== null ? $stokKini : (int)$item['stok_sistem'];
+/* Patokannya sama dengan api/opname/detail.php: stok pada tanggal laporan
+ * opname ini dibuat. Satu rumus, satu tempat — kalau layar dan penyimpanan
+ * memakai patokan berbeda, angkanya berubah sendiri begitu halamannya
+ * disegarkan. */
+$stokBanding = (int)$item['stok_sistem'];
 $selisih     = $hitung !== null ? $hitung - $stokBanding : null;
 $selisihAcc  = ($hitung !== null && $accurate !== null) ? $hitung - $accurate : null;
 
@@ -165,7 +166,7 @@ if ($sesuaikan) {
         ? 'Stok sudah sama dengan hitungan fisik, tidak ada koreksi yang perlu ditulis.'
         : 'Stok disesuaikan: ' . ($adj['jenis'] === 'masuk' ? '+' : '-')
           . number_format((int)$adj['qty'], 0, ',', '.') . ' pcs lewat barang '
-          . $adj['jenis'] . ' "' . KET_PENYESUAIAN . '". Stok akhir sekarang '
+          . $adj['jenis'] . ' "' . KET_PENYESUAIAN . '". Stok barang sekarang '
           . number_format((int)$stokKini, 0, ',', '.') . '.';
 }
 

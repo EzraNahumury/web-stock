@@ -72,6 +72,12 @@ function petikTeksPdf(buf) {
   if (!S.token) { console.log('Gagal masuk ke ' + B); process.exit(1); }
 
   const sesiId = nilai('SELECT id FROM opname_sesi WHERE deleted_at IS NULL ORDER BY id DESC LIMIT 1');
+  /* Suite ini menyamakan stok_sistem seluruh baris sesi dengan stok saat ini,
+     supaya keadaannya seperti sesi yang baru dibuat. Nilai aslinya disimpan
+     dulu dan dikembalikan di akhir — lihat aturan di tools/http/JALANKAN.md. */
+  php("require 'includes/db.php'; db()->exec('DROP TABLE IF EXISTS _simpan_sistem');"
+    + "db()->exec('CREATE TABLE _simpan_sistem AS SELECT id, stok_sistem FROM opname_item"
+    + " WHERE sesi_id = " + sesiId + "'); echo 'ok';");
   if (!sesiId) { console.log('Tidak ada sesi opname di basis data uji.'); process.exit(1); }
 
   /* ------------------------------------------------------------------ */
@@ -146,7 +152,8 @@ function petikTeksPdf(buf) {
   const kepala = barisC[iKepala].split(';');
   cek('SKU dan Nama barang kolom terpisah',
       [kepala[0], kepala[2]], ['SKU', 'Nama barang']);
-  cek('ada kolom salinan stok saat sesi dibuat', kepala[5], 'Stok saat opname dibuat');
+  cek('judul kolom menyebut patokannya', kepala[4], 'Stok akhir (saat laporan dibuat)');
+  cek('ada kolom stok saat laporan ditutup', kepala[5], 'Stok saat laporan ditutup');
   cek('judul kolom selisih menyebut rumusnya',
       [kepala[8], kepala[9]],
       ['Selisih (hitung - stok akhir)', 'Selisih Accurate (hitung - accurate)']);
@@ -188,24 +195,21 @@ function petikTeksPdf(buf) {
   cek('nilainya tidak bergeser',
       nilai('SELECT stok_hitung FROM opname_item WHERE id = ' + itemId), semula.hitung);
 
-  /* Stok akhir YANG BERLAKU SEKARANG, bukan opname_item.stok_sistem — kolom itu
-     salinan saat sesi dibuat, dan stok sudah bergerak sesudahnya. Membandingkan
-     dengan salinannya adalah bug yang baru saja diperbaiki. */
-  const stokKini = Number(nilai("SELECT m.stok_awal"
-    + " + COALESCE((SELECT SUM(jumlah) FROM barang_masuk WHERE master_id = m.id AND deleted_at IS NULL),0)"
-    + " - COALESCE((SELECT SUM(jumlah) FROM barang_keluar WHERE master_id = m.id AND deleted_at IS NULL),0)"
-    + " FROM master_barang m JOIN opname_item i ON i.master_id = m.id WHERE i.id = " + itemId));
+  /* Patokan laporan: stok pada tanggal laporan dibuat (opname_item.stok_sistem),
+     bukan stok hari ini. Lihat tools/http/uji_patokan_opname.cjs. */
+  const patokan = Number(nilai('SELECT stok_sistem FROM opname_item WHERE id = ' + itemId));
   r = await post(S, 'opname/item.php', { id: Number(itemId), stok_hitung: 5, stok_accurate: -12 });
-  cek('selisih dihitung terhadap STOK AKHIR yang berlaku', r.body.selisih, 5 - stokKini);
+  cek('selisih dihitung terhadap PATOKAN LAPORAN', r.body.selisih, 5 - patokan);
   cek('pembanding Accurate dibawa terpisah', r.body.selisih_acc, 17);
 
-  console.log('\n=== B2. selisih = stok hitung - stok akhir ===');
-  /* INILAH yang diminta gudang, dan inilah yang dulu keliru: angka Selisih di
-     layar dihitung terhadap stok accurate, padahal yang dibetulkan "Stok
-     Disesuaikan" selalu stok hitung - stok akhir. Jadi angka yang dilihat
-     bukan angka yang dikerjakan. Uji ini menegaskan keduanya sama. */
+  console.log('\n=== B2. koreksi sebesar selisih terhadap patokan ===');
+  /* Aturan patokannya diuji menyeluruh di tools/http/uji_patokan_opname.cjs.
+     Di sini yang dipastikan: pada keadaan biasa — sesi baru dibuat, stok belum
+     bergerak sejak itu — koreksinya sama dengan selisih yang ditampilkan, dan
+     stok benar-benar sampai di angka hitungan. */
   const idB = Number(nilai('SELECT id FROM opname_item WHERE sesi_id = ' + sesiId
     + ' AND master_id IS NOT NULL ORDER BY id LIMIT 1'));
+  const sistemAsliB = Number(nilai('SELECT stok_sistem FROM opname_item WHERE id = ' + idB));
   const stokB = () => Number(nilai("SELECT m.stok_awal"
     + " + COALESCE((SELECT SUM(jumlah) FROM barang_masuk WHERE master_id = m.id AND deleted_at IS NULL),0)"
     + " - COALESCE((SELECT SUM(jumlah) FROM barang_keluar WHERE master_id = m.id AND deleted_at IS NULL),0)"
@@ -220,47 +224,44 @@ function petikTeksPdf(buf) {
 
   bersihkanB();
   const awalB = stokB();
+  // Sesi yang baru dibuat: patokannya sama dengan stok saat itu.
+  php("require 'includes/db.php'; db()->exec('UPDATE opname_item SET stok_sistem = "
+    + awalB + " WHERE id = " + idB + "'); echo 'ok';");
 
-  // Lebih di rak daripada di sistem -> selisih positif.
   r = await post(S, 'opname/item.php', { id: idB, stok_hitung: awalB + 6 });
   cek('lebih di rak: selisih positif', r.body.selisih, 6);
-  cek('tanpa stok accurate pun selisihnya tetap terhitung', r.body.selisih !== null, true);
   cek('pembanding Accurate kosong karena kolomnya kosong', r.body.selisih_acc, null);
 
-  // Angka yang ditampilkan HARUS sama dengan yang dikerjakan koreksinya.
   r = await post(S, 'opname/item.php', { id: idB, penyesuaian: 'Stok Disesuaikan' });
   cek('koreksinya sebesar selisih yang ditampilkan', r.body.adj_qty, 6);
   cek('arahnya menambah stok', r.body.adj_jenis, 'masuk');
-  cek('stok jadi sama dengan hitungan rak', stokB(), awalB + 6);
-  let dd = await get(S, 'opname/detail.php?id=' + sesiId + '&q='
-    + encodeURIComponent(nilai('SELECT barcode FROM opname_item WHERE id = ' + idB)));
-  cek('sesudah dikoreksi selisihnya jadi nol', dd.body.rows[0].selisih, 0);
+  cek('stok sampai di angka hitungan', stokB(), awalB + 6);
 
-  // Kurang di rak daripada di sistem -> selisih negatif, koreksinya keluar.
   await post(S, 'opname/item.php', { id: idB, penyesuaian: 'Tidak Disesuaikan' });
   const kurang = Math.max(0, awalB - 4);
   r = await post(S, 'opname/item.php', { id: idB, stok_hitung: kurang });
   cek('kurang di rak: selisih negatif', r.body.selisih, kurang - awalB);
   r = await post(S, 'opname/item.php', { id: idB, penyesuaian: 'Stok Disesuaikan' });
   cek('arahnya mengurangi stok', r.body.adj_jenis, 'keluar');
-  cek('stok mengikuti hitungan rak', stokB(), kurang);
+  cek('stok sampai di angka hitungan', stokB(), kurang);
 
-  console.log('\n--- ringkasan dan penyaring ikut rumus yang sama ---');
+  console.log('\n--- ringkasan dan penyaring ikut patokan yang sama ---');
   await post(S, 'opname/item.php', { id: idB, penyesuaian: 'Tidak Disesuaikan' });
-  dd = await get(S, 'opname/detail.php?id=' + sesiId);
+  let dd = await get(S, 'opname/detail.php?id=' + sesiId);
   const bedaSql = Number(nilai('SELECT COUNT(*) FROM opname_item WHERE sesi_id = ' + sesiId
     + ' AND stok_hitung IS NOT NULL AND stok_hitung <> stok_sistem'));
-  cek('kartu Berselisih dihitung terhadap stok akhir', dd.body.ringkas.beda, bedaSql);
+  cek('kartu Berselisih ikut patokan', dd.body.ringkas.beda, bedaSql);
   cek('pembanding Accurate dihitung terpisah', typeof dd.body.ringkas.beda_acc, 'number');
   const saring = await get(S, 'opname/detail.php?id=' + sesiId + '&hanya=selisih');
-  cek('penyaring "Ada selisih" memakai rumus yang sama',
+  cek('penyaring "Ada selisih" memakai patokan yang sama',
       saring.body.rows.every(x => x.stok_hitung !== null && x.stok_hitung !== x.stok_sistem), true);
   cek('jumlahnya cocok dengan kartunya', saring.body.total, bedaSql);
 
   bersihkanB();
+  php("require 'includes/db.php'; db()->exec('UPDATE opname_item SET stok_sistem = "
+    + sistemAsliB + " WHERE id = " + idB + "'); echo 'ok';");
   cek('stok kembali seperti semula', stokB(), awalB);
 
-  /* ------------------------------------------------------------------ */
   console.log('\n=== C. centang semua ===');
   php("require 'includes/db.php'; db()->exec('UPDATE opname_item SET dicek = 0 WHERE sesi_id = " + sesiId + "'); echo 'ok';");
   const jmlKat = nilai("SELECT COUNT(*) FROM opname_item WHERE sesi_id = " + sesiId + " AND kategori = 'AVO'");
@@ -290,6 +291,15 @@ function petikTeksPdf(buf) {
   php("require 'includes/db.php'; db()->exec(\"UPDATE opname_item SET stok_hitung = NULL,"
     + " stok_accurate = NULL, penyesuaian = 'Tidak Disesuaikan', adj_jenis = NULL,"
     + " adj_id = NULL, adj_qty = NULL WHERE sesi_id = " + sesiId + "\"); echo 'ok';");
+  /* Patokan tiap baris disamakan dengan stoknya sekarang, seperti sesi yang
+     baru dibuat. Tanpa itu koreksinya dihitung terhadap salinan lama dan
+     "stok sampai di angka hitungan" tidak berlaku — bukan karena salah,
+     melainkan karena keadaannya memang bukan keadaan sesi yang baru dibuat. */
+  php("require 'includes/db.php'; db()->exec('UPDATE opname_item i"
+    + " JOIN master_barang m ON m.id = i.master_id SET i.stok_sistem = m.stok_awal"
+    + " + COALESCE((SELECT SUM(jumlah) FROM barang_masuk WHERE master_id = m.id AND deleted_at IS NULL),0)"
+    + " - COALESCE((SELECT SUM(jumlah) FROM barang_keluar WHERE master_id = m.id AND deleted_at IS NULL),0)"
+    + " WHERE i.sesi_id = " + sesiId + "'); echo 'ok';");
 
   const stokDari = (itemId2) => nilai("SELECT m.stok_awal"
     + " + COALESCE((SELECT SUM(jumlah) FROM barang_masuk WHERE master_id = m.id AND deleted_at IS NULL),0)"
@@ -397,6 +407,9 @@ function petikTeksPdf(buf) {
     + " penyesuaian = 'Tidak Disesuaikan', adj_jenis = NULL, adj_id = NULL, adj_qty = NULL,"
     + " petugas = '', catatan = '' WHERE sesi_id = " + sesiId + "\");"
     + "db()->exec(\"DELETE FROM activity_log WHERE entitas = 'opname'\");"
+    + "db()->exec('UPDATE opname_item i JOIN _simpan_sistem s ON s.id = i.id"
+    + " SET i.stok_sistem = s.stok_sistem');"
+    + "db()->exec('DROP TABLE _simpan_sistem');"
     + "db()->prepare('DELETE FROM users WHERE username = ?')->execute(['ujiop']); echo 'ok';");
   cek('tidak ada koreksi stok yang tertinggal',
       nilai("SELECT COUNT(*) FROM barang_masuk WHERE keterangan = 'Penyesuaian Opname'"), '0');
