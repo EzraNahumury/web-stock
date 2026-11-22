@@ -43,6 +43,56 @@ bukan dibiarkan diam-diam kembali ke "sejak awal".
 
 ---
 
+## 22 November 2026 (malam) — pembatalan: laporan berjalan HARUS ikut bergerak
+
+Perubahan "satu patokan" sore tadi **dibatalkan** (`git revert`). Dasarnya
+salah baca. Kalimat gudang
+
+> selama periode di range tgl 22 stok barang masuk dan barang keluar
+> mengikuti stok akhir
+
+saya artikan "pergerakan menumpuk di atas patokan yang diam". Maksudnya
+kebalikannya: **stok akhirnyalah yang mengikuti** barang masuk dan keluar
+selama laporannya masih berjalan.
+
+Keterangan berikutnya tidak menyisakan ruang tafsir:
+
+> selagi kita belum klik tandai selesai, hasil stok akhirnya masih bisa
+> ke-update, sedangkan jika kita sudah klik maka dia akan tetap
+
+| Keadaan laporan | Kolom Stok akhir |
+|---|---|
+| Belum "Tandai selesai" | **ikut bergerak** mengikuti barang masuk / keluar |
+| Sudah "Tandai selesai" | **diam**, pada stok saat laporan itu dibuat |
+| Dibuka kembali | hidup lagi |
+
+### Akibat nyata dari salahnya
+
+Barang masuk 2 pcs, dihitung 2 pcs. Laporannya tetap menyebut Stok akhir 0 dan
+Selisih **+2** — dan petugas yang mempercayai angka itu akan menekan "Stok
+Disesuaikan", menambahkan 2 pcs lagi untuk selisih yang tidak pernah ada.
+
+### Kenapa ini lolos dua kali
+
+Tidak ada satu pun uji yang menjalankan urutan paling biasa di gudang: **buat
+laporan, catat barang masuk, lihat laporannya.** Semua suite menyiapkan
+datanya lewat SQL lalu langsung memeriksa, jadi keadaan "laporan sudah ada lalu
+stok bergerak" tidak pernah terjadi di dalam uji sama sekali.
+
+[uji_opname_hidup.cjs](tools/http/uji_opname_hidup.cjs) menjalankan urutan itu
+apa adanya — termasuk kasus masuk 2 / hitung 2 yang harus berselisih **nol**
+dan tidak boleh menulis koreksi apa pun — lalu menutup sesinya, menggerakkan
+stok lagi, dan memastikan laporannya diam.
+
+### Satu hal yang masih perlu disepakati
+
+Saat ditutup, angkanya berhenti pada **stok saat laporan dibuat**, bukan pada
+nilai terakhir yang sempat tampil. Itu yang dikonfirmasi benar untuk laporan
+Oktober (38, bukan 33 sesudah koreksi) — angka pembanding hitungan fisiknya.
+Tapi berarti ada lompatan kecil pada saat ditekan "Tandai selesai".
+
+---
+
 ## 22 November 2026 — angka yang dibekukan ternyata angka yang salah
 
 ### Laporannya

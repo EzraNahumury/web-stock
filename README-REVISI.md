@@ -336,33 +336,27 @@ keterangan dan tanggal, tidak ikut kotak pencarian, jadi hasil unduhannya
 seluruh transaksi. Sekarang: cari dulu, baru tekan Unduh PDF — isinya persis
 yang terlihat. Berlaku juga sesudah pindah tab lalu kembali.
 
-## Laporan stok opname yang sudah ditutup  *(baru 21 November)*
+## Laporan stok opname: hidup lalu diam  *(22 November)*
 
-Begitu sebuah laporan ditandai **selesai**, **angka Stok akhirnya dibekukan**
-pada keadaan saat itu. Membukanya bulan depan tetap menunjukkan angka yang
-sama, jadi bisa dipakai menelusuri selisih antarbulan.
+| Keadaan laporan | Kolom Stok akhir |
+|---|---|
+| Belum ditandai **selesai** | **ikut ter-update** mengikuti barang masuk / keluar |
+| Sudah ditandai **selesai** | **diam**, pada stok saat laporan itu dibuat |
+| Dibuka kembali | hidup lagi, lalu diam lagi saat ditutup |
 
-Selama masih berjalan, Stok akhir tetap mengikuti stok terkini — harus begitu,
-karena "Stok Disesuaikan" bekerja pada angka itu.
+Jadi selama laporannya masih dikerjakan, mencatat barang masuk langsung
+terlihat di kolom Stok akhir — dan kalau hitungan fisiknya sama banyak,
+**Selisihnya nol**, tidak ada yang perlu disesuaikan.
 
-Kalau laporannya **dibuka kembali** untuk diperbaiki, angkanya hidup lagi
-mengikuti stok terkini, lalu dibekukan ulang saat ditutup lagi.
+Begitu ditandai **selesai**, angkanya berhenti bergerak. Laporan Oktober tetap
+menunjukkan angka Oktober meski stoknya sudah bergerak di November, jadi bisa
+dipakai menelusuri selisih antarbulan. Angka yang dipakai adalah stok yang
+dipegang sistem **saat laporan itu dibuat** — itulah angka pembanding hitungan
+fisiknya, dan dengan angka itu kolom **Selisih** sama dengan koreksi yang
+benar-benar ditulis ke Barang masuk/keluar.
 
-## Laporan opname yang sudah ditutup  *(diperbaiki 22 November)*
-
-Begitu sebuah laporan ditandai **selesai**, kolom **Stok akhir** menunjukkan
-stok yang dipegang sistem **saat laporan itu dibuat** — bukan stok hari ini.
-
-Itulah angka pembanding hitungan fisiknya, dan karena tidak pernah berubah,
-laporan Oktober tetap menunjukkan angka Oktober meski stoknya sudah bergerak di
-November. Dengan angka itu pula kolom **Selisih** sama persis dengan koreksi
-yang benar-benar ditulis ke Barang masuk/keluar.
-
-Selama laporannya **masih berjalan**, Stok akhir mengikuti stok terkini — harus
-begitu, karena "Stok Disesuaikan" bekerja pada angka itu.
-
-> Laporan lama tidak perlu diapa-apakan. Angkanya sudah tersimpan sejak laporan
-> itu dibuat, jadi begitu pembaruan ini terpasang, semuanya langsung benar.
+> Laporan lama tidak perlu diapa-apakan: angkanya sudah tersimpan sejak laporan
+> itu dibuat.
 
 ## Riwayat: "Sejak opname terakhir"  *(baru 21 November)*
 
