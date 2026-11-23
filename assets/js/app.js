@@ -17,8 +17,8 @@ let tab = "dashboard";   // diselaraskan dengan hak akses saat init()
 
 let dashFilters   = { q:"", kategori:"Semua", status:"semua", page:1 };
 let masterFilters = { q:"", page:1 };
-let trxFilters    = { masuk:{ q:"", dari:"", sampai:"", keterangan:"", page:1 },
-                      keluar:{ q:"", dari:"", sampai:"", keterangan:"", page:1 } };
+let trxFilters    = { masuk:{ q:"", dari:"", sampai:"", keterangan:"", packing:"", page:1 },
+                      keluar:{ q:"", dari:"", sampai:"", keterangan:"", packing:"", page:1 } };
 
 let kategoriOptions = [];
 let editingMasterId = null;
@@ -1000,6 +1000,15 @@ function renderTransaksiTab(kind){
   html += '<div><label class="field-label">Jumlah</label><input type="number" min="1" id="'+kind+'Jumlah" placeholder="0"></div>';
   if(kind === "keluar"){
     html += '<div><label class="field-label">No. Pesanan</label><input type="text" id="keluarNoPesanan" placeholder="Opsional"></div>';
+    /* Siapa yang mem-packing. Kolom user_id sudah mencatat siapa yang MENGETIK
+     * barisnya, dan itu pertanyaan yang berbeda: yang mengetik biasanya admin
+     * gudang, yang mem-packing orang lain. Ketika sebuah paket sampai kurang
+     * isi, yang perlu ditanyai orang yang memasukkan barangnya ke kardus.
+     * Nama terakhir diingat, karena satu orang biasanya mem-packing berturut-
+     * turut dan mengetiknya ulang tiap baris hanya akan dilewati. */
+    html += '<div><label class="field-label" for="keluarPacking">Di-packing oleh</label>'
+      + '<input type="text" id="keluarPacking" maxlength="100" placeholder="Nama pem-packing"'
+      + ' value="' + esc(ingatPacking()) + '"></div>';
   }
   html += '<div><label class="field-label">Keterangan</label><select id="'+kind+'Ket">' + ketOptions.map(k=>'<option>'+esc(k)+'</option>').join("") + '</select></div>';
   html += '</div>';
@@ -1037,6 +1046,11 @@ function renderTransaksiTab(kind){
     + '<div class="search-wrap">' + svgIcon("search") + '<input type="text" id="'+kind+'Cari" placeholder="Cari nama, SKU, barcode' + (kind==="keluar"?", no. pesanan":"") + '…" oninput="onTrxSearchInput(\''+kind+'\')"></div>'
     + '<select id="'+kind+'FKet" onchange="onTrxFilterChange(\''+kind+'\')">'
       + '<option value="">Semua keterangan</option></select>'
+    + (kind === "keluar"
+        ? '<select id="keluarFPacking" onchange="onTrxFilterChange(\'keluar\')" '
+          + 'title="Saring menurut siapa yang mem-packing">'
+          + '<option value="">Semua pem-packing</option></select>'
+        : '')
     + '<div class="daterange">Dari <input type="date" id="'+kind+'Dari" onchange="onTrxFilterChange(\''+kind+'\')">'
     + ' s/d <input type="date" id="'+kind+'Sampai" onchange="onTrxFilterChange(\''+kind+'\')"></div>'
     + (sayaAdmin() && bisaTulis
@@ -1079,8 +1093,19 @@ function samakanTautanUnduhTrx(kind){
   ex.href = "api/export/pdf.php?jenis=" + kind
     + "&q=" + encodeURIComponent(f.q || "")
     + "&keterangan=" + encodeURIComponent(f.keterangan || "")
+    + "&packing=" + encodeURIComponent(f.packing || "")
     + "&dari=" + encodeURIComponent(f.dari || "")
     + "&sampai=" + encodeURIComponent(f.sampai || "");
+}
+
+/* Nama pem-packing terakhir, diingat di peramban masing-masing.
+ * Bukan di server: ini kenyamanan satu orang di satu komputer, dan menyimpannya
+ * di server berarti nama satu petugas ikut terbawa ke layar petugas lain. */
+function ingatPacking(){
+  try { return localStorage.getItem("wms_packing") || ""; } catch(e){ return ""; }
+}
+function simpanIngatPacking(v){
+  try { if(v) localStorage.setItem("wms_packing", v); } catch(e){ /* mode privat */ }
 }
 
 const onTrxSearchInput = debounce(function(kind){
@@ -1096,6 +1121,7 @@ function onTrxFilterChange(kind){
   f.dari   = $(kind+"Dari").value;
   f.sampai = $(kind+"Sampai").value;
   f.keterangan = $(kind+"FKet") ? $(kind+"FKet").value : "";
+  f.packing    = $(kind+"FPacking") ? $(kind+"FPacking").value : "";
   f.page   = 1;
   samakanTautanUnduhTrx(kind);
   renderTransaksiTable(kind);
@@ -1202,6 +1228,8 @@ async function submitTransaksi(e, kind){
     keterangan: $(kind+"Ket").value
   };
   if(kind === "keluar"){
+    const pk = $("keluarPacking");
+    if(pk) { body.packing_oleh = pk.value.trim(); simpanIngatPacking(body.packing_oleh); }
     const np = $("keluarNoPesanan");
     body.no_pesanan = np ? np.value.trim() : "";
 
@@ -1236,6 +1264,8 @@ async function submitTransaksi(e, kind){
     $(kind+"Jumlah").value="";  $(kind+"Picker").value="";
     $(kind+"Ket").selectedIndex = 0;              // audit F5
     if(kind === "keluar" && $("keluarNoPesanan")) $("keluarNoPesanan").value = "";
+    // Nama pem-packing SENGAJA tidak dikosongkan: orang yang sama biasanya
+    // mem-packing beberapa pesanan berturut-turut.
     if(kind === "keluar" && $("keluarAdaTukar")){
       $("keluarAdaTukar").checked = false;
       toggleTukarKeluar();
@@ -1258,7 +1288,8 @@ async function renderTransaksiTable(kind){
   let data;
   try{
     data = await API.trxList(kind, { q:f.q, dari:f.dari, sampai:f.sampai,
-                                     keterangan:f.keterangan, page:f.page });
+                                     keterangan:f.keterangan, packing:f.packing,
+                                     page:f.page });
   }catch(e){ tampilGalat(e); return; }
 
   /* Isi dropdown penyaring keterangan.
@@ -1270,6 +1301,17 @@ async function renderTransaksiTable(kind){
    * Dibandingkan dengan isi elemennya sendiri, bukan dengan salinan di
    * memori: tabel digambar ulang tiap kali tabnya dibuka, dan dropdown yang
    * baru lahir selalu kosong. */
+  const selPacking = $(kind+"FPacking");
+  if(selPacking && Array.isArray(data.packing_options)){
+    /* Diisi dari nama yang BENAR-BENAR ada di data, bukan daftar pegawai:
+     * yang mem-packing sering bukan pemegang akun, dan nama yang tidak pernah
+     * dipakai hanya memperpanjang dropdown. */
+    const mau = '<option value="">Semua pem-packing</option>'
+      + data.packing_options.map(v => '<option value="' + esc(v) + '">' + esc(v) + '</option>').join("");
+    if(selPacking.innerHTML !== mau) selPacking.innerHTML = mau;
+    selPacking.value = f.packing || "";
+  }
+
   const selKet = $(kind+"FKet");
   if(selKet && (data.ket_filter || []).length){
     const mau = '<option value="">Semua keterangan</option>'
@@ -1296,6 +1338,7 @@ async function renderTransaksiTable(kind){
     + '<td style="font-weight:600">'+fmtNum(r.jumlah)+'</td>'
     + '<td style="color:var(--slate)">'+esc(r.keterangan)+'</td>'
     + (showPesanan ? '<td class="mono" style="font-size:11.5px; color:var(--slate)">'+esc(r.no_pesanan || "-")+'</td>' : '')
+    + (showPesanan ? '<td style="font-size:11.5px">'+esc(r.packing_oleh || "-")+'</td>' : '')
     + '<td style="color:var(--slate); font-size:11.5px">'+esc(r.oleh || "-")+'</td>'
     + (bolehHapus()
         ? '<td class="num"><button class="icon-btn" onclick="deleteTransaksi(\''+kind+'\','+r.id+')" aria-label="Hapus">'+svgIcon("trash")+'</button></td>'
@@ -1303,14 +1346,14 @@ async function renderTransaksiTable(kind){
     + '</tr>'
   ).join("");
 
-  // +1 kolom SKU.
-  const kolomJml = (showPesanan ? 9 : 8) - (bolehHapus() ? 0 : 1);
+  // +1 kolom SKU, +1 kolom Di-packing oleh (hanya barang keluar).
+  const kolomJml = (showPesanan ? 10 : 8) - (bolehHapus() ? 0 : 1);
   if(data.rows.length===0) body = '<tr class="empty-row"><td colspan="'+kolomJml+'">Belum ada catatan.</td></tr>';
 
   const headers = ["Tanggal","Barang","SKU","Barcode",jumlahLabel,"Keterangan"]
-    .concat(showPesanan?["No. Pesanan"]:[]).concat(["Oleh"]).concat(bolehHapus()?[""]:[]);
+    .concat(showPesanan?["No. Pesanan","Di-packing oleh"]:[]).concat(["Oleh"]).concat(bolehHapus()?[""]:[]);
 
-  wadah.innerHTML = '<div class="table-card"><table style="min-width:800px"><thead><tr>'
+  wadah.innerHTML = '<div class="table-card"><table style="min-width:' + (showPesanan ? 960 : 800) + 'px"><thead><tr>'
     + headers.map(h=>'<th>'+h+'</th>').join("")
     + '</tr></thead><tbody>'+body+'</tbody></table>'
     + '<div class="pagination"><span>' + fmtNum(data.total) + ' catatan · total ' + jumlahLabel.toLowerCase()
@@ -3830,6 +3873,10 @@ async function hapusDeadstok(id){
 let opnameSesiId = null;                                   // null = daftar sesi
 let opnameFilter = { q:"", kategori:"Semua", hanya:"semua", page:1 };
 let opnameCariSesi = "";
+/* Laporan opname dibuat tiap bulan, jadi daftarnya terus memanjang. Penyaring
+ * tanggal dan status menjaga yang dicari tetap bisa ditemukan tanpa membuka
+ * halaman demi halaman. */
+let opnameSesiFilter = { dari:"", sampai:"", status:"" };
 let opnameSesiPage = 1;
 // Pilihan penyesuaian datang dari server, sama seperti status retur.
 let opnamePenyesuaian = ["Tidak Disesuaikan", "Stok Disesuaikan"];
@@ -3870,12 +3917,24 @@ function renderOpnameDaftar(){
   html += '<div class="toolbar">'
     + '<div class="search-wrap">' + svgIcon("search")
       + '<input type="text" id="opCari" placeholder="Cari nama laporan atau periode&hellip;" oninput="onOpnameCari()"></div>'
+    + '<select id="opFStatus" onchange="onOpnameSesiFilter()">'
+      + '<option value="">Semua status</option>'
+      + '<option value="draft">Masih berjalan</option>'
+      + '<option value="selesai">Sudah selesai</option>'
+      + '</select>'
+    + '<div class="daterange">Dari <input type="date" id="opDari" onchange="onOpnameSesiFilter()">'
+      + ' s/d <input type="date" id="opSampai" onchange="onOpnameSesiFilter()"></div>'
+    + '<button type="button" class="btn ghost" onclick="resetOpnameSesiFilter()">'
+      + svgIcon("x") + 'Reset</button>'
     + '</div>'
     + '<div id="opHasil"></div>';
 
   $("content").innerHTML = html;
   const c = $("opCari");
   if(c) c.value = opnameCariSesi;
+  $("opFStatus").value = opnameSesiFilter.status;
+  $("opDari").value    = opnameSesiFilter.dari;
+  $("opSampai").value  = opnameSesiFilter.sampai;
   refreshOpnameDaftar();
 }
 
@@ -3885,12 +3944,35 @@ const onOpnameCari = debounce(function(){
   refreshOpnameDaftar();
 }, 300);
 
+function onOpnameSesiFilter(){
+  opnameSesiFilter.status = $("opFStatus").value;
+  opnameSesiFilter.dari   = $("opDari").value;
+  opnameSesiFilter.sampai = $("opSampai").value;
+  opnameSesiPage = 1;
+  refreshOpnameDaftar();
+}
+
+function resetOpnameSesiFilter(){
+  opnameCariSesi   = "";
+  opnameSesiFilter = { dari:"", sampai:"", status:"" };
+  opnameSesiPage   = 1;
+  if($("opCari"))    $("opCari").value = "";
+  if($("opFStatus")) $("opFStatus").value = "";
+  if($("opDari"))    $("opDari").value = "";
+  if($("opSampai"))  $("opSampai").value = "";
+  refreshOpnameDaftar();
+}
+
 async function refreshOpnameDaftar(){
   const wadah = $("opHasil");
   if(!wadah) return;
 
   let d;
-  try{ d = await API.get("opname/list.php", { q: opnameCariSesi, page: opnameSesiPage }); }
+  try{ d = await API.get("opname/list.php", {
+    q: opnameCariSesi, page: opnameSesiPage,
+    dari: opnameSesiFilter.dari, sampai: opnameSesiFilter.sampai,
+    status: opnameSesiFilter.status
+  }); }
   catch(e){ tampilGalat(e); return; }
 
   const selKat = $("opKategori");
@@ -4026,9 +4108,10 @@ function renderOpnameDetail(){
     + '<button type="button" class="btn ghost" id="oiBatalSesuai" onclick="sesuaikanSemuaOpname(false)"'
       + ' title="Kembalikan ke Tidak Disesuaikan; koreksi stoknya ikut ditarik">'
       + svgIcon("x") + 'Batal sesuaikan</button>'
-    + '<label class="btn ghost" id="oiAccurate" title="Isi kolom Stok accurate dari laporan Accurate">'
-      + svgIcon("plus") + 'PDF Accurate'
-      + '<input type="file" accept="application/pdf,.pdf" id="oiAccurateFile"'
+    + '<label class="btn ghost" id="oiAccurate" '
+      + 'title="Isi kolom Stok accurate dari laporan Accurate — PDF atau ekspor CSV/Excel">'
+      + svgIcon("plus") + 'Impor Accurate'
+      + '<input type="file" accept="application/pdf,.pdf,.csv,.txt" id="oiAccurateFile"'
       + ' style="display:none" onchange="unggahPdfAccurate(event)"></label>'
     + '<a class="btn ghost" id="oiUnduh" href="#">' + svgIcon("download") + 'Unduh PDF</a>'
     /* Laporan ini memang dibawa ke Excel. Mengubah PDF ke Excel selalu menebak
@@ -4539,24 +4622,36 @@ async function unggahPdfAccurate(ev){
   if(!berkas) return;
 
   const isPdf = berkas.type === "application/pdf" || /\.pdf$/i.test(berkas.name);
-  if(!isPdf){ toast("File harus berformat PDF.", "err"); return; }
+  const isCsv = /\.(csv|txt)$/i.test(berkas.name);
+  if(!isPdf && !isCsv){
+    toast("Berkasnya harus PDF, atau CSV hasil ekspor dari Accurate.", "err");
+    return;
+  }
 
   setSaveStatus("saving");
   let hasil;
   try{
-    const buf = await berkas.arrayBuffer();
-    hasil = await parsePdfAccurate(buf);
+    if(isPdf){
+      const buf = await berkas.arrayBuffer();
+      hasil = await parsePdfAccurate(buf);
+    }else{
+      /* Ekspor CSV memuat kode barang, dan kode itu dicocokkan persis di
+       * server — jauh lebih bisa dipercaya daripada mencocokkan nama, yang
+       * gagal begitu ada satu kata berbeda. */
+      const csv = AccurateCsv.baca(await berkas.text());
+      hasil = { rows: csv.rows, gudang: "", csv: csv };
+    }
   }catch(e){
     setSaveStatus("ok");
     toast(e && e.message === "JUDUL_KOLOM_TIDAK_DITEMUKAN"
       ? "Kolom Kuantitas tidak ketemu di PDF ini. Pastikan yang diunggah laporan Kuantitas Barang per Gudang."
-      : "PDF tidak bisa dibaca.", "err");
+      : ((e && e.message) || "Berkasnya tidak bisa dibaca."), "err");
     return;
   }
 
   if(!hasil.rows.length){
     setSaveStatus("ok");
-    toast("Tidak ada baris barang yang terbaca dari PDF ini.", "err");
+    toast("Tidak ada baris barang yang terbaca dari berkas ini.", "err");
     return;
   }
 
@@ -4571,10 +4666,22 @@ async function unggahPdfAccurate(ev){
   setSaveStatus("ok");
 
   const contoh = (pra.tak_ketemu || []).slice(0, 8);
+  const asal = isPdf ? "PDF" : "berkas CSV";
   const isiDialog =
-    '<p>Dari <b>' + fmtNum(pra.dibaca) + '</b> baris di PDF'
+    '<p>Dari <b>' + fmtNum(pra.dibaca) + '</b> baris di ' + asal
       + (hasil.gudang ? ' (gudang <b>' + esc(hasil.gudang) + '</b>)' : '')
       + ', <b>' + fmtNum(pra.cocok) + '</b> cocok dengan barang di laporan ini.</p>'
+    /* Seberapa banyak yang cocok lewat KODE, bukan nama. Itu ukuran seberapa
+     * bisa dipercaya hasilnya: kode cocok persis, nama bisa salah orang. */
+    + (pra.lewat_kode
+        ? '<p style="color:var(--safe); font-size:12.5px; margin-top:-4px">'
+          + '<b>' + fmtNum(pra.lewat_kode) + '</b> di antaranya cocok lewat kode barang '
+          + '— pencocokan persis, bukan tebakan dari nama.</p>'
+        : (isCsv
+            ? '<p style="color:var(--amber); font-size:12.5px; margin-top:-4px">'
+              + 'Tidak ada yang cocok lewat kode barang. Kalau ekspor Accurate-nya '
+              + 'disertakan kolom <b>No. Barang</b>, hasilnya jauh lebih bisa dipercaya.</p>'
+            : ''))
     + '<div class="rapikan-daftar">'
       + '<div><b>' + fmtNum(pra.cocok) + '</b> baris akan terisi stok accurate-nya'
         + (pra.cocok ? '' : ' — tidak ada yang berubah') + '</div>'
@@ -4592,15 +4699,23 @@ async function unggahPdfAccurate(ev){
             + 'dilewati supaya tidak salah barang.</div>'
           : '')
       + (pra.rusak
-          ? '<div style="margin-top:8px">' + fmtNum(pra.rusak) + ' baris PDF tidak terbaca angkanya.</div>'
+          ? '<div style="margin-top:8px">' + fmtNum(pra.rusak) + ' baris tidak terbaca angkanya.</div>'
+          : '')
+      + (hasil.csv && hasil.csv.dilewati
+          ? '<div style="margin-top:8px; color:var(--slateLo)">' + fmtNum(hasil.csv.dilewati)
+            + ' baris tanpa angka dilewati — biasanya baris subtotal atau judul kelompok.</div>'
           : '')
     + '</div>'
     + '<p style="margin-top:10px; color:var(--slate); font-size:12px;">'
     + (pra.cocok
         ? 'Kolom Stok accurate yang sudah terisi akan tertimpa. Kolom lain tidak disentuh.'
-        : 'Nama di atas adalah yang terbaca dari PDF. Kalau isinya tidak seperti nama '
-          + 'barang, pembacanya yang meleset — buka <a href="diagnosa-accurate.php" '
-          + 'target="_blank">diagnosa-accurate.php</a> lalu kirimkan hasilnya.')
+        : (isPdf
+            ? 'Nama di atas adalah yang terbaca dari PDF. Kalau isinya tidak seperti nama '
+              + 'barang, pembacanya yang meleset — buka <a href="diagnosa-accurate.php" '
+              + 'target="_blank">diagnosa-accurate.php</a> lalu kirimkan hasilnya.'
+            : 'Nama di atas terbaca dari berkasnya. Kalau barangnya memang ada di laporan '
+              + 'ini, kemungkinan namanya berbeda — ekspor ulang dari Accurate beserta '
+              + 'kolom <b>No. Barang</b> supaya dicocokkan lewat kode, bukan nama.'))
     + '</p>';
 
   if(!pra.cocok){
@@ -4609,7 +4724,7 @@ async function unggahPdfAccurate(ev){
   }
 
   const ya = await konfirmasiIsi(
-    "Isi stok accurate dari PDF?", isiDialog, "Isikan " + fmtNum(pra.cocok) + " baris");
+    "Isi stok accurate dari " + asal + "?", isiDialog, "Isikan " + fmtNum(pra.cocok) + " baris");
   if(!ya) return;
 
   setSaveStatus("saving");

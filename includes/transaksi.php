@@ -62,6 +62,8 @@ function filterTransaksi(array $src, bool $keluar): array
         $kolom = ['t.nama', 't.barcode', 'm.nama', 'm.sku'];
         if ($keluar) {
             $kolom[] = 't.no_pesanan';
+            // Mencari "siapa yang packing paket ini" lewat kotak pencarian.
+            $kolom[] = 't.packing_oleh';
         }
         $potong = [];
         foreach ($kolom as $k) {
@@ -89,6 +91,14 @@ function filterTransaksi(array $src, bool $keluar): array
         $params[] = $keterangan;
     }
 
+    /* Penyaring "di-packing oleh". Dicocokkan apa adanya supaya bisa dipakai
+     * memeriksa pekerjaan satu orang pada satu hari. */
+    $packing = $keluar ? ambilStr($src, 'packing', 100) : '';
+    if ($packing !== '') {
+        $where[] = 't.packing_oleh = ?';
+        $params[] = $packing;
+    }
+
     return [
         'where' => 'WHERE ' . implode(' AND ', $where),
         /* Selalu di-join, bukan hanya saat mencari: COUNT, SUM, dan daftarnya
@@ -101,6 +111,7 @@ function filterTransaksi(array $src, bool $keluar): array
         'dari'       => $dari,
         'sampai'     => $sampai,
         'keterangan' => $keterangan,
+        'packing'    => $packing,
     ];
 }
 
@@ -124,12 +135,13 @@ function daftarTransaksi(string $jenis): void
     $dari       = $f['dari'];
     $sampai     = $f['sampai'];
     $keterangan = $f['keterangan'];
+    $packing    = $f['packing'];
 
     $total  = (int)dbValue("SELECT COUNT(*) FROM $tabel t $sqlJoin $sqlWhere", $params);
     $meta   = metaPaginasi($total, $page);
     $offset = ($meta['page'] - 1) * PAGE_SIZE;
 
-    $kolomExtra = $cfg['keluar'] ? ', t.no_pesanan, t.batch_id' : '';
+    $kolomExtra = $cfg['keluar'] ? ', t.no_pesanan, t.batch_id, t.packing_oleh' : '';
 
     $rows = dbAll(
         "SELECT t.id, t.tanggal, t.barcode, t.nama, t.jumlah, t.keterangan,
@@ -172,12 +184,27 @@ function daftarTransaksi(string $jenis): void
     $pilihanKet = array_values(array_unique(array_merge($cfg['ket'], $terpakai)));
     sort($pilihanKet, SORT_NATURAL | SORT_FLAG_CASE);
 
+    /* Nama pem-packing yang benar-benar ada di data. Bukan daftar pengguna:
+     * yang mem-packing sering bukan pemegang akun, dan nama yang tidak pernah
+     * dipakai hanya memperpanjang dropdownnya. */
+    $pilihanPacking = [];
+    if ($cfg['keluar']) {
+        $pilihanPacking = array_column(
+            dbAll("SELECT DISTINCT packing_oleh FROM $tabel
+                    WHERE deleted_at IS NULL AND packing_oleh <> ''
+                    ORDER BY packing_oleh"),
+            'packing_oleh'
+        );
+    }
+
     jsonOk([
-        'rows'         => $rows,
-        'total_jumlah' => $totalJumlah,
-        'ket_options'  => $cfg['ket'],
-        'ket_filter'   => $pilihanKet,
-        'keterangan'   => $keterangan,
+        'rows'            => $rows,
+        'total_jumlah'    => $totalJumlah,
+        'ket_options'     => $cfg['ket'],
+        'ket_filter'      => $pilihanKet,
+        'keterangan'      => $keterangan,
+        'packing_options' => $pilihanPacking,
+        'packing'         => $packing,
     ] + $meta);
 }
 
@@ -260,6 +287,11 @@ function buatTransaksi(string $jenis): void
     }
 
     $noPesanan = $cfg['keluar'] ? ambilStr($in, 'no_pesanan', 100) : '';
+    /* Siapa yang mem-packing. Teks bebas, bukan relasi ke users: yang
+     * mem-packing sering bukan pemegang akun — anak magang, pekerja harian —
+     * dan relasi akan membuat nama-nama itu tidak pernah bisa diisi. Lihat
+     * sql/025_packing_oleh.sql. */
+    $packing   = $cfg['keluar'] ? ambilStr($in, 'packing_oleh', 100) : '';
     $adaTukar  = $cfg['keluar'] && $tukarBarcode !== '';
 
     // Transaksi dan catatan pertukarannya ditulis bersama: yang satu tanpa
@@ -268,14 +300,15 @@ function buatTransaksi(string $jenis): void
     $skuBaru = (string)($master['sku'] ?? '');
     $id = dbTransaksi(static function (PDO $pdo) use (
         $cfg, $tabel, $tanggal, $masterId, $barcode, $nama, $jumlah, $ket,
-        $noPesanan, $adaTukar, $tukarBarcode, $tukarNama, $tukarSku, $skuBaru
+        $noPesanan, $packing, $adaTukar, $tukarBarcode, $tukarNama, $tukarSku, $skuBaru
     ) {
         if ($cfg['keluar']) {
             $st = $pdo->prepare(
-                "INSERT INTO $tabel (tanggal, master_id, barcode, nama, jumlah, keterangan, no_pesanan, user_id)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+                "INSERT INTO $tabel (tanggal, master_id, barcode, nama, jumlah, keterangan,
+                                     no_pesanan, packing_oleh, user_id)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
             );
-            $st->execute([$tanggal, $masterId, $barcode, $nama, $jumlah, $ket, $noPesanan, userId()]);
+            $st->execute([$tanggal, $masterId, $barcode, $nama, $jumlah, $ket, $noPesanan, $packing, userId()]);
         } else {
             $st = $pdo->prepare(
                 "INSERT INTO $tabel (tanggal, master_id, barcode, nama, jumlah, keterangan, user_id)

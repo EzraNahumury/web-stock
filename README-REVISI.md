@@ -336,6 +336,47 @@ keterangan dan tanggal, tidak ikut kotak pencarian, jadi hasil unduhannya
 seluruh transaksi. Sekarang: cari dulu, baru tekan Unduh PDF — isinya persis
 yang terlihat. Berlaku juga sesudah pindah tab lalu kembali.
 
+## Barang keluar: Di-packing oleh  *(baru 24 November)*
+
+Kolom baru di form Barang keluar dan di tabelnya: **siapa yang mem-packing**.
+
+Berbeda dari kolom "Oleh" yang sudah ada — itu siapa yang **mengetik** barisnya,
+biasanya admin gudang. Yang ini siapa yang **memasukkan barangnya ke kardus**,
+supaya kalau ada paket kurang isi, jelas siapa yang perlu ditanya.
+
+Diisi bebas, jadi nama pekerja harian atau anak magang yang tidak punya akun
+tetap bisa dicatat. Nama terakhir diingat dan tidak dikosongkan sesudah
+menyimpan, karena satu orang biasanya mem-packing beberapa pesanan berturut-
+turut.
+
+Ada **dropdown penyaring** berisi nama-nama yang benar-benar pernah dipakai,
+kotak pencarian juga menjangkaunya, dan kolomnya ikut tercetak di Unduh PDF
+(termasuk ikut penyaringnya).
+
+Untuk impor picking list PDF, satu nama berlaku untuk seluruh isi berkas itu.
+
+## Laporan stok opname: penyaring daftar  *(baru 24 November)*
+
+Daftar laporan opname dapat penyaring **rentang tanggal** dan **status**
+(masih berjalan / sudah selesai), plus tombol Reset. Laporan dibuat tiap bulan,
+jadi daftarnya akan terus memanjang.
+
+## Impor Accurate: sekarang bisa CSV  *(baru 24 November)*
+
+Tombolnya berubah dari "PDF Accurate" jadi **"Impor Accurate"**, dan menerima
+**PDF maupun CSV** hasil ekspor Accurate.
+
+**Pakai CSV kalau bisa.** PDF cetakan Accurate tidak memuat kode barang, jadi
+pencocokannya hanya bisa lewat nama — dan beda satu kata saja sudah tidak
+ketemu. Ekspor CSV memuat kolom **No. Barang**, dan kode itu dicocokkan persis
+ke SKU atau barcode.
+
+Dialog sebelum menyimpan menyebut berapa baris yang cocok **lewat kode** — makin
+besar angkanya, makin bisa dipercaya hasilnya. Kalau nol dan Anda memakai CSV,
+ekspor ulang dari Accurate dengan kolom No. Barang disertakan.
+
+Berkasnya tidak diunggah ke server; yang dikirim hanya kode, nama, dan jumlah.
+
 ## Laporan stok opname: hidup lalu diam  *(22 November)*
 
 | Keadaan laporan | Kolom Stok akhir |

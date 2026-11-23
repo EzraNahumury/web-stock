@@ -43,6 +43,69 @@ bukan dibiarkan diam-diam kembali ke "sejak awal".
 
 ---
 
+## 24 November 2026 — penyaring daftar opname, impor Accurate lewat kode, dan pem-packing
+
+### 1. Penyaring tanggal dan status di daftar laporan opname
+
+Laporan dibuat tiap bulan, jadi daftarnya terus memanjang. Sekarang ada
+penyaring **rentang tanggal** dan **status** (masih berjalan / sudah selesai),
+beserta tombol Reset. Nilai yang tidak sah — tanggal ngawur, status di luar
+kedua pilihan — diabaikan, bukan dikirim ke SQL.
+
+### 2. Impor Accurate: dari CSV/Excel, dan dicocokkan lewat kode barang
+
+Impor Accurate selama ini **hanya menerima PDF**, dan PDF cetakan Accurate
+tidak memuat kode barang. Satu-satunya pegangan adalah nama — pegangan yang
+rapuh: beda satu kata saja sudah tidak ketemu.
+
+Dua perbaikan:
+
+**Pencocokan lewat kode.** Bila barisnya membawa kode, kode itu dicocokkan
+lebih dulu ke **SKU atau barcode**. Cocok persis, tidak bisa salah orang. Nama
+tetap dipakai sebagai cadangan untuk baris yang kodenya kosong atau tidak
+dikenal — jadi impor PDF yang lama tetap bekerja seperti sebelumnya. Dialog
+pratinjaunya menyebut berapa yang cocok lewat kode, karena itulah ukuran
+seberapa bisa dipercaya hasilnya.
+
+**Berkas CSV diterima.** Tombolnya kini "Impor Accurate" dan menerima `.pdf`
+maupun `.csv`. Pembacanya ([accurate-csv.js](assets/js/accurate-csv.js))
+menoleransi apa adanya bentuk ekspor Accurate:
+
+| | |
+|---|---|
+| Pemisah | koma atau titik koma, dikenali sendiri |
+| `sep=;` | arahan Excel di baris pertama, dilewati |
+| Baris kop | judul kolom **dicari**, tidak diandaikan di baris pertama |
+| Sel berkutip | boleh memuat pemisah dan ganti baris |
+| Angka | `1.234` dibaca seribu dua ratus tiga puluh empat, bukan 1,234 |
+| Subtotal | baris tanpa angka dilewati diam-diam, bukan dilaporkan rusak |
+
+Berkasnya **tidak diunggah ke server** — sama seperti pembaca PDF-nya, dengan
+alasan yang sama: ekspor Accurate memuat harga pokok per barang.
+
+### 3. Kolom "Di-packing oleh" pada barang keluar
+
+`user_id` sudah mencatat siapa yang **mengetik** barisnya, dan itu pertanyaan
+yang berbeda: yang mengetik biasanya admin gudang, yang mem-packing orang lain.
+Ketika sebuah paket sampai dalam keadaan kurang isi, yang perlu ditanyai orang
+yang memasukkan barangnya ke kardus.
+
+Kolom baru ([sql/025](sql/025_packing_oleh.sql)) berupa **teks bebas, bukan
+relasi ke `users`**: yang mem-packing sering bukan pemegang akun — anak magang,
+pekerja harian — dan relasi akan membuat nama-nama itu tidak pernah bisa diisi.
+
+Terpasang di: form manual, impor picking list PDF (satu nama untuk seluruh
+isinya, karena yang dikerjakan sekali jalan biasanya satu orang), kolom tabel,
+**dropdown penyaring** berisi nama yang benar-benar ada di data, kotak
+pencarian, dan kolom di PDF.
+
+Namanya diingat di peramban masing-masing dan tidak dikosongkan sesudah
+menyimpan: satu orang biasanya mem-packing beberapa pesanan berturut-turut.
+Disimpan di peramban, bukan di server, supaya nama satu petugas tidak terbawa
+ke layar petugas lain.
+
+---
+
 ## 22 November 2026 (malam) — pembatalan: laporan berjalan HARUS ikut bergerak
 
 Perubahan "satu patokan" sore tadi **dibatalkan** (`git revert`). Dasarnya

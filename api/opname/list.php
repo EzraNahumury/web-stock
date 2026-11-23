@@ -6,7 +6,11 @@
  * berapa yang sudah dicek, dan total selisihnya ikut dihitung supaya
  * daftar bisa langsung menunjukkan sesi mana yang belum selesai.
  *
- * Parameter: q, page
+ * Parameter: q, dari, sampai, status, page
+ *
+ * Laporan stok opname dibuat tiap bulan, jadi daftarnya terus memanjang.
+ * Penyaring tanggal dan status menjaga yang dicari tetap bisa ditemukan tanpa
+ * membuka halaman demi halaman.
  */
 
 declare(strict_types=1);
@@ -19,7 +23,14 @@ pasangPenangananGalatApi();
 wajibMetode('GET');
 wajibLoginApi();
 
-$q    = ambilStr($_GET, 'q', 100);
+$q      = ambilStr($_GET, 'q', 100);
+$dari   = trim((string)($_GET['dari'] ?? ''));
+$sampai = trim((string)($_GET['sampai'] ?? ''));
+// Hanya dua nilai yang sah; sisanya diabaikan, bukan dikirim ke SQL.
+$status = ambilStr($_GET, 'status', 20);
+if ($status !== 'draft' && $status !== 'selesai') {
+    $status = '';
+}
 $page = ambilHalaman();
 
 $where  = ['s.deleted_at IS NULL'];
@@ -29,6 +40,19 @@ if ($q !== '') {
     $pola = polaLike($q);
     array_push($params, $pola, $pola, $pola);
 }
+if ($dari !== '' && ambilTanggal(['d' => $dari], 'd') !== null) {
+    $where[] = 's.tanggal >= ?';
+    $params[] = $dari;
+}
+if ($sampai !== '' && ambilTanggal(['d' => $sampai], 'd') !== null) {
+    $where[] = 's.tanggal <= ?';
+    $params[] = $sampai;
+}
+if ($status !== '') {
+    $where[] = 's.status = ?';
+    $params[] = $status;
+}
+
 $sqlWhere = 'WHERE ' . implode(' AND ', $where);
 
 $total  = (int)dbValue("SELECT COUNT(*) FROM opname_sesi s $sqlWhere", $params);
@@ -77,4 +101,8 @@ unset($r);
 jsonOk([
     'rows'             => $rows,
     'kategori_options' => daftarKategori(),
+    // Dikembalikan apa adanya supaya layar tahu penyaring mana yang berlaku.
+    'dari'             => $dari,
+    'sampai'           => $sampai,
+    'status'           => $status,
 ] + $meta);

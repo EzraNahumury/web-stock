@@ -163,7 +163,7 @@ switch ($jenis) {
         $sqlWhere  = $f['where'];
         $params    = $f['params'];
         $ketSaring = $f['keterangan'];
-        $extra     = $isKel ? ', t.no_pesanan' : '';
+        $extra     = $isKel ? ', t.no_pesanan, t.packing_oleh' : '';
 
         $data = dbAll(
             "SELECT t.tanggal, t.barcode, t.nama, t.jumlah, t.keterangan,
@@ -185,6 +185,7 @@ switch ($jenis) {
         ];
         if ($isKel) {
             $kolom[] = ['label' => 'No. Pesanan', 'lebar' => 15, 'bungkus' => true];
+            $kolom[] = ['label' => 'Di-packing oleh', 'lebar' => 12, 'bungkus' => true];
         }
         $kolom[] = ['label' => 'Dicatat oleh', 'lebar' => 13, 'bungkus' => true];
 
@@ -196,6 +197,7 @@ switch ($jenis) {
                 ? (($dari !== '' ? $dari : 'awal') . ' s/d ' . ($sampai !== '' ? $sampai : 'kini'))
                 : 'Semua',
             'Keterangan' => $ketSaring !== '' ? $ketSaring : 'Semua',
+            'Packing' => ($isKel && $f['packing'] !== '') ? $f['packing'] : 'Semua',
             'Baris'   => count($data),
         ], $kolom);
 
@@ -214,6 +216,7 @@ switch ($jenis) {
             ];
             if ($isKel) {
                 $sel[] = (string)($r['no_pesanan'] ?? '');
+                $sel[] = (string)($r['packing_oleh'] ?? '');
             }
             $sel[] = (string)($r['oleh'] ?? '-');
             $pdf->baris($sel);

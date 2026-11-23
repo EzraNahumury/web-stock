@@ -48,6 +48,10 @@ $rows     = is_array($in['rows'] ?? null) ? $in['rows'] : [];
 $fileName = ambilStr($in, 'fileName', 255);
 $fileHash = ambilStr($in, 'fileHash', 64);
 $tanggal  = ambilTanggal($in, 'tanggal');
+/* Siapa yang mem-packing seluruh isi picking list ini. Boleh kosong: impor
+ * lama tidak mengirimnya, dan menolaknya hanya akan membuat impor gagal
+ * karena sebuah kolom keterangan. */
+$packingOleh = ambilStr($in, 'packing_oleh', 100);
 $abaikan  = !empty($in['abaikanDuplikat']);
 $abaikanStok = !empty($in['abaikanStokKurang']);
 
@@ -398,8 +402,9 @@ $hasil = dbTransaksi(static function (PDO $pdo) use (
 
     $stRow = $pdo->prepare(
         'INSERT INTO barang_keluar
-            (tanggal, master_id, barcode, nama, jumlah, keterangan, no_pesanan, batch_id, user_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+            (tanggal, master_id, barcode, nama, jumlah, keterangan, no_pesanan,
+             packing_oleh, batch_id, user_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     );
     // Pertukaran produk dicatat di transaksi yang sama dengan barang
     // keluarnya: kalau salah satunya gagal, keduanya batal, sehingga tidak
@@ -421,6 +426,10 @@ $hasil = dbTransaksi(static function (PDO $pdo) use (
             $b['qty'],
             $b['keterangan'],
             $b['no_pesanan'],
+            /* Satu nama untuk seluruh isi satu picking list: yang dikerjakan
+             * sekali jalan biasanya dikerjakan satu orang, dan meminta nama per
+             * baris pada impor berisi ratusan baris hanya akan dikosongkan. */
+            $packingOleh,
             $batchId,
             userId(),
         ]);
