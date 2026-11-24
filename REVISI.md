@@ -43,6 +43,49 @@ bukan dibiarkan diam-diam kembali ke "sejak awal".
 
 ---
 
+## 24 November 2026 (sore) — impor PDF ternyata tidak pernah mengisi pem-packing
+
+Kolom "Di-packing oleh" terpasang pagi tadi, tapi hanya separuh: server sudah
+menerima `packing_oleh` pada impor picking list, sedangkan **kolom isiannya
+tidak pernah dipasang di layar tinjauan impor**. Jadi yang terkirim selalu
+kosong — dan impor PDF justru jalur yang paling banyak dipakai, sehingga
+kolomnya praktis tidak pernah terisi sama sekali.
+
+Sekarang ada kolom **Di-packing oleh** di kepala layar tinjauan, di sebelah
+Tanggal transaksi. Satu nama untuk seluruh isi berkas: yang dikerjakan sekali
+jalan biasanya dikerjakan satu orang, dan meminta nama per baris pada impor
+berisi ratusan baris hanya akan dikosongkan. Kalau memang berbeda per baris,
+barisnya bisa diperbaiki sesudah tersimpan lewat menu Barang keluar.
+
+Namanya diingat sama seperti pada input manual, jadi impor berikutnya sudah
+terisi.
+
+### Satu bug lagi yang ketahuan dari ujinya
+
+Impor langsung gagal **HTTP 500** begitu diuji:
+
+```
+SQLSTATE[23000]: Column 'packing_oleh' cannot be null
+  commit.php:434
+```
+
+`$packingOleh` dibaca di awal berkas, tapi INSERT-nya ada di dalam closure
+`dbTransaksi(static function (...) use (...))` — dan variabelnya tidak masuk
+daftar `use`, jadi null di dalam sana. Closure `static` tidak mewarisi apa pun
+secara diam-diam; itu gunanya, dan juga jebakannya.
+
+Artinya kalau ini ter-deploy pagi tadi tanpa diuji, **seluruh impor picking
+list akan gagal** begitu kolomnya diisi.
+
+### Catatan uji
+
+Harapan ujinya sempat meleset juga: kunci nomor pesanan pada impor adalah
+`noPesanan` (camelCase), bukan `no_pesanan`. Dikirim dengan nama lain, nomornya
+jatuh ke nama berkas sebagai cadangan — perilaku yang memang benar, tapi
+membuat penegasan ujinya tidak ketemu.
+
+---
+
 ## 24 November 2026 — penyaring daftar opname, impor Accurate lewat kode, dan pem-packing
 
 ### 1. Penyaring tanggal dan status di daftar laporan opname

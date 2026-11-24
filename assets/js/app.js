@@ -24,7 +24,7 @@ let kategoriOptions = [];
 let editingMasterId = null;
 
 let pdfImport = { status:"idle", header:null, rows:[], fileName:"", fileHash:"",
-                  tanggal:"", cocok:{}, cocokSku:{}, duplikat:null };
+                  tanggal:"", packingOleh:"", cocok:{}, cocokSku:{}, duplikat:null };
 
 if(window["pdfjsLib"]){
   pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdf.worker.min.js";
@@ -1396,10 +1396,10 @@ function handlePdfUpload(event){
   const reader = new FileReader();
   reader.onload = function(e){ prosesPdf(e.target.result, file.name); };
   reader.onerror = function(){
-    pdfImport = { status:"error", header:null, rows:[], fileName:file.name, fileHash:"", tanggal:"", cocok:{}, cocokSku:{}, duplikat:null };
+    pdfImport = { status:"error", header:null, rows:[], fileName:file.name, fileHash:"", tanggal:"", packingOleh:ingatPacking(), cocok:{}, cocokSku:{}, duplikat:null };
     renderPdfImportStatus(); renderPdfReview();
   };
-  pdfImport = { status:"parsing", header:null, rows:[], fileName:file.name, fileHash:"", tanggal:"", cocok:{}, cocokSku:{}, duplikat:null };
+  pdfImport = { status:"parsing", header:null, rows:[], fileName:file.name, fileHash:"", tanggal:"", packingOleh:ingatPacking(), cocok:{}, cocokSku:{}, duplikat:null };
   renderPdfImportStatus(); renderPdfReview();
   reader.readAsArrayBuffer(file);
 }
@@ -1633,6 +1633,19 @@ function renderPdfReview(){
     + '<label class="field-label" style="margin:0">Tanggal transaksi</label>'
     + '<input type="date" style="width:auto" value="'+esc(pdfImport.tanggal)+'" onchange="pdfImport.tanggal=this.value">'
     + '<span style="font-size:12px; color:var(--slate)">Diisi dari tanggal cetak PDF bila terbaca.</span>'
+    + '</div>';
+
+  /* Siapa yang mem-packing seluruh isi picking list ini. Satu nama untuk satu
+   * berkas: yang dikerjakan sekali jalan biasanya dikerjakan satu orang, dan
+   * meminta nama per baris pada impor berisi ratusan baris hanya akan
+   * dikosongkan. Kalau memang berbeda per baris, barisnya bisa diperbaiki
+   * sesudah tersimpan lewat menu Barang keluar. */
+  html += '<div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px;">'
+    + '<label class="field-label" style="margin:0" for="pdfPacking">Di-packing oleh</label>'
+    + '<input type="text" id="pdfPacking" style="width:auto" maxlength="100"'
+      + ' placeholder="Nama pem-packing" value="'+esc(pdfImport.packingOleh || "")+'"'
+      + ' onchange="pdfImport.packingOleh=this.value.trim()">'
+    + '<span style="font-size:12px; color:var(--slate)">Berlaku untuk seluruh baris di berkas ini.</span>'
     + '</div>';
 
   html += '<div style="font-size:12.5px; color:var(--slate); margin-bottom:8px;">Cek data di bawah ini sudah sesuai fisik barang atau belum. Ubah bila perlu, lalu tekan <strong>Konfirmasi &amp; Simpan</strong> untuk mencatatnya sebagai barang keluar.</div>';
@@ -1973,6 +1986,7 @@ async function confirmPdfReview(){
         fileName: pdfImport.fileName,
         fileHash: pdfImport.fileHash,
         tanggal:  pdfImport.tanggal || todayISO(),
+        packing_oleh: pdfImport.packingOleh || "",
         abaikanDuplikat: !!pdfImport.duplikat,
         abaikanStokKurang: !!abaikanStok
       });
@@ -1985,12 +1999,15 @@ async function confirmPdfReview(){
       fileName: pdfImport.fileName,
       fileHash: pdfImport.fileHash,
       tanggal:  pdfImport.tanggal || todayISO(),
+      packing_oleh: pdfImport.packingOleh || "",
       abaikanDuplikat: !!pdfImport.duplikat,
       abaikanStokKurang: !!abaikanStok
     });
   };
 
   const selesai = (res) => {
+    // Diingat untuk impor berikutnya, sama seperti pada input manual.
+    simpanIngatPacking(pdfImport.packingOleh || "");
     setSaveStatus("ok");
     toast(res.pesan || (res.tersimpan + " barang keluar berhasil disimpan."));
     (res.peringatan || []).forEach(p => toast(p, "err"));

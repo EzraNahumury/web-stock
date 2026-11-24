@@ -379,7 +379,8 @@ if ($tc !== '') {
 }
 
 $hasil = dbTransaksi(static function (PDO $pdo) use (
-    $noPicking, $fileName, $fileHash, $tanggalCetak, $header, $bersih, $tanggal
+    $noPicking, $fileName, $fileHash, $tanggalCetak, $header, $bersih, $tanggal,
+    $packingOleh
 ) {
     $stBatch = $pdo->prepare(
         'INSERT INTO import_batch

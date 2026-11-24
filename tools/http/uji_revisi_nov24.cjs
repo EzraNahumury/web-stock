@@ -247,13 +247,72 @@ const TANDA = 'UJIN24';
       buf.toString('latin1').indexOf('FAHRUL') === -1, true);
 
   /* ------------------------------------------------------------------ */
+  console.log('\n=== 4. impor picking list ikut mencatat pem-packing ===');
+  /* Server sudah menerima packing_oleh sejak 24 November, tapi kolom isiannya
+     tidak pernah dipasang di layar tinjauan impor — jadi yang terkirim selalu
+     kosong. Impor PDF justru jalur yang paling banyak dipakai, sehingga
+     kolomnya praktis tidak pernah terisi. */
+  /* Kunci nomor pesanannya "noPesanan" (camelCase) — itu yang dikirim layar
+     tinjauan impor, dan commit.php membacanya dari sana. Dikirim dengan nama
+     lain, nomornya jatuh ke nama berkas sebagai cadangan. */
+  const brsImpor = (no) => ({
+    barcode: brg.barcode, nama: brg.nama, sku: '', qty: 1,
+    keterangan: 'Pesanan MP', noPesanan: TANDA + '-IMP' + no
+  });
+
+  r = await post(S, 'import/commit.php', {
+    header: {}, rows: [brsImpor(1), brsImpor(2)],
+    fileName: TANDA + '-a.pdf', fileHash: '',
+    tanggal: '2026-11-24', packing_oleh: 'RIZKY',
+    abaikanDuplikat: true
+  });
+  cek('HTTP', r.status, 200);
+  cek('kedua baris memakai nama pem-packingnya',
+      nilai("SELECT COUNT(*) FROM barang_keluar WHERE no_pesanan LIKE '" + TANDA
+            + "-IMP%' AND packing_oleh = 'RIZKY'"), '2');
+
+  console.log('\n--- jalur bertahap (berkas besar) juga ---');
+  const sesiKirim = 'abcdef0123456789';
+  await post(S, 'import/commit.php', {
+    sesi: sesiKirim, potong: true, mulai: true, rows: [brsImpor(3)]
+  });
+  await post(S, 'import/commit.php', {
+    sesi: sesiKirim, potong: true, rows: [brsImpor(4)]
+  });
+  r = await post(S, 'import/commit.php', {
+    sesi: sesiKirim, selesai: true, header: {},
+    fileName: TANDA + '-b.pdf', fileHash: '',
+    tanggal: '2026-11-24', packing_oleh: 'DEWI',
+    abaikanDuplikat: true
+  });
+  cek('HTTP', r.status, 200);
+  cek('potongan ikut memakai namanya juga',
+      nilai("SELECT COUNT(*) FROM barang_keluar WHERE no_pesanan IN ('" + TANDA
+            + "-IMP3','" + TANDA + "-IMP4') AND packing_oleh = 'DEWI'"), '2');
+
+  console.log('\n--- dikosongkan: tetap tersimpan, bukan gagal ---');
+  r = await post(S, 'import/commit.php', {
+    header: {}, rows: [brsImpor(5)],
+    fileName: TANDA + '-c.pdf', fileHash: '', tanggal: '2026-11-24',
+    abaikanDuplikat: true
+  });
+  cek('impor tanpa nama pem-packing tetap jalan', r.status, 200);
+  cek('kolomnya kosong, bukan menggagalkan impor',
+      nilai("SELECT packing_oleh FROM barang_keluar WHERE no_pesanan = '" + TANDA + "-IMP5'"), '');
+
+  d = await get(S, 'keluar/list.php?q=' + TANDA + '&packing=RIZKY');
+  cek('hasil impor ikut terjaring penyaringnya', d.body.total, 2);
+
+  /* ------------------------------------------------------------------ */
   console.log('\n=== Kembalikan keadaan semula ===');
   php("require 'includes/db.php';"
     + "db()->exec('DELETE FROM opname_item WHERE sesi_id > " + sesiAwal + "');"
     + "db()->exec('DELETE FROM opname_sesi WHERE id > " + sesiAwal + "');"
     + "db()->exec('DELETE FROM barang_keluar WHERE id > " + keluarAwal + "');"
     + "db()->exec(\"DELETE FROM barang_masuk WHERE keterangan = '" + TANDA + "'\");"
-    + "db()->exec(\"DELETE FROM activity_log WHERE entitas IN ('opname','keluar','masuk')\"); echo 'ok';");
+    + "db()->exec(\"DELETE FROM import_antrian\");"
+    + "db()->exec(\"DELETE FROM import_batch WHERE nama_file LIKE '" + TANDA + "%'\");"
+    + "db()->exec(\"DELETE FROM activity_log WHERE entitas IN ('opname','keluar','masuk','import')\"); echo 'ok';");
   cek('sesi uji terhapus', nilai("SELECT COUNT(*) FROM opname_sesi WHERE id > " + sesiAwal), '0');
   cek('barang keluar uji terhapus', nilai("SELECT COUNT(*) FROM barang_keluar WHERE id > " + keluarAwal), '0');
   cek('stok kembali seperti semula', stok(), Number(nilai("SELECT m.stok_awal"

@@ -353,7 +353,11 @@ Ada **dropdown penyaring** berisi nama-nama yang benar-benar pernah dipakai,
 kotak pencarian juga menjangkaunya, dan kolomnya ikut tercetak di Unduh PDF
 (termasuk ikut penyaringnya).
 
-Untuk impor picking list PDF, satu nama berlaku untuk seluruh isi berkas itu.
+Untuk **impor picking list PDF**, kolom **Di-packing oleh** ada di kepala layar
+tinjauan — di sebelah Tanggal transaksi, sebelum menekan Konfirmasi & Simpan.
+Satu nama berlaku untuk seluruh isi berkas itu; kalau ada baris yang
+di-packing orang lain, perbaiki barisnya sesudah tersimpan lewat menu Barang
+keluar.
 
 ## Laporan stok opname: penyaring daftar  *(baru 24 November)*
 
